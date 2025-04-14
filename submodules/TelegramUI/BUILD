@@ -49,6 +49,12 @@ swift_library(
         "-warnings-as-errors",
     ],
     deps = [
+        "//Teleport/TPNews:TPNews",
+        "//Teleport/TPSettings:TPSettings",
+        "//Teleport/DWallpaper:DWallpaper",
+        "@FirebaseSDK//:FirebaseCore",
+        "@FirebaseSDK//:FirebaseCrashlytics",
+
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
         "//submodules/SSignalKit/SSignalKit:SSignalKit",
         "//submodules/AsyncDisplayKit:AsyncDisplayKit",
@@ -458,6 +464,7 @@ swift_library(
         "//submodules/TelegramUI/Components/PeerManagement/OwnershipTransferController",
         "//submodules/TelegramUI/Components/PeerManagement/OldChannelsController",
         "//submodules/TelegramUI/Components/Chat/ChatSendStarsScreen",
+	    "//submodules/TelegramUI/Components/DSettings",
         "//submodules/TelegramUI/Components/MinimizedContainer",
         "//submodules/TelegramUI/Components/SpaceWarpView",
         "//submodules/TelegramUI/Components/MiniAppListScreen",

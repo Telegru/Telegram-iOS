@@ -15,6 +15,7 @@ from BazelLocation import locate_bazel
 from BuildConfiguration import CodesigningSource, GitCodesigningSource, DirectoryCodesigningSource, XcodeManagedCodesigningSource, BuildConfiguration, build_configuration_from_json
 import RemoteBuild
 import GenerateProfiles
+from GoogleConfiguration import generate_google_services_plist
 
 
 class ResolvedCodesigningData:
@@ -225,7 +226,8 @@ class BazelCommandLine:
     def get_define_arguments(self):
         return [
             '--define=buildNumber={}'.format(self.build_number),
-            '--define=telegramVersion={}'.format(self.build_environment.app_version)
+            '--define=appVersion={}'.format(self.build_environment.app_version),
+            '--define=tgAppVersion={}'.format(self.build_environment.original_app_version)
         ]
 
     def get_project_generation_arguments(self):
@@ -443,6 +445,9 @@ def resolve_configuration(base_path, bazel_command_line: BazelCommandLine, argum
         provisioning_profiles_path=provisioning_path,
         additional_codesigning_output_path=additional_codesigning_output_path
     )
+
+    generate_google_services_plist(bundle_id=build_configuration.bundle_id)
+
     if codesigning_data.aps_environment is None:
         print('Could not find a valid aps-environment entitlement in the provided provisioning profiles')
         sys.exit(1)
