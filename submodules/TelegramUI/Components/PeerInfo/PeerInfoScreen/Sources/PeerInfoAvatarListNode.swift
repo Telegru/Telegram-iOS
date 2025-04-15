@@ -130,7 +130,7 @@ final class PeerInfoAvatarListNode: ASDisplayNode {
     
     func update(size: CGSize, avatarSize: CGFloat, isExpanded: Bool, peer: Peer?, isForum: Bool, threadId: Int64?, threadInfo: EngineMessageHistoryThread.Info?, theme: PresentationTheme, transition: ContainedViewLayoutTransition) {
         self.arguments = (peer, threadId, threadInfo, theme, avatarSize, isExpanded)
-        self.maskNode.isForum = isForum
+        self.maskNode.isForum = isForum || theme.squareStyle
         self.pinchSourceNode.update(size: size, transition: transition)
         self.containerNode.frame = CGRect(origin: CGPoint(), size: size)
         self.pinchSourceNode.frame = CGRect(origin: CGPoint(), size: size)

@@ -4,13 +4,21 @@ import Display
 import AsyncDisplayKit
 import TelegramPresentationData
 import ProgressNavigationButtonNode
+import TelegramCore
+import AccountContext
+import SwiftSignalKit
 
 final class AuthorizationSequencePasswordEntryController: ViewController {
     private var controllerNode: AuthorizationSequencePasswordEntryControllerNode {
         return self.displayNode as! AuthorizationSequencePasswordEntryControllerNode
     }
     
+    private let proxyButtonNode: DAuthorizationProxyButtonNode
+    private let proxyDisposable = MetaDisposable()
+    
     private var validLayout: ContainerViewLayout?
+    private let sharedContext: SharedAccountContext
+    private var account: UnauthorizedAccount?
     
     private let presentationData: PresentationData
     
@@ -40,10 +48,20 @@ final class AuthorizationSequencePasswordEntryController: ViewController {
         }
     }
     
-    init(presentationData: PresentationData, back: @escaping () -> Void) {
+    deinit {
+        proxyDisposable.dispose()
+    }
+    
+    init(presentationData: PresentationData, sharedContext: SharedAccountContext, account: UnauthorizedAccount?, back: @escaping () -> Void) {
         self.presentationData = presentationData
+        self.sharedContext = sharedContext
+        self.account = account
+        
+        self.proxyButtonNode = DAuthorizationProxyButtonNode(theme: presentationData.theme)
         
         super.init(navigationBarPresentationData: NavigationBarPresentationData(theme: AuthorizationSequenceController.navigationBarTheme(presentationData.theme), strings: NavigationBarStrings(presentationStrings: presentationData.strings)))
+        
+        self.proxyButtonNode.addTarget(self, action: #selector(proxyButtonPressed), forControlEvents: .touchUpInside)
         
         self.supportedOrientations = ViewControllerSupportedOrientations(regularSize: .all, compactSize: .portrait)
         
@@ -57,6 +75,26 @@ final class AuthorizationSequencePasswordEntryController: ViewController {
         self.navigationBar?.backPressed = {
             back()
         }
+        
+        proxyDisposable.set(
+            (
+                sharedContext.accountManager.sharedData(keys: [SharedDataKeys.proxySettings])
+                |> map { sharedData -> Bool in
+                    if let settings = sharedData.entries[SharedDataKeys.proxySettings]?.get(ProxySettings.self) {
+                        return settings.enabled
+                    } else {
+                        return false
+                    }
+                }
+                |> distinctUntilChanged
+                |> deliverOnMainQueue
+            )
+            .start(next: { [weak self] enabled in
+                guard let self else { return }
+                self.proxyButtonNode.status = enabled ? .connected : .available
+                self.updateNavigationItems()
+            })
+        )
     }
     
     required init(coder aDecoder: NSCoder) {
@@ -96,16 +134,28 @@ final class AuthorizationSequencePasswordEntryController: ViewController {
         self.controllerNode.activateInput()
     }
     
+    @objc private func proxyButtonPressed() {
+        guard let account else {
+            return
+        }
+        self.present(self.sharedContext.makeProxySettingsController(sharedContext: self.sharedContext, account: account), in: .window(.root), with: ViewControllerPresentationArguments(presentationAnimation: .modalSheet))
+    }
+    
     func updateNavigationItems() {
+        let proxyItem = UIBarButtonItem(customDisplayNode: proxyButtonNode)
         guard let layout = self.validLayout, layout.size.width < 360.0 else {
+            self.navigationItem.rightBarButtonItem = proxyItem
             return
         }
                 
         if self.inProgress {
             let item = UIBarButtonItem(customDisplayNode: ProgressNavigationButtonNode(color: self.presentationData.theme.rootController.navigationBar.accentTextColor))
-            self.navigationItem.rightBarButtonItem = item
+            self.navigationItem.rightBarButtonItems = [proxyItem, item].compactMap { $0 }
         } else {
-            self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: self.presentationData.strings.Common_Next, style: .done, target: self, action: #selector(self.nextPressed))
+            self.navigationItem.rightBarButtonItems = [
+                proxyItem,
+                UIBarButtonItem(title: self.presentationData.strings.Common_Next, style: .done, target: self, action: #selector(self.nextPressed))
+            ].compactMap { $0 }
         }
     }
     

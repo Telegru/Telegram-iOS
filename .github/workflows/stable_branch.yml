@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   stable-branch:
-    runs-on: macos-15
+    runs-on: [self-hosted, xcode]
 
     steps:
       - uses: webfactory/ssh-agent@v0.9.0
@@ -38,11 +38,6 @@ jobs:
           submodules: "recursive"
           fetch-depth: "0"
 
-      - name: Set active Xcode path
-        run: |
-          XCODE_VERSION=$(cat versions.json | python3 -c 'import json,sys;obj=json.load(sys.stdin);print(obj["xcode"]);')
-          sudo xcode-select -s /Applications/Xcode_$XCODE_VERSION.app/Contents/Developer
-
       - name: Create canonical source directory
         run: |
           set -x
@@ -55,7 +50,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: "/Users/Shared/telegram-bazel-cache"
-          key: bazel
+          key: ${{ runner.os }}-bazel
 
       - name: Build project
         run: |
@@ -63,6 +58,7 @@ jobs:
 
           mkdir -p $BUILD_WORKING_DIR
           cd $SOURCE_PATH/ci
+          bundle install
           fastlane build
 
       - name: Save Bazel cache
@@ -70,7 +66,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: "/Users/Shared/telegram-bazel-cache"
-          key: bazel
+          key: ${{ runner.os }}-bazel
 
     env:
       CI: 1

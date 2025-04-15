@@ -45,6 +45,7 @@ import MetalEngine
 import RecaptchaEnterprise
 import DOnboarding
 import FirebaseCore
+import DAnalytics
 
 #if canImport(AppCenter)
 import AppCenter
@@ -343,6 +344,9 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         let launchStartTime = CFAbsoluteTimeGetCurrent()
         
         FirebaseApp.configure()
+        
+        Analytics.register(MyTrackerProvider())
+        Analytics.setup()
         
         let statusBarHost = ApplicationStatusBarHost()
         let (window, hostView) = nativeWindowHostView()
@@ -1258,6 +1262,12 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             var network: Network?
             if let context = context {
                 network = context.context.account.network
+            }
+            
+            if let context {
+                Analytics.setUserId(String(context.context.account.peerId.id._internalGetInt64Value()))
+            } else {
+                Analytics.setUserId(nil)
             }
             
             Logger.shared.log("App \(self.episodeId)", "received context \(String(describing: context)) account \(String(describing: context?.context.account.id)) network \(String(describing: network))")

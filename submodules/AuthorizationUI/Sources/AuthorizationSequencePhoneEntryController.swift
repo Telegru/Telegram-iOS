@@ -46,6 +46,8 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         return self.controllerNode.buttonNode
     }
     
+    private let proxyButtonNode: DAuthorizationProxyButtonNode
+    
     public var inProgress: Bool = false {
         didSet {
             self.updateNavigationItems()
@@ -62,6 +64,8 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     
     private let hapticFeedback = HapticFeedback()
     
+    private let proxyDisposable = MetaDisposable()
+    
     public init(sharedContext: SharedAccountContext, account: UnauthorizedAccount?, countriesConfiguration: CountriesConfiguration? = nil, isTestingEnvironment: Bool, otherAccountPhoneNumbers: ((String, AccountRecordId, Bool)?, [(String, AccountRecordId, Bool)]), network: Network, presentationData: PresentationData, openUrl: @escaping (String) -> Void, back: @escaping () -> Void) {
         self.sharedContext = sharedContext
         self.account = account
@@ -71,6 +75,8 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         self.presentationData = presentationData
         self.openUrl = openUrl
         self.back = back
+        
+        self.proxyButtonNode = DAuthorizationProxyButtonNode(theme: presentationData.theme)
                 
         super.init(navigationBarPresentationData: NavigationBarPresentationData(theme: AuthorizationSequenceController.navigationBarTheme(presentationData.theme), strings: NavigationBarStrings(presentationStrings: presentationData.strings)))
         
@@ -86,6 +92,8 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
             back()
         }
         
+        self.proxyButtonNode.addTarget(self, action: #selector(proxyButtonPressed), forControlEvents: .touchUpInside)
+        
         if !otherAccountPhoneNumbers.1.isEmpty {
             self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: presentationData.strings.Common_Cancel, style: .plain, target: self, action: #selector(self.cancelPressed))
         }
@@ -93,6 +101,26 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         if let countriesConfiguration {
             AuthorizationSequenceCountrySelectionController.setupCountryCodes(countries: countriesConfiguration.countries, codesByPrefix: countriesConfiguration.countriesByPrefix)
         }
+        
+        proxyDisposable.set(
+            (
+                sharedContext.accountManager.sharedData(keys: [SharedDataKeys.proxySettings])
+                |> map { sharedData -> Bool in
+                    if let settings = sharedData.entries[SharedDataKeys.proxySettings]?.get(ProxySettings.self) {
+                        return settings.enabled
+                    } else {
+                        return false
+                    }
+                }
+                |> distinctUntilChanged
+                |> deliverOnMainQueue
+            )
+            .start(next: { [weak self] enabled in
+                guard let self else { return }
+                self.proxyButtonNode.status = enabled ? .connected : .available
+                self.updateNavigationItems()
+            })
+        )
     }
     
     required init(coder aDecoder: NSCoder) {
@@ -101,22 +129,35 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     
     deinit {
         self.termsDisposable.dispose()
+        self.proxyDisposable.dispose()
     }
     
     @objc private func cancelPressed() {
         self.back()
     }
     
+    @objc private func proxyButtonPressed() {
+        guard let account else {
+            return
+        }
+        self.present(self.sharedContext.makeProxySettingsController(sharedContext: self.sharedContext, account: account), in: .window(.root), with: ViewControllerPresentationArguments(presentationAnimation: .modalSheet))
+    }
+    
     func updateNavigationItems() {
+        let proxyItem = UIBarButtonItem(customDisplayNode: proxyButtonNode)
         guard let layout = self.validLayout, layout.size.width < 360.0 else {
+            self.navigationItem.rightBarButtonItem = proxyItem
             return
         }
                 
         if self.inProgress {
             let item = UIBarButtonItem(customDisplayNode: ProgressNavigationButtonNode(color: self.presentationData.theme.rootController.navigationBar.accentTextColor))
-            self.navigationItem.rightBarButtonItem = item
+            self.navigationItem.rightBarButtonItems = [proxyItem, item].compactMap { $0 }
         } else {
-            self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: self.presentationData.strings.Common_Next, style: .done, target: self, action: #selector(self.nextPressed))
+            self.navigationItem.rightBarButtonItems = [
+                proxyItem,
+                UIBarButtonItem(title: self.presentationData.strings.Common_Next, style: .done, target: self, action: #selector(self.nextPressed))
+            ].compactMap { $0 }
         }
     }
     

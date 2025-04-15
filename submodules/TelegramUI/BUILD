@@ -52,6 +52,7 @@ swift_library(
         "//Teleport/TPNews:TPNews",
         "//Teleport/TPSettings:TPSettings",
         "//Teleport/DWallpaper:DWallpaper",
+        "//Teleport/DAnalytics:DAnalytics",
         "@FirebaseSDK//:FirebaseCore",
         "@FirebaseSDK//:FirebaseCrashlytics",
 

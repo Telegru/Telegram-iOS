@@ -149,7 +149,7 @@ ios_application(
     name = "CallUITest",
     bundle_id = "org.telegram.Telegram-iOS",
     families = ["iphone", "ipad"],
-    minimum_os_version = "12.0",
+    minimum_os_version = "12.4",
     provisioning_profile = "@build_configuration//provisioning:Telegram.mobileprovision",
     infoplists = [
         ":AppInfoPlist",

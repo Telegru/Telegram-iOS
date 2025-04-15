@@ -222,6 +222,14 @@ API_AVAILABLE(ios(10))
     return @(D_CONFIG_PROXY_SECRET);
 }
 
+- (NSString * _Nonnull)dArchivedProxies {
+    return @(D_CONFIG_ARCHIVED_PROXIES);
+}
+
+- (NSString * _Nonnull)dMyTrackerId {
+    return @(D_CONFIG_MY_TRACKER_ID);
+}
+
 + (NSString * _Nullable)bundleSeedId {
     NSDictionary *query = [NSDictionary dictionaryWithObjectsAndKeys:
        (__bridge NSString *)kSecClassGenericPassword, (__bridge NSString *)kSecClass,

@@ -622,7 +622,12 @@ public final class AvatarStoryIndicatorComponent: Component {
             
             if self.indefiniteDashLayer.path == nil {
                 let path = CGMutablePath()
-                path.addEllipse(in: CGRect(origin: CGPoint(x: (size.width - radius * 2.0) * 0.5, y: (size.height - radius * 2.0) * 0.5), size: CGSize(width: radius * 2.0, height: radius * 2.0)))
+                if isRoundedRect {
+                    let frame = CGRect(origin: CGPoint(x: (size.width - radius * 2.0) * 0.5, y: (size.height - radius * 2.0) * 0.5), size: CGSize(width: radius * 2.0, height: radius * 2.0))
+                    path.addRoundedRect(in: frame, cornerWidth: frame.width * 0.125, cornerHeight: frame.height * 0.125)
+                } else {
+                    path.addEllipse(in: CGRect(origin: CGPoint(x: (size.width - radius * 2.0) * 0.5, y: (size.height - radius * 2.0) * 0.5), size: CGSize(width: radius * 2.0, height: radius * 2.0)))
+                }
                 self.indefiniteDashLayer.path = path
                 self.indefiniteReplicatorLayer.frame = bounds
                 self.indefiniteDashLayer.frame = bounds
@@ -691,19 +696,95 @@ public final class AvatarStoryIndicatorComponent: Component {
                     if component.isRectSimple {
                         let lineWidth: CGFloat = component.hasUnseen ? component.activeLineWidth : component.inactiveLineWidth
                         context.setLineWidth(lineWidth)
+                        let path = UIBezierPath(roundedRect: CGRect(origin: CGPoint(x: size.width * 0.5 - diameter * 0.5, y: size.height * 0.5 - diameter * 0.5), size: size).insetBy(dx: lineWidth * 0.5, dy: lineWidth * 0.5), cornerRadius: floor(diameter * 0.125))
                         
-                        let rect = CGRect(origin: CGPoint(x: size.width * 0.5 - diameter * 0.5, y: size.height * 0.5 - diameter * 0.5), size: CGSize(width: diameter, height: diameter))
-                        let cornerRadius = floor(diameter * 0.1) // задайте радиус округления по желанию
-                        let path = UIBezierPath(roundedRect: rect.insetBy(dx: lineWidth * 0.5, dy: lineWidth * 0.5), cornerRadius: cornerRadius)
+                        var startPoint: CGPoint?
+                        var vertices: [CurveVertex] = []
+                        path.cgPath.applyWithBlock({ element in
+                            switch element.pointee.type {
+                            case .moveToPoint:
+                                startPoint = element.pointee.points[0]
+                            case .addLineToPoint:
+                                if let _ = vertices.last {
+                                    vertices.append(CurveVertex(point: element.pointee.points[0], inTangentRelative: CGPoint(), outTangentRelative: CGPoint()))
+                                } else if let startPoint {
+                                    vertices.append(CurveVertex(point: startPoint, inTangentRelative: CGPoint(), outTangentRelative: CGPoint()))
+                                    vertices.append(CurveVertex(point: element.pointee.points[0], inTangentRelative: CGPoint(), outTangentRelative: CGPoint()))
+                                }
+                            case .addQuadCurveToPoint:
+                                break
+                            case .addCurveToPoint:
+                                if let _ = vertices.last {
+                                    vertices.append(CurveVertex(point: element.pointee.points[2], inTangentRelative: CGPoint(), outTangentRelative: CGPoint()))
+                                } else if let startPoint {
+                                    vertices.append(CurveVertex(point: startPoint, inTangentRelative: CGPoint(), outTangentRelative: CGPoint()))
+                                    vertices.append(CurveVertex(point: element.pointee.points[2], inTangentRelative: CGPoint(), outTangentRelative: CGPoint()))
+                                }
+                                
+                                if vertices.count >= 2 {
+                                    vertices[vertices.count - 2].outTangent = element.pointee.points[0]
+                                    vertices[vertices.count - 1].inTangent = element.pointee.points[1]
+                                }
+                            case .closeSubpath:
+                                if let startPointValue = startPoint {
+                                    vertices.append(CurveVertex(point: startPointValue, inTangentRelative: CGPoint(), outTangentRelative: CGPoint()))
+                                    startPoint = nil
+                                }
+                            @unknown default:
+                                break
+                            }
+                        })
                         
-                        context.addPath(path.cgPath)
-                        context.replacePathWithStrokedPath()
-                        context.clip()
+                        var length: CGFloat = 0.0
+                        var firstOffset: CGFloat = 0.0
+                        for i in 0 ..< vertices.count - 1 {
+                            let value = vertices[i].distanceTo(vertices[i + 1])
+                            if firstOffset == 0.0 {
+                                firstOffset = value * 0.5
+                            }
+                            length += value
+                        }
                         
-                        let colors: [CGColor] = component.hasUnseen ? activeColors : inactiveColors
-                        let colorSpace = CGColorSpaceCreateDeviceRGB()
-                        if let gradient = CGGradient(colorsSpace: colorSpace, colors: colors as CFArray, locations: &locations) {
-                            context.drawLinearGradient(gradient, start: CGPoint(x: 0.0, y: 0.0), end: CGPoint(x: 0.0, y: size.height), options: [])
+                        let spacing: CGFloat = component.activeLineWidth * 2.0
+                        let useableLength = length - spacing * CGFloat(counters.totalCount)
+                        let segmentLength = useableLength / CGFloat(counters.totalCount)
+                        
+                        context.setLineWidth(lineWidth)
+                        
+                        for index in 0 ..< counters.totalCount {
+                            var dashWidths: [CGFloat] = []
+                            dashWidths.append(segmentLength)
+                            dashWidths.append(10000000.0)
+                            
+                            let colors: [CGColor]
+                            if index >= counters.totalCount - counters.unseenCount {
+                                colors = activeColors
+                            } else {
+                                colors = inactiveColors
+                            }
+                            let colorSpace = CGColorSpaceCreateDeviceRGB()
+                            let gradient = CGGradient(colorsSpace: colorSpace, colors: colors as CFArray, locations: &locations)!
+                            
+                            context.resetClip()
+                            context.setLineDash(phase: -firstOffset - spacing * 0.5 - CGFloat(index) * (spacing + segmentLength), lengths: dashWidths)
+                            context.addPath(path.cgPath)
+                            
+                            context.replacePathWithStrokedPath()
+                            context.clip()
+                            
+                            context.drawLinearGradient(gradient, start: CGPoint(x: 0.0, y: 0.0), end: CGPoint(x: 0.0, y: size.height), options: CGGradientDrawingOptions())
+                            
+                            if index == counters.totalCount - 1 {
+                                context.resetClip()
+                                let addPath = CGMutablePath()
+                                addPath.move(to: CGPoint(x: vertices[0].interpolate(to: vertices[1], amount: 0.5).point.x - spacing * 0.5, y: vertices[0].point.y))
+                                addPath.addLine(to: CGPoint(x: vertices[0].point.x, y: vertices[0].point.y))
+                                context.setLineDash(phase: 0.0, lengths: [])
+                                context.addPath(addPath)
+                                context.replacePathWithStrokedPath()
+                                context.clip()
+                                context.drawLinearGradient(gradient, start: CGPoint(x: 0.0, y: 0.0), end: CGPoint(x: 0.0, y: size.height), options: CGGradientDrawingOptions())
+                            }
                         }
                         
                         return

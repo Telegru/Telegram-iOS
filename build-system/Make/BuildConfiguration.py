@@ -26,7 +26,9 @@ class BuildConfiguration:
         d_app_reviewer_env,
         d_proxy_server,
         d_proxy_port,
-        d_proxy_secret
+        d_proxy_secret,
+        d_archived_proxies,
+        d_mytracker_id
     ):
         self.bundle_id = bundle_id
         self.api_id = api_id
@@ -46,6 +48,8 @@ class BuildConfiguration:
         self.d_proxy_server = d_proxy_server
         self.d_proxy_port = d_proxy_port
         self.d_proxy_secret = d_proxy_secret
+        self.d_archived_proxies = d_archived_proxies
+        self.d_mytracker_id = d_mytracker_id
 
     def write_to_variables_file(self, bazel_path, use_xcode_managed_codesigning, aps_environment, path):
         string = ''
@@ -71,6 +75,8 @@ class BuildConfiguration:
         string += 'dahl_proxy_server = "{}"\n'.format(self.d_proxy_server)
         string += 'dahl_proxy_port = "{}"\n'.format(self.d_proxy_port)
         string += 'dahl_proxy_secret = "{}"\n'.format(self.d_proxy_secret)
+        string += 'dahl_archived_proxies = "{}"\n'.format(self.d_archived_proxies)
+        string += 'dahl_mytracker_id = "{}"\n'.format(self.d_mytracker_id)
 
         if os.path.exists(path):
             os.remove(path)
@@ -103,6 +109,8 @@ def build_configuration_from_json(path):
             'dahl_proxy_server',
             'dahl_proxy_port',
             'dahl_proxy_secret',
+            'dahl_archived_proxies',
+            'dahl_mytracker_id'
         ]
         for key in required_keys:
             if key not in configuration_dict:
@@ -126,6 +134,8 @@ def build_configuration_from_json(path):
             d_proxy_server=configuration_dict['dahl_proxy_server'],
             d_proxy_port=configuration_dict['dahl_proxy_port'],
             d_proxy_secret=configuration_dict['dahl_proxy_secret'],
+            d_archived_proxies=configuration_dict['dahl_archived_proxies'],
+            d_mytracker_id=configuration_dict['dahl_mytracker_id']
         )
 
 
@@ -275,7 +285,7 @@ class CodesigningSource:
         raise Exception('Not implemented')
 
     def use_xcode_managed_codesigning(self):
-        raise Exception('Not implemented')        
+        raise Exception('Not implemented')
 
     def copy_certificates_to_destination(self, destination_path):
         raise Exception('Not implemented')

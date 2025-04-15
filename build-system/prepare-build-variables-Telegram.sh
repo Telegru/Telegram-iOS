@@ -37,7 +37,7 @@ prepare_build_variables () {
 		APP_SPECIFIC_URL_SCHEME \
 		PREMIUM_IAP_PRODUCT_ID \
 		TELEGRAM_DISABLE_EXTENSIONS \
-		TELEPORT_APP_REVIEWER_PHONE \
+		DAHL_APP_REVIEWER_PHONE \
 	)
 
 	local MISSING_VARIABLES="0"
@@ -59,7 +59,7 @@ prepare_build_variables () {
 
 	echo "telegram_build_number = \"$BUILD_NUMBER\"" >> "$VARIABLES_PATH"
 	echo "telegram_version = \"$APP_VERSION\"" >> "$VARIABLES_PATH"
-	echo "telegram_bundle_id = \"$BUNDLE_ID\"" >> "$VARIABLES_PATH"	
+	echo "telegram_bundle_id = \"$BUNDLE_ID\"" >> "$VARIABLES_PATH"
 	echo "telegram_api_id = \"$API_ID\"" >> "$VARIABLES_PATH"
 	echo "telegram_team_id = \"$DEVELOPMENT_TEAM\"" >> "$VARIABLES_PATH"
 	echo "telegram_api_hash = \"$API_HASH\"" >> "$VARIABLES_PATH"
@@ -76,6 +76,8 @@ prepare_build_variables () {
 	echo "dahl_proxy_server = \"$DAHL_PROXY_SERVER\"" >> "$VARIABLES_PATH"
 	echo "dahl_proxy_port = \"$DAHL_PROXY_PORT\"" >> "$VARIABLES_PATH"
 	echo "dahl_proxy_secret = \"$DAHL_PROXY_SECRET\"" >> "$VARIABLES_PATH"
+	echo "dahl_archived_proxies = \"$DAHL_ARCHIVED_PROXIES\"" >> "$VARIABLES_PATH"
+	echo "dahl_mytracker_id = \"$DAHL_MY_TRACKER_ID\"" >> "$VARIABLES_PATH"
 
 	if [  "$TELEGRAM_DISABLE_EXTENSIONS" == "1" ]; then
 		echo "telegram_disable_extensions = True" >> "$VARIABLES_PATH"

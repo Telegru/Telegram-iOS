@@ -61,6 +61,14 @@ For _fastlane_ installation instructions, see [Installing _fastlane_](https://do
 
 
 
+### update_certs_for_new_devices
+
+```sh
+[bundle exec] fastlane update_certs_for_new_devices
+```
+
+
+
 ### generate_new_certificates
 
 ```sh

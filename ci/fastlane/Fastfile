@@ -172,8 +172,30 @@ lane :match_certs do |options|
     git_url: ENV['CERTS_GIT_URL'],
     git_branch: team_id,
     skip_provisioning_profiles: true,
-    readonly: true
+    force_for_new_devices: ENV['CI'].nil?,
+    readonly: !ENV['CI'].nil?
   )
+end
+
+lane :update_certs_for_new_devices do |options|
+  ensure_env_vars(
+    env_vars: ['CERTS_GIT_URL']
+  )
+
+  types = ['development', 'adhoc']
+
+  types.each do |type|
+    team_id = team_id(build_type: type)
+    match(
+      type: type,
+      app_identifier: app_bundle_ids(),
+      team_id: team_id,
+      git_url: ENV['CERTS_GIT_URL'],
+      git_branch: team_id,
+      api_key: generate_app_store_connect_api_key(),
+      force_for_new_devices: true,
+    )
+  end
 end
 
 lane :generate_new_certificates do |options|

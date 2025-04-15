@@ -15,6 +15,8 @@ load(
     "dahl_proxy_server",
     "dahl_proxy_port",
     "dahl_proxy_secret",
+    "dahl_archived_proxies",
+    "dahl_mytracker_id",
 )
 
 objc_library(
@@ -41,6 +43,8 @@ objc_library(
         "-DD_CONFIG_PROXY_SERVER=\\\"{}\\\"".format(dahl_proxy_server),
         "-DD_CONFIG_PROXY_PORT={}".format(dahl_proxy_port),
         "-DD_CONFIG_PROXY_SECRET=\\\"{}\\\"".format(dahl_proxy_secret),
+        "-DD_CONFIG_ARCHIVED_PROXIES=\\\"{}\\\"".format(dahl_archived_proxies),
+        "-DD_CONFIG_MY_TRACKER_ID=\\\"{}\\\"".format(dahl_mytracker_id),
     ],
     hdrs = glob([
         "PublicHeaders/**/*.h",

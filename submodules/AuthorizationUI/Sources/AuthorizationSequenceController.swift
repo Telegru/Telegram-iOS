@@ -872,7 +872,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         if let currentController = currentController {
             controller = currentController
         } else {
-            controller = AuthorizationSequencePasswordEntryController(presentationData: self.presentationData, back: { [weak self] in
+            controller = AuthorizationSequencePasswordEntryController(presentationData: self.presentationData, sharedContext: self.sharedContext, account: self.account, back: { [weak self] in
                 guard let strongSelf = self else {
                     return
                 }

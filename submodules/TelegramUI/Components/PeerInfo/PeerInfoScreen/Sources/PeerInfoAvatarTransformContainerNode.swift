@@ -154,7 +154,8 @@ final class PeerInfoAvatarTransformContainerNode: ASDisplayNode {
             colors: colors,
             lineWidth: 3.0,
             inactiveLineWidth: 1.5,
-            forceRoundedRect: isForum
+            forceRoundedRect: isForum,
+            forceRect: theme.squareStyle
         ), transition: ComponentTransition(transition))
     }
     

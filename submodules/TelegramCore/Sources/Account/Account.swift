@@ -5,6 +5,7 @@ import MtProtoKit
 import TelegramApi
 import CryptoUtils
 import EncryptionProvider
+import BuildConfig
 
 private let accountRecordToActiveKeychainId = Atomic<[AccountRecordId: Int]>(value: [:])
 
@@ -1259,6 +1260,48 @@ public class Account {
                 }
             }
         }))
+        self.managedOperationsDisposable.add(
+            (
+                accountManager.sharedData(keys: [SharedDataKeys.proxySettings])
+                |> map { sharedData -> ProxySettings in
+                    sharedData.entries[SharedDataKeys.proxySettings]?.get(ProxySettings.self) ?? .defaultSettings
+                } |> take(1)
+            )
+            .start(next: { proxySettings in
+                let baseAppBundleId = Bundle.main.bundleIdentifier!
+                let buildConfig = BuildConfig(baseAppBundleId: baseAppBundleId)
+                var updatedProxySettings = proxySettings
+                let archivedServers = buildConfig.dArchivedProxies.split(separator: ",")
+                let actualServers = proxySettings.servers.filter { server in
+                    !archivedServers.contains { server.host == $0 }
+                }
+                updatedProxySettings.servers = actualServers
+                
+                guard updatedProxySettings.servers != proxySettings.servers,
+                    let parsedSecret = MTProxySecret.parse(buildConfig.dProxySecret) else {
+                    return
+                }
+                let dahlServer = ProxyServerSettings(
+                    host: buildConfig.dProxyServer,
+                    port: buildConfig.dProxyPort,
+                    connection: .mtp(secret: parsedSecret.serialize())
+                )
+                if !updatedProxySettings.servers.contains(dahlServer) {
+                    updatedProxySettings.servers.insert(dahlServer, at: 0)
+                }
+                
+                if let activeServer = updatedProxySettings.activeServer,
+                   archivedServers.contains(where: { $0 == activeServer.host }) {
+                    updatedProxySettings.activeServer = dahlServer
+                }
+                
+                if updatedProxySettings != proxySettings {
+                    let _ = updateProxySettingsInteractively(accountManager: accountManager, { _ in
+                        return updatedProxySettings
+                    }).start()
+                }
+            })
+        )
 
         if !supplementary {
             let mediaBox = postbox.mediaBox

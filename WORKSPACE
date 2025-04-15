@@ -65,6 +65,13 @@ http_archive(
 	sha256 = "9726794e1e82072e416aa96587bfd48cc4a3ce2b8a8fd1c509fb4d5ac07a980b",
 )
 
+http_archive(
+    name = "MyTrackerSDK",
+    urls = ["https://github.com/myTrackerSDK/mytracker-ios/releases/download/3.3.0/mytracker-ios-sdk-3.3.0.zip"],
+    build_file = "@//third-party/MyTrackerSDK:BUILD",
+    sha256 = "55604a3862f15bf242d5d63fe272c8a58ba59c6d7e149e4e92f4b8ba3114d6dd"
+)
+
 load(
     "@rules_xcodeproj//xcodeproj:repositories.bzl",
     "xcodeproj_rules_dependencies",
