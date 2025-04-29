@@ -82,6 +82,10 @@ public struct TGIconSet: IconSet {
             return UIImage(bundleImageName: "Context Menu/Delete")
         case .contextMenuEye:
             return UIImage(bundleImageName: "Context Menu/Eye")
+        case .contextMenuLeave:
+            return UIImage(bundleImageName: "Context Menu/Leave")
+        case .contextMenuExclude:
+            return UIImage(bundleImageName: "Context Menu/Exclude")
         case .callsTab:
             return UIImage(bundleImageName: "Chat List/Tabs/IconCalls")
         case .contactsTab:
@@ -90,6 +94,17 @@ public struct TGIconSet: IconSet {
             return UIImage(bundleImageName: "Chat List/Tabs/IconChats")
         case .settingsTab:
             return UIImage(bundleImageName: "Chat List/Tabs/IconSettings")
+        case .wallTab:
+            return UIImage(bundleImageName: "Wall/WallTabTG")
+        case .chatAdd:
+            return UIImage(bundleImageName: "Chat List/AddIcon")
+        case .chatDelete:
+            return UIImage(bundleImageName: "Chat/Input/Accessory Panels/MessageSelectionTrash")
+        case .wallGear:
+            return UIImage(bundleImageName: "Wall/WallGear")
+        case .wallDismiss:
+            return UIImage(bundleImageName: "Wall/Dismiss")
         }
     }
+    
 }

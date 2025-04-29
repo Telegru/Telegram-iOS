@@ -77,7 +77,7 @@ public class ChatMessageShareButton: ASDisplayNode {
         self.morePressed?()
     }
     
-    public func update(presentationData: ChatPresentationData, controllerInteraction: ChatControllerInteraction, chatLocation: ChatLocation, subject: ChatControllerSubject?, message: Message, account: Account, disableComments: Bool = false) -> CGSize {
+    public func update(presentationData: ChatPresentationData, controllerInteraction: ChatControllerInteraction, chatLocation: ChatLocation, subject: ChatControllerSubject?, message: Message, account: Account, disableComments: Bool = false, isPrimairyButton: Bool) -> CGSize {
         var isReplies = false
         var replyCount = 0
         if let channel = message.peers[message.id.peerId] as? TelegramChannel, case .broadcast = channel.info {
@@ -118,9 +118,20 @@ public class ChatMessageShareButton: ASDisplayNode {
                 if hasMore {
                     updatedBottomIconImage = PresentationResourcesChat.chatFreeMoreButtonIcon(presentationData.theme.theme, wallpaper: presentationData.theme.wallpaper)
                 }
-            } else if case let .customChatContents(contents) = subject, case .hashTagSearch = contents.kind {
-                updatedIconImage = PresentationResourcesChat.chatFreeNavigateButtonIcon(presentationData.theme.theme, wallpaper: presentationData.theme.wallpaper)
-                updatedIconOffset = CGPoint(x: UIScreenPixel, y: 1.0)
+            } else if case let .customChatContents(contents) = subject {
+                switch contents.kind {
+                case .hashTagSearch, .wall:
+                    
+                    if isPrimairyButton {
+                        updatedIconImage = PresentationResourcesChat.chatFreeNavigateButtonIcon(presentationData.theme.theme, wallpaper: presentationData.theme.wallpaper)
+                        updatedIconOffset = CGPoint(x: UIScreenPixel, y: 1.0)
+                    } else {
+                        updatedIconImage = PresentationResourcesChat.chatFreeShareButtonIcon(presentationData.theme.theme, wallpaper: presentationData.theme.wallpaper)
+                    }
+               
+                default:
+                    break
+                }
             } else if case .pinnedMessages = subject {
                 updatedIconImage = PresentationResourcesChat.chatFreeNavigateButtonIcon(presentationData.theme.theme, wallpaper: presentationData.theme.wallpaper)
                 updatedIconOffset = CGPoint(x: UIScreenPixel, y: 1.0)

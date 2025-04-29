@@ -3,6 +3,7 @@ import UIKit
 import Display
 import TelegramCore
 import AppBundle
+import TPUI
 
 private func generateLineImage(color: UIColor) -> UIImage? {
     return generateImage(CGSize(width: 2.0, height: 3.0), contextGenerator: { size, context in
@@ -129,6 +130,10 @@ public struct PresentationResourcesChat {
         return theme.image(PresentationResourceKey.chatBubbleVerticalLineOutgoingImage.rawValue, { theme in
             return generateLineImage(color: theme.chat.message.outgoing.accentTextColor)
         })
+    }
+    
+    public static func chatWallGearImage(_ theme: PresentationTheme) -> UIImage? {
+        return generateTintedImage(image: TPIconManager.shared.icon(.wallGear), color: theme.chat.inputPanel.panelControlAccentColor)
     }
     
     public static func chatBubbleArrowImage(color: UIColor) -> UIImage? {
@@ -505,6 +510,18 @@ public struct PresentationResourcesChat {
     public static func chatInputPanelAttachmentButtonImage(_ theme: PresentationTheme) -> UIImage? {
         return theme.image(PresentationResourceKey.chatInputPanelAttachmentButtonImage.rawValue, { theme in
             return generateTintedImage(image: UIImage(bundleImageName: "Chat/Input/Text/IconAttachment"), color: theme.chat.inputPanel.panelControlColor)
+        })
+    }
+    
+    public static func dChatInputPanelExpandInputButtonImage(_ theme: PresentationTheme) -> UIImage? {
+        return theme.image(PresentationResourceKey.dChatInputPanelExpandInputButtonImage.rawValue, { theme in
+            return generateTintedImage(image: UIImage(bundleImageName: "Chat/Input/Text/DIconExpandInput"), color: theme.chat.inputPanel.panelControlColor)
+        })
+    }
+    
+    public static func dChatInputPanelCollapseInputButtonImage(_ theme: PresentationTheme) -> UIImage? {
+        return theme.image(PresentationResourceKey.dChatInputPanelCollapseInputButtonImage.rawValue, { theme in
+            return generateTintedImage(image: UIImage(bundleImageName: "Chat/Input/Text/DIconCollapseInput"), color: theme.chat.inputPanel.panelControlColor)
         })
     }
     

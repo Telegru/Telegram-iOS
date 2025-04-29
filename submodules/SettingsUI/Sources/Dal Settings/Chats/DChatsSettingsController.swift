@@ -21,6 +21,7 @@ private final class DChatsSettingsArguments {
     let updateFolderInfiniteScrolling: (Bool) -> Void
     let updateHideAllChats: (Bool) -> Void
     let updateChatFolderVisibility: (Bool) -> Void
+    let updateChatFullscreenInput: (Bool) -> Void
 
     init(
         context: AccountContext,
@@ -31,7 +32,8 @@ private final class DChatsSettingsArguments {
         updateBottomFolders: @escaping (Bool) -> Void,
         updateFolderInfiniteScrolling: @escaping (Bool) -> Void,
         updateHideAllChats: @escaping (Bool) -> Void,
-        updateChatFolderVisibility: @escaping (Bool) -> Void
+        updateChatFolderVisibility: @escaping (Bool) -> Void,
+        updateChatFullscreenInput: @escaping (Bool) -> Void
     ) {
         self.context = context
         self.updateCallConfirmation = updateCallConfirmation
@@ -42,6 +44,7 @@ private final class DChatsSettingsArguments {
         self.updateFolderInfiniteScrolling = updateFolderInfiniteScrolling
         self.updateHideAllChats = updateHideAllChats
         self.updateChatFolderVisibility = updateChatFolderVisibility
+        self.updateChatFullscreenInput = updateChatFullscreenInput
     }
 }
 
@@ -49,6 +52,7 @@ private enum DChatsSettingsSection: Int32 {
     case confirmation
     case recentChats
     case folders
+    case keyboard
 }
 
 private enum DChatsSettingsEntry: ItemListNodeEntry {
@@ -67,6 +71,9 @@ private enum DChatsSettingsEntry: ItemListNodeEntry {
     case showChatFolders(title: String, value: Bool)
     case hideAllChats(title: String, value: Bool, enabled: Bool)
     
+    case keyboardHeader(title: String)
+    case fullscreenInput(title: String, value: Bool)
+    
     var section: ItemListSectionId {
         switch self {
         case .confirmationHeader, .confirmCall, .confirmAudioMessage, .audioMessageCamera:
@@ -77,6 +84,9 @@ private enum DChatsSettingsEntry: ItemListNodeEntry {
             
         case .foldersHeader, .bottomFolder, .folderInfiniteScroll, .showChatFolders, .hideAllChats:
             return DChatsSettingsSection.folders.rawValue
+                
+        case .keyboardHeader, .fullscreenInput:
+            return DChatsSettingsSection.keyboard.rawValue
         }
     }
 
@@ -94,6 +104,8 @@ private enum DChatsSettingsEntry: ItemListNodeEntry {
         case .folderInfiniteScroll: return 9
         case .showChatFolders: return 10
         case .hideAllChats: return 11
+        case .keyboardHeader: return 12
+        case .fullscreenInput: return 13
         }
     }
 
@@ -168,6 +180,18 @@ private enum DChatsSettingsEntry: ItemListNodeEntry {
         case let .hideAllChats(lhsTitle, lhsValue, lhsEnabled):
             if case let .hideAllChats(rhsTitle, rhsValue, rhsEnabled) = rhs {
                 return lhsTitle == rhsTitle && lhsValue == rhsValue && lhsEnabled == rhsEnabled
+            }
+            return false
+            
+        case let .keyboardHeader(lhsTitle):
+            if case let .keyboardHeader(rhsTitle) = rhs {
+                return lhsTitle == rhsTitle
+            }
+            return false
+                
+        case let .fullscreenInput(lhsTitle, lhsValue):
+            if case let .fullscreenInput(rhsTitle, rhsValue) = rhs {
+                return lhsTitle == rhsTitle && lhsValue == rhsValue
             }
             return false
         }
@@ -289,6 +313,23 @@ private enum DChatsSettingsEntry: ItemListNodeEntry {
                 text: .plain(title),
                 sectionId: section
             )
+            
+        case let .keyboardHeader(title):
+            return ItemListSectionHeaderItem(
+                presentationData: presentationData,
+                text: title,
+                sectionId: section
+            )
+            
+        case let .fullscreenInput(title, value):
+            return ItemListSwitchItem(
+                presentationData: presentationData,
+                title: title,
+                value: value,
+                sectionId: section,
+                style: .blocks) { updatedValue in
+                    arguments.updateChatFullscreenInput(updatedValue)
+                }
         }
     }
 }
@@ -374,6 +415,16 @@ public func dChatsSettingsController(
                         settings.hideAllChatsFolder = false
                     }
                     settings.showChatFolders = updatedValue
+                    return settings
+                }
+            ).start()
+        },
+        updateChatFullscreenInput: { updatedValue in
+            let _ = updateDalSettingsInteractively(
+                accountManager: context.sharedContext.accountManager,
+                { settings in
+                    var settings = settings
+                    settings.chatFullscreenInput = updatedValue
                     return settings
                 }
             ).start()
@@ -490,6 +541,17 @@ public func dChatsSettingsController(
                 title: "DahlSettings.Chats.Folders.HideAllChats".tp_loc(lang: lang),
                 value: dahlSettings.hideAllChatsFolder,
                 enabled: dahlSettings.showChatFolders
+            )
+        )
+        
+        entries.append(
+            .keyboardHeader(title: "DahlSettings.Chats.Keyboard.Header".tp_loc(lang: lang).uppercased())
+        )
+        
+        entries.append(
+            .fullscreenInput(
+                title: "DahlSettings.Chats.Keyboard.ChatFullscreenInput".tp_loc(lang: lang),
+                value: dahlSettings.chatFullscreenInput
             )
         )
         

@@ -666,8 +666,9 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
     private var unlockButtonNode: ChatMessageUnlockMediaNode?
     private var mediaInfoNode: ChatMessageStarsMediaInfoNode?
     
-    private var shareButtonNode: ChatMessageShareButton?
-    
+    private var primaryShareButtonNode: ChatMessageShareButton?
+    private var secondaryShareButtonNode: ChatMessageShareButton?
+
     private let messageAccessibilityArea: AccessibilityAreaNode
 
     private var backgroundType: ChatMessageBackgroundType?
@@ -1183,9 +1184,14 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                     }
                 }
                 
-                if let shareButtonNode = strongSelf.shareButtonNode, shareButtonNode.frame.contains(point) {
+                if let secondaryShareButtonNode = strongSelf.secondaryShareButtonNode, secondaryShareButtonNode.frame.contains(point) {
                     return .fail
                 }
+                
+                if let primaryShareButtonNode = strongSelf.primaryShareButtonNode, primaryShareButtonNode.frame.contains(point) {
+                    return .fail
+                }
+                
                 
                 if let actionButtonsNode = strongSelf.actionButtonsNode {
                     if let _ = actionButtonsNode.hitTest(strongSelf.view.convert(point, to: actionButtonsNode.view), with: nil) {
@@ -1608,6 +1614,8 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                     
                     if !isBroadcastChannel {
                         hasAvatar = incoming
+                    } else if case let .customChatContents(contents) = item.associatedData.subject, case .wall = contents.kind {
+                        hasAvatar = true
                     } else if case .customChatContents = item.chatLocation {
                         hasAvatar = false
                     } else if overrideEffectiveAuthor {
@@ -1622,8 +1630,12 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                 hasAvatar = true
             }
         }
+        var alwaysShowAuthor = false
+        if let subject = item.associatedData.subject, case let .customChatContents(contents) = subject, case .wall = contents.kind {
+            alwaysShowAuthor = true
+        }
         
-        if isPreview, let peer = firstMessage.peers[firstMessage.id.peerId] as? TelegramUser, peer.firstName == nil {
+        if isPreview, let peer = firstMessage.peers[firstMessage.id.peerId] as? TelegramUser, peer.firstName == nil, !alwaysShowAuthor {
             hasAvatar = false
             effectiveAuthor = nil
         }
@@ -1647,6 +1659,13 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         let isFailed = item.content.firstMessage.effectivelyFailed(timestamp: item.context.account.network.getApproximateRemoteTimestamp())
         
         var needsShareButton = false
+        var useFixedWidthForAllMessages: Bool = false
+        var needsSecondaryShareButton = false
+
+        if case let .customChatContents(contents) = item.associatedData.subject, case .wall = contents.kind {
+            useFixedWidthForAllMessages = true
+        }
+            
         if incoming, case let .customChatContents(contents) = item.associatedData.subject, case .hashTagSearch = contents.kind {
             needsShareButton = true
         } else if case .pinnedMessages = item.associatedData.subject {
@@ -1727,6 +1746,15 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
             }
         }
         
+        if case let .customChatContents(contents) = item.associatedData.subject {
+            switch contents.kind {
+            case .wall:
+                needsSecondaryShareButton = true
+            default:
+                break
+            }
+        }
+        
         if isPreview {
             needsShareButton = false
         }
@@ -1769,6 +1797,11 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         let (contentNodeMessagesAndClasses, needSeparateContainers, needReactions) = contentNodeMessagesAndClassesForItem(item)
         
         var maximumContentWidth = floor(tmpWidth - layoutConstants.bubble.edgeInset * 3.0 - layoutConstants.bubble.contentInsets.left - layoutConstants.bubble.contentInsets.right - avatarInset)
+        
+        if useFixedWidthForAllMessages {
+            maximumContentWidth = floor(baseWidth - params.rightInset - layoutConstants.bubble.contentInsets.left - layoutConstants.bubble.contentInsets.right - avatarInset - 44.0)
+        }
+        
         if needsShareButton {
             maximumContentWidth -= 10.0
         }
@@ -2110,6 +2143,12 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         var currentCredibilityIcon: (EmojiStatusComponent.Content, UIColor?)?
         
         var initialDisplayHeader = true
+        
+        if let subject = item.associatedData.subject, case let .customChatContents(contents) = subject, case .wall = contents.kind {
+            ignoreNameHiding = true
+            displayAuthorInfo = true
+        }
+        
         if hidesHeaders || item.message.adAttribute != nil {
             initialDisplayHeader = false
         } else if let backgroundHiding, case .always = backgroundHiding {
@@ -2560,11 +2599,16 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
             var hasThreadInfo = false
             if case let .peer(peerId) = item.chatLocation, (peerId == replyMessage?.id.peerId || item.message.threadId == 1 || item.associatedData.isRecentActions), let channel = item.message.peers[item.message.id.peerId] as? TelegramChannel, channel.flags.contains(.isForum), item.message.associatedThreadInfo != nil {
                 hasThreadInfo = true
-            } else if case let .customChatContents(contents) = item.associatedData.subject, case .hashTagSearch = contents.kind {
-                if let channel = item.message.peers[item.message.id.peerId] as? TelegramChannel, case .broadcast = channel.info {
-                    
-                } else {
-                    hasThreadInfo = true
+            } else if case let .customChatContents(contents) = item.associatedData.subject {
+                switch contents.kind {
+                case .hashTagSearch, .wall:
+                    if let channel = item.message.peers[item.message.id.peerId] as? TelegramChannel, case .broadcast = channel.info {
+                        
+                    } else {
+                        hasThreadInfo = true
+                    }
+                default:
+                    break
                 }
             }
                         
@@ -2896,6 +2940,9 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                         assertionFailure()
                         contentPosition = .linear(top: .Neighbour(false, .text, .default), bottom: .Neighbour(false, .text, .default))
                 }
+                
+                let fixedWidth = baseWidth - params.rightInset - 54.0 - layoutConstants.bubble.contentInsets.left - layoutConstants.bubble.contentInsets.right - avatarInset
+
                 let (contentNodeWidth, contentNodeFinalize) = contentNodeLayout(CGSize(width: maximumNodeWidth, height: CGFloat.greatestFiniteMagnitude), contentPosition)
                 #if DEBUG
                 if contentNodeWidth > maximumNodeWidth {
@@ -2906,7 +2953,7 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                 if contentNodeProperties.isDetached {
                     
                 } else {
-                    maxContentWidth = max(maxContentWidth, contentNodeWidth)
+                    maxContentWidth = max(maxContentWidth, useFixedWidthForAllMessages ? fixedWidth : contentNodeWidth)
                 }
                 
                 contentNodePropertiesAndFinalize.append((contentNodeProperties, contentPosition, contentNodeFinalize, contentGroupId, itemSelection))
@@ -3143,7 +3190,18 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
             layoutSize.height += 1.0 + actionButtonsSizeAndApply.0.height
         }
         
-        var layoutInsets = UIEdgeInsets(top: mergedTop.merged ? layoutConstants.bubble.mergedSpacing : layoutConstants.bubble.defaultSpacing, left: 0.0, bottom: mergedBottom.merged ? layoutConstants.bubble.mergedSpacing : layoutConstants.bubble.defaultSpacing, right: 0.0)
+        var additionalSpacing = 0.0
+        
+        if case let .customChatContents(contents) = item.associatedData.subject {
+            switch contents.kind {
+            case .wall:
+                additionalSpacing = 3.0
+            default:
+                break
+            }
+        }
+        
+        var layoutInsets = UIEdgeInsets(top: mergedTop.merged ? layoutConstants.bubble.mergedSpacing : (layoutConstants.bubble.defaultSpacing + additionalSpacing), left: 0.0, bottom: mergedBottom.merged ? layoutConstants.bubble.mergedSpacing : (layoutConstants.bubble.defaultSpacing + additionalSpacing), right: 0.0)
         if dateHeaderAtBottom {
             layoutInsets.top += layoutConstants.timestampHeaderHeight
         }
@@ -3169,7 +3227,11 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
             }
         }
         
-        let disablesComments = !hasInstantVideo
+        var disablesComments = !hasInstantVideo
+        
+        if case let .customChatContents(contents) = item.associatedData.subject, case .wall = contents.kind {
+            disablesComments = true
+        }
         
         return (layout, { animation, applyInfo, synchronousLoads in
             return ChatMessageBubbleItemNode.applyLayout(selfReference: selfReference, animation, synchronousLoads,
@@ -3221,6 +3283,7 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                 mediaInfoOrigin: mediaInfoOrigin,
                 mediaInfoSizeAndApply: mediaInfoSizeApply,
                 needsShareButton: needsShareButton,
+                needsSecondaryShareButton: needsSecondaryShareButton,
                 shareButtonOffset: shareButtonOffset,
                 avatarOffset: avatarOffset,
                 hidesHeaders: hidesHeaders,
@@ -3281,6 +3344,7 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         mediaInfoOrigin: CGPoint?,
         mediaInfoSizeAndApply: (CGSize, (Bool) -> ChatMessageStarsMediaInfoNode?),
         needsShareButton: Bool,
+        needsSecondaryShareButton: Bool,
         shareButtonOffset: CGPoint?,
         avatarOffset: CGFloat?,
         hidesHeaders: Bool,
@@ -4347,20 +4411,44 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         }
 
         if needsShareButton {
-            if strongSelf.shareButtonNode == nil {
-                let shareButtonNode = ChatMessageShareButton()
-                strongSelf.shareButtonNode = shareButtonNode
-                strongSelf.insertSubnode(shareButtonNode, belowSubnode: strongSelf.messageAccessibilityArea)
-                shareButtonNode.pressed = { [weak strongSelf] in
+            let primaryButtonExists = strongSelf.primaryShareButtonNode != nil
+            if !primaryButtonExists {
+                let primaryShareButtonNode = ChatMessageShareButton()
+                strongSelf.primaryShareButtonNode = primaryShareButtonNode
+                strongSelf.insertSubnode(primaryShareButtonNode, belowSubnode: strongSelf.messageAccessibilityArea)
+                primaryShareButtonNode.pressed = { [weak strongSelf] in
                     strongSelf?.shareButtonPressed()
                 }
-                shareButtonNode.morePressed = { [weak strongSelf] in
+                primaryShareButtonNode.morePressed = { [weak strongSelf] in
                     strongSelf?.openMessageContextMenu()
                 }
             }
-        } else if let shareButtonNode = strongSelf.shareButtonNode {
-            strongSelf.shareButtonNode = nil
-            shareButtonNode.removeFromSupernode()
+        } else {
+            if let primaryShareButtonNode = strongSelf.primaryShareButtonNode {
+                strongSelf.primaryShareButtonNode = nil
+                primaryShareButtonNode.removeFromSupernode()
+            }
+        }
+        
+        if needsSecondaryShareButton {
+            let secondaryButtonExists = strongSelf.secondaryShareButtonNode != nil
+            
+            if !secondaryButtonExists {
+                let secondaryShareButtonNode = ChatMessageShareButton()
+                strongSelf.secondaryShareButtonNode = secondaryShareButtonNode
+                strongSelf.insertSubnode(secondaryShareButtonNode, belowSubnode: strongSelf.messageAccessibilityArea)
+                secondaryShareButtonNode.pressed = { [weak strongSelf] in
+                    strongSelf?.secondaryShareButtonPressed()
+                }
+                secondaryShareButtonNode.morePressed = { [weak strongSelf] in
+                    strongSelf?.openMessageContextMenu()
+                }
+            }
+        } else {
+            if let secondaryShareButtonNode = strongSelf.secondaryShareButtonNode {
+                strongSelf.secondaryShareButtonNode = nil
+                secondaryShareButtonNode.removeFromSupernode()
+            }
         }
         
         let offset: CGFloat = params.leftInset + (incoming ? 42.0 : 0.0)
@@ -4510,27 +4598,49 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                 }
                 strongSelf.messageAccessibilityArea.frame = backgroundFrame
             }
-            if let shareButtonNode = strongSelf.shareButtonNode {
-                let buttonSize = shareButtonNode.update(presentationData: item.presentationData, controllerInteraction: item.controllerInteraction, chatLocation: item.chatLocation, subject: item.associatedData.subject, message: item.message, account: item.context.account, disableComments: disablesComments)
+            
+            if let secondaryShareButtonNode = strongSelf.secondaryShareButtonNode {
+                let buttonSize = secondaryShareButtonNode.update(presentationData: item.presentationData, controllerInteraction: item.controllerInteraction, chatLocation: item.chatLocation, subject: item.associatedData.subject, message: item.message, account: item.context.account, disableComments: disablesComments, isPrimairyButton: false)
                 
-                var buttonFrame = CGRect(origin: CGPoint(x: !incoming ? backgroundFrame.minX - buttonSize.width - 8.0 : backgroundFrame.maxX + 8.0, y: backgroundFrame.maxY - buttonSize.width - 1.0), size: buttonSize)
+                var secondaryShareButtonFrame = CGRect(origin: CGPoint(x: !incoming ? backgroundFrame.minX - buttonSize.width - 8.0 : backgroundFrame.maxX + 8.0, y: backgroundFrame.maxY - buttonSize.width - 1.0 - buttonSize.height - 4.0), size: buttonSize)
                 
                 if item.message.adAttribute != nil {
-                    buttonFrame.origin.y = backgroundFrame.minY + 1.0
+                    secondaryShareButtonFrame.origin.y = backgroundFrame.minY + 1.0 - buttonSize.height - 4.0
                 }
                 
                 if let shareButtonOffset = shareButtonOffset {
                     if incoming {
-                        buttonFrame.origin.x = shareButtonOffset.x
+                        secondaryShareButtonFrame.origin.x = shareButtonOffset.x
                     }
-                    buttonFrame.origin.y = buttonFrame.origin.y + shareButtonOffset.y - (buttonSize.height - 30.0)
+                    secondaryShareButtonFrame.origin.y = secondaryShareButtonFrame.origin.y + shareButtonOffset.y - (buttonSize.height - 30.0)
                 } else if !disablesComments {
-                    buttonFrame.origin.y = buttonFrame.origin.y - (buttonSize.height - 30.0)
+                    secondaryShareButtonFrame.origin.y = secondaryShareButtonFrame.origin.y - (buttonSize.height - 30.0)
                 }
                 
-                animation.animator.updateFrame(layer: shareButtonNode.layer, frame: buttonFrame, completion: nil)
-                animation.animator.updateAlpha(layer: shareButtonNode.layer, alpha: isCurrentlyPlayingMedia ? 0.0 : 1.0, completion: nil)
-
+                animation.animator.updateFrame(layer: secondaryShareButtonNode.layer, frame: secondaryShareButtonFrame, completion: nil)
+                animation.animator.updateAlpha(layer: secondaryShareButtonNode.layer, alpha: isCurrentlyPlayingMedia ? 0.0 : 1.0, completion: nil)
+            }
+            
+            if let primaryShareButtonNode = strongSelf.primaryShareButtonNode {
+                let buttonSize = primaryShareButtonNode.update(presentationData: item.presentationData, controllerInteraction: item.controllerInteraction, chatLocation: item.chatLocation, subject: item.associatedData.subject, message: item.message, account: item.context.account, disableComments: disablesComments, isPrimairyButton: true)
+                
+                var primaryButtonFrame = CGRect(origin: CGPoint(x: !incoming ? backgroundFrame.minX - buttonSize.width - 8.0 : backgroundFrame.maxX + 8.0, y: backgroundFrame.maxY - buttonSize.width - 1.0), size: buttonSize)
+                
+                if item.message.adAttribute != nil {
+                    primaryButtonFrame.origin.y = backgroundFrame.minY + 1.0
+                }
+                
+                if let shareButtonOffset = shareButtonOffset {
+                    if incoming {
+                        primaryButtonFrame.origin.x = shareButtonOffset.x
+                    }
+                    primaryButtonFrame.origin.y = primaryButtonFrame.origin.y + shareButtonOffset.y - (buttonSize.height - 30.0)
+                } else if !disablesComments {
+                    primaryButtonFrame.origin.y = primaryButtonFrame.origin.y - (buttonSize.height - 30.0)
+                }
+                
+                animation.animator.updateFrame(layer: primaryShareButtonNode.layer, frame: primaryButtonFrame, completion: nil)
+                animation.animator.updateAlpha(layer: primaryShareButtonNode.layer, alpha: isCurrentlyPlayingMedia ? 0.0 : 1.0, completion: nil)
             }
         } else {
             /*if let _ = strongSelf.backgroundFrameTransition {
@@ -4538,25 +4648,49 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                 strongSelf.backgroundFrameTransition = nil
             }*/
             strongSelf.messageAccessibilityArea.frame = backgroundFrame
-            if let shareButtonNode = strongSelf.shareButtonNode {
-                let buttonSize = shareButtonNode.update(presentationData: item.presentationData, controllerInteraction: item.controllerInteraction, chatLocation: item.chatLocation, subject: item.associatedData.subject, message: item.message, account: item.context.account, disableComments: disablesComments)
+            
+            if let secondaryShareButtonNode = strongSelf.secondaryShareButtonNode {
+                let buttonSize = secondaryShareButtonNode.update(presentationData: item.presentationData, controllerInteraction: item.controllerInteraction, chatLocation: item.chatLocation, subject: item.associatedData.subject, message: item.message, account: item.context.account, disableComments: disablesComments, isPrimairyButton: false)
                 
-                var buttonFrame = CGRect(origin: CGPoint(x: !incoming ? backgroundFrame.minX - buttonSize.width - 8.0 : backgroundFrame.maxX + 8.0, y: backgroundFrame.maxY - buttonSize.width - 1.0), size: buttonSize)
+                var secondaryButtonFrame = CGRect(origin: CGPoint(x: !incoming ? backgroundFrame.minX - buttonSize.width - 8.0 : backgroundFrame.maxX + 8.0, y: backgroundFrame.maxY - buttonSize.width - 1.0 - buttonSize.height - 4.0), size: buttonSize)
                 
                 if item.message.adAttribute != nil {
-                    buttonFrame.origin.y = backgroundFrame.minY + 1.0
+                    secondaryButtonFrame.origin.y = backgroundFrame.minY + 1.0 - buttonSize.height - 4.0
                 }
                 
                 if let shareButtonOffset = shareButtonOffset {
                     if incoming {
-                        buttonFrame.origin.x = shareButtonOffset.x
+                        secondaryButtonFrame.origin.x = shareButtonOffset.x
                     }
-                    buttonFrame.origin.y = buttonFrame.origin.y + shareButtonOffset.y - (buttonSize.height - 30.0)
+                    secondaryButtonFrame.origin.y = secondaryButtonFrame.origin.y + shareButtonOffset.y - (buttonSize.height - 30.0)
                 } else if !disablesComments {
-                    buttonFrame.origin.y = buttonFrame.origin.y - (buttonSize.height - 30.0)
+                    secondaryButtonFrame.origin.y = secondaryButtonFrame.origin.y - (buttonSize.height - 30.0)
                 }
-                shareButtonNode.frame = buttonFrame
-                shareButtonNode.alpha = isCurrentlyPlayingMedia ? 0.0 : 1.0
+                
+                secondaryShareButtonNode.frame = secondaryButtonFrame
+                secondaryShareButtonNode.alpha = isCurrentlyPlayingMedia ? 0.0 : 1.0
+            }
+            
+            if let primaryShareButtonNode = strongSelf.primaryShareButtonNode {
+                let buttonSize = primaryShareButtonNode.update(presentationData: item.presentationData, controllerInteraction: item.controllerInteraction, chatLocation: item.chatLocation, subject: item.associatedData.subject, message: item.message, account: item.context.account, disableComments: disablesComments, isPrimairyButton: true)
+                
+                var primaryButtonFrame = CGRect(origin: CGPoint(x: !incoming ? backgroundFrame.minX - buttonSize.width - 8.0 : backgroundFrame.maxX + 8.0, y: backgroundFrame.maxY - buttonSize.width - 1.0), size: buttonSize)
+                
+                if item.message.adAttribute != nil {
+                    primaryButtonFrame.origin.y = backgroundFrame.minY + 1.0
+                }
+                
+                if let shareButtonOffset = shareButtonOffset {
+                    if incoming {
+                        primaryButtonFrame.origin.x = shareButtonOffset.x
+                    }
+                    primaryButtonFrame.origin.y = primaryButtonFrame.origin.y + shareButtonOffset.y - (buttonSize.height - 30.0)
+                } else if !disablesComments {
+                    primaryButtonFrame.origin.y = primaryButtonFrame.origin.y - (buttonSize.height - 30.0)
+                }
+                
+                primaryShareButtonNode.frame = primaryButtonFrame
+                primaryShareButtonNode.alpha = isCurrentlyPlayingMedia ? 0.0 : 1.0
             }
             
             if case .System = animation, strongSelf.mainContextSourceNode.isExtractedToContextPreview {
@@ -5354,8 +5488,12 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
             return boostButtonNode.view
         }
         
-        if let shareButtonNode = self.shareButtonNode, shareButtonNode.frame.contains(point) {
-            return shareButtonNode.view.hitTest(self.view.convert(point, to: shareButtonNode.view), with: event)
+        if let primaryShareButtonNode = self.primaryShareButtonNode, primaryShareButtonNode.frame.contains(point) {
+            return primaryShareButtonNode.view.hitTest(self.view.convert(point, to: primaryShareButtonNode.view), with: event)
+        }
+
+        if let secondaryShareButtonNode = self.secondaryShareButtonNode, secondaryShareButtonNode.frame.contains(point) {
+            return secondaryShareButtonNode.view.hitTest(self.view.convert(point, to: secondaryShareButtonNode.view), with: event)
         }
         
         if let selectionNode = self.selectionNode {
@@ -5754,8 +5892,42 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         if let item = self.item {
             if item.message.adAttribute != nil {
                 item.controllerInteraction.openNoAdsDemo()
-            } else if case let .customChatContents(contents) = item.associatedData.subject, case .hashTagSearch = contents.kind {
-                item.controllerInteraction.navigateToMessage(item.content.firstMessage.id, item.content.firstMessage.id, NavigateToMessageParams(timestamp: nil, quote: nil, forceNew: true))
+            } else if case let .customChatContents(contents) = item.associatedData.subject {
+                switch contents.kind {
+                case .hashTagSearch, .wall:
+                    item.controllerInteraction.navigateToMessage(item.content.firstMessage.id, item.content.firstMessage.id, NavigateToMessageParams(timestamp: nil, quote: nil, forceNew: true))
+                default:
+                    break
+                }
+            } else if case .pinnedMessages = item.associatedData.subject {
+                item.controllerInteraction.navigateToMessageStandalone(item.content.firstMessage.id)
+            } else if item.content.firstMessage.id.peerId.isRepliesOrSavedMessages(accountPeerId: item.context.account.peerId) {
+                for attribute in item.content.firstMessage.attributes {
+                    if let attribute = attribute as? SourceReferenceMessageAttribute {
+                        item.controllerInteraction.navigateToMessage(item.content.firstMessage.id, attribute.messageId, NavigateToMessageParams(timestamp: nil, quote: nil))
+                        break
+                    }
+                }
+            } else {
+                if !self.disablesComments {
+                    if let channel = item.message.peers[item.message.id.peerId] as? TelegramChannel, case .broadcast = channel.info {
+                        for attribute in item.message.attributes {
+                            if let _ = attribute as? ReplyThreadMessageAttribute {
+                                item.controllerInteraction.openMessageReplies(item.message.id, true, false)
+                                return
+                            }
+                        }
+                    }
+                }
+                item.controllerInteraction.openMessageShareMenu(item.message.id)
+            }
+        }
+    }
+    
+    @objc private func secondaryShareButtonPressed() {
+        if let item = self.item {
+            if item.message.adAttribute != nil {
+                item.controllerInteraction.openNoAdsDemo()
             } else if case .pinnedMessages = item.associatedData.subject {
                 item.controllerInteraction.navigateToMessageStandalone(item.content.firstMessage.id)
             } else if item.content.firstMessage.id.peerId.isRepliesOrSavedMessages(accountPeerId: item.context.account.peerId) {
@@ -5996,12 +6168,20 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
             container.updateAbsoluteRect(containerFrame, within: containerSize)
         }
         
-        if let shareButtonNode = self.shareButtonNode {
-            var shareButtonNodeFrame = shareButtonNode.frame
+        if let primaryShareButtonNode = self.primaryShareButtonNode {
+            var shareButtonNodeFrame = primaryShareButtonNode.frame
             shareButtonNodeFrame.origin.x += rect.minX
             shareButtonNodeFrame.origin.y += rect.minY
             
-            shareButtonNode.updateAbsoluteRect(shareButtonNodeFrame, within: containerSize)
+            primaryShareButtonNode.updateAbsoluteRect(shareButtonNodeFrame, within: containerSize)
+        }
+
+        if let secondaryShareButtonNode = self.secondaryShareButtonNode {
+            var shareButtonNodeFrame = secondaryShareButtonNode.frame
+            shareButtonNodeFrame.origin.x += rect.minX
+            shareButtonNodeFrame.origin.y += rect.minY
+            
+            secondaryShareButtonNode.updateAbsoluteRect(shareButtonNodeFrame, within: containerSize)
         }
         
         if let actionButtonsNode = self.actionButtonsNode {

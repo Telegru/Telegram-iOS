@@ -21,4 +21,9 @@ public final class Analytics {
         let providers = self.providers.with { $0 }
         providers.forEach { $0.setUserId(userId) }
     }
+    
+    public static func trackEvent(name: String, params: [String: String]? = nil) {
+        let providers = self.providers.with { $0 }
+        providers.forEach { $0.trackEvent(name: name, params: params) }
+    }
 }

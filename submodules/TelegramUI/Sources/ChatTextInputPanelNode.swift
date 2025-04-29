@@ -511,6 +511,12 @@ final class ChatTextViewForOverlayContent: UIView, ChatInputPanelViewForOverlayC
     }
 }
 
+enum DChatInputPanelMode: Int {
+    case normal
+    case expanded
+    case fullscreen
+}
+
 private func makeTextInputTheme(context: AccountContext, interfaceState: ChatPresentationInterfaceState) -> ChatInputTextView.Theme {
     let lineStyle: ChatInputTextView.Theme.Quote.LineStyle
     let authorNameColor: UIColor
@@ -592,6 +598,11 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
     let sendAsAvatarContainerNode: ContextControllerSourceNode
     private let sendAsAvatarNode: AvatarNode
     
+    let fullscreenButton: HighlightableButtonNode
+    private let isFullscreenInputEnabled: Bool
+    private var chatInputPanelMode: DChatInputPanelMode = .normal
+    private var forceChangeChatInputPanelMode: Bool = false
+    
     let attachmentButton: HighlightableButtonNode
     let attachmentButtonDisabledNode: HighlightableButtonNode
     let searchLayoutClearButton: HighlightableButton
@@ -609,7 +620,7 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
     
     private var accessoryItemButtons: [(ChatTextInputAccessoryItem, AccessoryItemIconButtonNode)] = []
     
-    private var validLayout: (CGFloat, CGFloat, CGFloat, CGFloat, UIEdgeInsets, CGFloat, LayoutMetrics, Bool, Bool)?
+    private var validLayout: (CGFloat, CGFloat, CGFloat, CGFloat, UIEdgeInsets, CGFloat, CGFloat, LayoutMetrics, Bool, Bool)?
     private var leftMenuInset: CGFloat = 0.0
     private var rightSlowModeInset: CGFloat = 0.0
     private var currentTextInputBackgroundWidthOffset: CGFloat = 0.0
@@ -784,6 +795,7 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
             self.extendedSearchLayout = extendedSearchLayout
             self.updateTextNodeText(animated: animated)
             self.updateSpoiler()
+            self.updateFullscreenButtonMode()
         }
     }
     
@@ -906,6 +918,12 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
         self.searchLayoutClearImageNode.isUserInteractionEnabled = false
         self.searchLayoutClearButton.addSubnode(self.searchLayoutClearImageNode)
         
+        self.fullscreenButton = HighlightableButtonNode(pointerStyle: .circle(36.0))
+        self.isFullscreenInputEnabled = context.currentDahlSettings.with { $0 }.chatFullscreenInput
+        self.fullscreenButton.alpha = 0.0
+        self.fullscreenButton.setImage(PresentationResourcesChat.dChatInputPanelExpandInputButtonImage(presentationInterfaceState.theme), for: [])
+        self.fullscreenButton.hitTestSlop = UIEdgeInsets(top: -10.0, left: -10.0, bottom: -10.0, right: -4.0)
+        
         self.actionButtons = ChatTextInputActionButtonsNode(context: context, presentationInterfaceState: presentationInterfaceState, presentationContext: presentationContext, presentController: presentController)
         self.counterTextNode = ImmediateTextNode()
         self.counterTextNode.textAlignment = .center
@@ -916,6 +934,19 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
         self.viewOnceButton = ChatRecordingViewOnceButtonNode(icon: .viewOnce)
         
         super.init()
+        
+        self.fullscreenButton.addTarget(self, action: #selector(self.fullscreenButtonPressed), forControlEvents: .touchUpInside)
+        self.fullscreenButton.highligthedChanged = { [weak self] highlighted in
+            if let strongSelf = self {
+                if highlighted {
+                    let transition: ContainedViewLayoutTransition = .animated(duration: 0.3, curve: .spring)
+                    transition.updateTransformScale(node: strongSelf.fullscreenButton, scale: 0.85)
+                } else {
+                    let transition: ContainedViewLayoutTransition = .animated(duration: 0.5, curve: .spring)
+                    transition.updateTransformScale(node: strongSelf.fullscreenButton, scale: 1.0)
+                }
+            }
+        }
         
         self.slowModeButton.requestUpdate = { [weak self] in
             self?.requestLayout(transition: .animated(duration: 0.2, curve: .easeInOut))
@@ -1044,15 +1075,15 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
         }
         self.actionButtons.micButton.offsetRecordingControls = { [weak self] in
             if let strongSelf = self, let presentationInterfaceState = strongSelf.presentationInterfaceState {
-                if let (width, leftInset, rightInset, bottomInset, additionalSideInsets, maxHeight, metrics, isSecondary, isMediaInputExpanded) = strongSelf.validLayout {
-                    let _ = strongSelf.updateLayout(width: width, leftInset: leftInset, rightInset: rightInset, bottomInset: bottomInset, additionalSideInsets: additionalSideInsets, maxHeight: maxHeight, isSecondary: isSecondary, transition: .immediate, interfaceState: presentationInterfaceState, metrics: metrics, isMediaInputExpanded: isMediaInputExpanded)
+                if let (width, leftInset, rightInset, bottomInset, additionalSideInsets, maxHeight, fullscreenMaxHeight, metrics, isSecondary, isMediaInputExpanded) = strongSelf.validLayout {
+                    let _ = strongSelf.updateLayout(width: width, leftInset: leftInset, rightInset: rightInset, bottomInset: bottomInset, additionalSideInsets: additionalSideInsets, maxHeight: maxHeight, fullscreenMaxHeight: fullscreenMaxHeight, isSecondary: isSecondary, transition: .immediate, interfaceState: presentationInterfaceState, metrics: metrics, isMediaInputExpanded: isMediaInputExpanded)
                 }
             }
         }
         self.actionButtons.micButton.updateCancelTranslation = { [weak self] in
             if let strongSelf = self, let presentationInterfaceState = strongSelf.presentationInterfaceState {
-                if let (width, leftInset, rightInset, bottomInset, additionalSideInsets, maxHeight, metrics, isSecondary, isMediaInputExpanded) = strongSelf.validLayout {
-                    let _ = strongSelf.updateLayout(width: width, leftInset: leftInset, rightInset: rightInset, bottomInset: bottomInset, additionalSideInsets: additionalSideInsets, maxHeight: maxHeight, isSecondary: isSecondary, transition: .immediate, interfaceState: presentationInterfaceState, metrics: metrics, isMediaInputExpanded: isMediaInputExpanded)
+                if let (width, leftInset, rightInset, bottomInset, additionalSideInsets, maxHeight, fullscreenMaxHeight, metrics, isSecondary, isMediaInputExpanded) = strongSelf.validLayout {
+                    let _ = strongSelf.updateLayout(width: width, leftInset: leftInset, rightInset: rightInset, bottomInset: bottomInset, additionalSideInsets: additionalSideInsets, maxHeight: maxHeight, fullscreenMaxHeight: fullscreenMaxHeight, isSecondary: isSecondary, transition: .immediate, interfaceState: presentationInterfaceState, metrics: metrics, isMediaInputExpanded: isMediaInputExpanded)
                 }
             }
         }
@@ -1102,6 +1133,7 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
         self.clippingNode.addSubnode(self.menuButton)
         self.clippingNode.addSubnode(self.attachmentButton)
         self.clippingNode.addSubnode(self.attachmentButtonDisabledNode)
+        self.clippingNode.addSubnode(self.fullscreenButton)
         
         self.clippingNode.addSubnode(self.startButton)
           
@@ -1328,7 +1360,7 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
             
             if textInputNode.textView.isFirstResponder {
                 return true
-            } else if let (_, _, _, bottomInset, _, _, metrics, _, _) = strongSelf.validLayout {
+            } else if let (_, _, _, bottomInset, _, _, _, metrics, _, _) = strongSelf.validLayout {
                 let textFieldWaitsForTouchUp: Bool
                 if case .regular = metrics.widthClass, bottomInset.isZero {
                     textFieldWaitsForTouchUp = true
@@ -1354,7 +1386,7 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
         return max(33.0, maxHeight - (textFieldInsets.top + textFieldInsets.bottom + self.textInputViewInternalInsets.top + self.textInputViewInternalInsets.bottom))
     }
     
-    private func calculateTextFieldMetrics(width: CGFloat, maxHeight: CGFloat, metrics: LayoutMetrics) -> (accessoryButtonsWidth: CGFloat, textFieldHeight: CGFloat) {
+    private func calculateTextFieldMetrics(width: CGFloat, maxHeight: CGFloat, fullscreenMaxHeight: CGFloat, metrics: LayoutMetrics) -> (accessoryButtonsWidth: CGFloat, textFieldHeight: CGFloat) {
         let accessoryButtonInset = self.accessoryButtonInset
         let accessoryButtonSpacing = self.accessoryButtonSpacing
         
@@ -1364,6 +1396,7 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
         }
         
         let fieldMaxHeight = textFieldMaxHeight(maxHeight, metrics: metrics)
+        let fullscreenFieldMaxHeight = textFieldMaxHeight(fullscreenMaxHeight, metrics: metrics)
         
         var accessoryButtonsWidth: CGFloat = 0.0
         var firstButton = true
@@ -1397,8 +1430,11 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
             let maxNumberOfLines = min(12, (Int(fieldMaxHeight - 11.0) - 33) / 22)
             
             let updatedMaxHeight = (CGFloat(maxNumberOfLines) * (22.0 + 2.0) + 10.0)
-            
-            textFieldHeight = max(textFieldMinHeight, min(updatedMaxHeight, unboundTextFieldHeight))
+            if self.isFullscreenInputEnabled {
+                textFieldHeight = max(textFieldMinHeight, chatInputPanelMode == .fullscreen ? fullscreenFieldMaxHeight : min(self.forceChangeChatInputPanelMode && self.chatInputPanelMode == .normal ? updatedMaxHeight : fullscreenFieldMaxHeight, unboundTextFieldHeight))
+            } else {
+                textFieldHeight = max(textFieldMinHeight, min(updatedMaxHeight, unboundTextFieldHeight))
+            }
         } else {
             textFieldHeight = textFieldMinHeight
         }
@@ -1550,15 +1586,15 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
     }
     
     func requestLayout(transition: ContainedViewLayoutTransition = .immediate) {
-        guard let presentationInterfaceState = self.presentationInterfaceState, let (width, leftInset, rightInset, bottomInset, additionalSideInsets, maxHeight, metrics, isSecondary, isMediaInputExpanded) = self.validLayout else {
+        guard let presentationInterfaceState = self.presentationInterfaceState, let (width, leftInset, rightInset, bottomInset, additionalSideInsets, maxHeight, fullscreenMaxHeight, metrics, isSecondary, isMediaInputExpanded) = self.validLayout else {
             return
         }
-        let _ = self.updateLayout(width: width, leftInset: leftInset, rightInset: rightInset, bottomInset: bottomInset, additionalSideInsets: additionalSideInsets, maxHeight: maxHeight, isSecondary: isSecondary, transition: transition, interfaceState: presentationInterfaceState, metrics: metrics, isMediaInputExpanded: isMediaInputExpanded)
+        let _ = self.updateLayout(width: width, leftInset: leftInset, rightInset: rightInset, bottomInset: bottomInset, additionalSideInsets: additionalSideInsets, maxHeight: maxHeight, fullscreenMaxHeight: fullscreenMaxHeight, isSecondary: isSecondary, transition: transition, interfaceState: presentationInterfaceState, metrics: metrics, isMediaInputExpanded: isMediaInputExpanded)
     }
     
-    override func updateLayout(width: CGFloat, leftInset: CGFloat, rightInset: CGFloat, bottomInset: CGFloat, additionalSideInsets: UIEdgeInsets, maxHeight: CGFloat, isSecondary: Bool, transition: ContainedViewLayoutTransition, interfaceState: ChatPresentationInterfaceState, metrics: LayoutMetrics, isMediaInputExpanded: Bool) -> CGFloat {
+    override func updateLayout(width: CGFloat, leftInset: CGFloat, rightInset: CGFloat, bottomInset: CGFloat, additionalSideInsets: UIEdgeInsets, maxHeight: CGFloat, fullscreenMaxHeight: CGFloat, isSecondary: Bool, transition: ContainedViewLayoutTransition, interfaceState: ChatPresentationInterfaceState, metrics: LayoutMetrics, isMediaInputExpanded: Bool) -> CGFloat {
         let previousAdditionalSideInsets = self.validLayout?.4
-        self.validLayout = (width, leftInset, rightInset, bottomInset, additionalSideInsets, maxHeight, metrics, isSecondary, isMediaInputExpanded)
+        self.validLayout = (width, leftInset, rightInset, bottomInset, additionalSideInsets, maxHeight, fullscreenMaxHeight, metrics, isSecondary, isMediaInputExpanded)
     
         var transition = transition
         var additionalOffset: CGFloat = 0.0
@@ -1609,6 +1645,8 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
         var displayMediaButton = true
         if case let .customChatContents(customChatContents) = interfaceState.subject {
             switch customChatContents.kind {
+            case .wall:
+                break
             case .hashTagSearch:
                 break
             case .quickReplyMessageInput:
@@ -1994,6 +2032,8 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
                     switch customChatContents.kind {
                     case .hashTagSearch:
                         placeholder = ""
+                    case .wall:
+                        placeholder = ""
                     case let .quickReplyMessageInput(_, shortcutType):
                         switch shortcutType {
                         case .generic:
@@ -2026,6 +2066,8 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
             if let interfaceState = self.presentationInterfaceState {
                 if case let .customChatContents(customChatContents) = interfaceState.subject {
                     switch customChatContents.kind {
+                    case .wall:
+                        break
                     case .hashTagSearch:
                         break
                     case .quickReplyMessageInput:
@@ -2163,10 +2205,16 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
         }
         
         let baseWidth = width - leftInset - leftMenuInset - rightInset - rightSlowModeInset
-        let (accessoryButtonsWidth, textFieldHeight) = self.calculateTextFieldMetrics(width: baseWidth, maxHeight: maxHeight, metrics: metrics)
+        let (accessoryButtonsWidth, textFieldHeight) = self.calculateTextFieldMetrics(width: baseWidth, maxHeight: maxHeight, fullscreenMaxHeight: fullscreenMaxHeight, metrics: metrics)
         var panelHeight = self.panelHeight(textFieldHeight: textFieldHeight, metrics: metrics)
         if displayBotStartButton {
             panelHeight += 27.0
+        }
+        
+        let numberOfLines = self.textInputNode?.textView.numberOfLines ?? 0
+        let fullscreenButtonAlpha = self.isFullscreenInputEnabled && maxHeight > 100.0 && (numberOfLines >= (maxHeight < 150 ? 4 : 5) || self.chatInputPanelMode != .normal) ? 1.0 : 0.0
+        if self.fullscreenButton.alpha != fullscreenButtonAlpha {
+            transition.updateAlpha(node: self.fullscreenButton, alpha: fullscreenButtonAlpha)
         }
         
         let menuButtonOriginY: CGFloat
@@ -2537,6 +2585,8 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
         transition.updateFrame(layer: self.attachmentButton.layer, frame: CGRect(origin: CGPoint(x: attachmentButtonX, y: hideOffset.y + panelHeight - minimalHeight), size: CGSize(width: 40.0, height: minimalHeight)))
         transition.updateFrame(node: self.attachmentButtonDisabledNode, frame: self.attachmentButton.frame)
         
+        transition.updateFrame(node: self.fullscreenButton, frame: CGRect(origin: CGPoint(x: width - 7.0 - 24.0, y: 11), size: CGSize(width: 24.0, height: 24.0)))
+        
         var composeButtonsOffset: CGFloat = 0.0
         if self.extendedSearchLayout {
             composeButtonsOffset = 44.0
@@ -2758,9 +2808,10 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
             textPlaceholderSize = self.textPlaceholderNode.bounds.size
         }
         
+        let fullscreenTopInset: CGFloat = chatInputPanelMode == .fullscreen ? textInputBackgroundFrame.maxY - textPlaceholderSize.height - (textFieldInsets.top + self.textInputViewInternalInsets.bottom + textInputViewRealInsets.bottom + self.textInputViewInternalInsets.top + textInputViewRealInsets.top + 2 * UIScreenPixel) : 0
         let textPlaceholderFrame: CGRect
         if sendingTextDisabled {
-            textPlaceholderFrame = CGRect(origin: CGPoint(x: textInputBackgroundFrame.minX + floor((textInputBackgroundFrame.width - textPlaceholderSize.width) / 2.0), y: textFieldInsets.top + self.textInputViewInternalInsets.top + textInputViewRealInsets.top + UIScreenPixel), size: textPlaceholderSize)
+            textPlaceholderFrame = CGRect(origin: CGPoint(x: textInputBackgroundFrame.minX + floor((textInputBackgroundFrame.width - textPlaceholderSize.width) / 2.0), y: textFieldInsets.top + self.textInputViewInternalInsets.top + textInputViewRealInsets.top + UIScreenPixel + fullscreenTopInset), size: textPlaceholderSize)
             
             let textLockIconNode: ASImageNode
             var textLockIconTransition = transition
@@ -2779,7 +2830,7 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
                 textLockIconTransition.updateFrame(node: textLockIconNode, frame: CGRect(origin: CGPoint(x: -image.size.width - 4.0, y: floor((textPlaceholderFrame.height - image.size.height) / 2.0)), size: image.size))
             }
         } else {
-            textPlaceholderFrame = CGRect(origin: CGPoint(x: hideOffset.x + leftInset + textFieldInsets.left + self.textInputViewInternalInsets.left, y: hideOffset.y + textFieldInsets.top + self.textInputViewInternalInsets.top + textInputViewRealInsets.top + UIScreenPixel), size: textPlaceholderSize)
+            textPlaceholderFrame = CGRect(origin: CGPoint(x: hideOffset.x + leftInset + textFieldInsets.left + self.textInputViewInternalInsets.left, y: hideOffset.y + textFieldInsets.top + self.textInputViewInternalInsets.top + textInputViewRealInsets.top + UIScreenPixel + fullscreenTopInset), size: textPlaceholderSize)
             
             if let textLockIconNode = self.textLockIconNode {
                 self.textLockIconNode = nil
@@ -3030,6 +3081,8 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
     
     func chatInputTextNodeDidUpdateText() {
         if let textInputNode = self.textInputNode, let presentationInterfaceState = self.presentationInterfaceState, let context = self.context {
+            self.forceChangeChatInputPanelMode = false
+            
             let baseFontSize = max(minInputFontSize, presentationInterfaceState.fontSize.baseDisplaySize)
             refreshChatTextInputAttributes(context: context, textView: textInputNode.textView, theme: presentationInterfaceState.theme, baseFontSize: baseFontSize, spoilersRevealed: self.spoilersRevealed, availableEmojis: (self.context?.animatedEmojiStickersValue.keys).flatMap(Set.init) ?? Set(), emojiViewProvider: self.emojiViewProvider, makeCollapsedQuoteAttachment: { text, attributes in
                 return ChatInputTextCollapsedQuoteAttachmentImpl(text: text, attributes: attributes)
@@ -3037,6 +3090,7 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
             refreshChatTextInputTypingAttributes(textInputNode.textView, theme: presentationInterfaceState.theme, baseFontSize: baseFontSize)
             
             self.updateSpoiler()
+            self.updateFullscreenButtonMode()
             
             let inputTextState = self.inputTextState
             
@@ -3046,6 +3100,41 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
             
             self.updateCounterTextNode(transition: .immediate)
         }
+    }
+    
+    func updateFullscreenButtonMode() {
+        if self.isFullscreenInputEnabled,
+           let textInputNode = self.textInputNode,
+           let (width, _, _, _, _, maxHeight, fullscreenMaxHeight, metrics, _, _) = self.validLayout {
+            let (_, textFieldHeight) = self.calculateTextFieldMetrics(width: width, maxHeight: maxHeight, fullscreenMaxHeight: fullscreenMaxHeight, metrics: metrics)
+            let numberOfLines = textInputNode.textView.numberOfLines
+            if self.chatInputPanelMode == .normal && (textFieldHeight > maxHeight || numberOfLines > 12) {
+                self.chatInputPanelMode = .expanded
+                self.updateFullscreenButtonImage()
+            } else if self.chatInputPanelMode == .expanded && textFieldHeight <= maxHeight && numberOfLines <= 12 {
+                self.chatInputPanelMode = .normal
+                self.updateFullscreenButtonImage()
+            }
+        }
+    }
+    
+    func updateFullscreenButtonImage() {
+        guard let presentationInterfaceState else { return }
+        let image = self.chatInputPanelMode == .normal ? PresentationResourcesChat.dChatInputPanelExpandInputButtonImage(presentationInterfaceState.theme) : PresentationResourcesChat.dChatInputPanelCollapseInputButtonImage(presentationInterfaceState.theme)
+        fullscreenButton.setImage(image, for: [])
+    }
+    
+    @objc func fullscreenButtonPressed() {
+        let currentMode = self.chatInputPanelMode
+        switch currentMode {
+        case .normal:
+            self.chatInputPanelMode = .fullscreen
+        case .fullscreen, .expanded:
+            self.chatInputPanelMode = .normal
+        }
+        self.forceChangeChatInputPanelMode = true
+        self.updateFullscreenButtonImage()
+        self.updateTextNodeText(animated: true)
     }
     
     @objc func editableTextNodeDidUpdateText(_ editableTextNode: ASEditableTextNode) {
@@ -3467,6 +3556,15 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
                 componentView.adjustBackground(relativePositionX: floor(globalPosition.x - viewFrame.minX))
             }
         }
+        
+        if self.isFullscreenInputEnabled {
+            if self.chatInputPanelMode == .fullscreen {
+                let textView = textInputNode.textView
+                textInputNode.textView.contentInset = UIEdgeInsets(top: max(0, textView.bounds.height - textView.contentSize.height), left: 0, bottom: 0, right: 0)
+            } else {
+                textInputNode.textView.contentInset = .zero
+            }
+        }
     }
     
     private func updateCounterTextNode(transition: ContainedViewLayoutTransition) {
@@ -3490,13 +3588,13 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
             self.counterTextNode.attributedText = NSAttributedString(string: "", font: counterFont, textColor: .black)
         }
         
-        if let (width, leftInset, rightInset, _, _, maxHeight, metrics, _, _) = self.validLayout {
+        if let (width, leftInset, rightInset, _, _, maxHeight, fullscreenMaxHeight, metrics, _, _) = self.validLayout {
             var composeButtonsOffset: CGFloat = 0.0
             if self.extendedSearchLayout {
                 composeButtonsOffset = 44.0
             }
             
-            let (_, textFieldHeight) = self.calculateTextFieldMetrics(width: width - leftInset - rightInset - self.leftMenuInset - self.rightSlowModeInset + self.currentTextInputBackgroundWidthOffset, maxHeight: maxHeight, metrics: metrics)
+            let (_, textFieldHeight) = self.calculateTextFieldMetrics(width: width - leftInset - rightInset - self.leftMenuInset - self.rightSlowModeInset + self.currentTextInputBackgroundWidthOffset, maxHeight: maxHeight, fullscreenMaxHeight: fullscreenMaxHeight, metrics: metrics)
             let panelHeight = self.panelHeight(textFieldHeight: textFieldHeight, metrics: metrics)
             var textFieldMinHeight: CGFloat = 33.0
             if let presentationInterfaceState = self.presentationInterfaceState {
@@ -3823,6 +3921,8 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
             
             if case let .customChatContents(customChatContents) = presentationInterfaceState.subject {
                 switch customChatContents.kind {
+                case .wall:
+                    break
                 case .hashTagSearch:
                     break
                 case .quickReplyMessageInput:
@@ -3943,6 +4043,8 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
         if let interfaceState = self.presentationInterfaceState {
             if case let .customChatContents(customChatContents) = interfaceState.subject {
                 switch customChatContents.kind {
+                case .wall:
+                    break
                 case .hashTagSearch:
                     break
                 case .quickReplyMessageInput:
@@ -4000,8 +4102,8 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
     }
     
     private func updateTextHeight(animated: Bool) {
-        if let (width, leftInset, rightInset, _, additionalSideInsets, maxHeight, metrics, _, _) = self.validLayout {
-            let (_, textFieldHeight) = self.calculateTextFieldMetrics(width: width - leftInset - rightInset - additionalSideInsets.right - self.leftMenuInset - self.rightSlowModeInset + self.currentTextInputBackgroundWidthOffset, maxHeight: maxHeight, metrics: metrics)
+        if let (width, leftInset, rightInset, _, additionalSideInsets, maxHeight, fullscreenMaxHeight, metrics, _, _) = self.validLayout {
+            let (_, textFieldHeight) = self.calculateTextFieldMetrics(width: width - leftInset - rightInset - additionalSideInsets.right - self.leftMenuInset - self.rightSlowModeInset + self.currentTextInputBackgroundWidthOffset, maxHeight: maxHeight, fullscreenMaxHeight: fullscreenMaxHeight, metrics: metrics)
             let panelHeight = self.panelHeight(textFieldHeight: textFieldHeight, metrics: metrics)
             if !self.bounds.size.height.isEqual(to: panelHeight) {
                 self.updateHeight(animated)
@@ -4048,6 +4150,8 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
             var sendButtonHasApplyIcon = interfaceState.interfaceState.editMessage != nil
             if case let .customChatContents(customChatContents) = interfaceState.subject {
                 switch customChatContents.kind {
+                case .wall:
+                    break
                 case .hashTagSearch:
                     break
                 case .quickReplyMessageInput:
@@ -4596,7 +4700,8 @@ class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, Ch
                 return
             }
         }
-    
+        self.chatInputPanelMode = .normal
+        self.updateFullscreenButtonImage()
         self.sendMessage()
     }
     

@@ -25,4 +25,12 @@ public final class MyTrackerProvider: AnalyticsProvider {
         let params = MRMyTracker.trackerParams()
         params.customUserId = userId
     }
+    
+    public func trackEvent(name: String, params: [String: String]? = nil) {
+        if let params = params {
+            MRMyTracker.trackEvent(name: name, eventParams: params)
+        } else {
+            MRMyTracker.trackEvent(name: name)
+        }
+    }
 }

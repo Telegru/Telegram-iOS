@@ -38,6 +38,9 @@ import ChatMessageBubbleItemNode
 import AdsInfoScreen
 import AdsReportScreen
  
+
+import TPUI
+
 private struct MessageContextMenuData {
     let starStatus: Bool?
     let canReply: Bool
@@ -281,8 +284,13 @@ private func canViewReadStats(message: Message, participantCount: Int?, isMessag
 }
 
 func canReplyInChat(_ chatPresentationInterfaceState: ChatPresentationInterfaceState, accountPeerId: PeerId) -> Bool {
-    if case let .customChatContents(contents) = chatPresentationInterfaceState.subject, case .hashTagSearch = contents.kind {
-        return true
+    if case let .customChatContents(contents) = chatPresentationInterfaceState.subject {
+        switch contents.kind {
+        case .hashTagSearch, .wall:
+            return true
+        default:
+            break
+        }
     }
     if case .customChatContents = chatPresentationInterfaceState.chatLocation {
         return true
@@ -487,6 +495,10 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
     }
     
     if case let .customChatContents(customChatContents) = chatPresentationInterfaceState.subject, case .hashTagSearch = customChatContents.kind {
+        isEmbeddedMode = true
+    }
+    
+    if case let .customChatContents(customChatContents) = chatPresentationInterfaceState.subject, case .wall = customChatContents.kind {
         isEmbeddedMode = true
     }
     
@@ -895,8 +907,16 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
         
         var messageActions = messageActions
         if isEmbeddedMode {
+            let isWall = {
+                guard let subject = chatPresentationInterfaceState.subject,
+                      case let .customChatContents(contents) = subject,
+                      case .wall = contents.kind else {
+                    return false
+                }
+                return true
+            }()
             messageActions = ChatAvailableMessageActions(
-                options: messageActions.options.intersection([.deleteLocally, .deleteGlobally, .forward]),
+                options: messageActions.options.intersection(isWall ? [.deleteLocally, .deleteGlobally, .forward, .report] : [.deleteLocally, .deleteGlobally, .forward]),
                 banAuthor: nil,
                 banAuthors: [],
                 disableDelete: true,
@@ -1724,6 +1744,57 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
             }
         }
         
+        if case let .customChatContents(customChatContents) = chatPresentationInterfaceState.subject {
+            switch customChatContents.kind {
+            case .wall:
+                let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+
+                actions.append(.action(ContextMenuActionItem(text: "Wall.Conversation.ContextMenuExcludeChannel".tp_loc(lang: presentationData.strings.baseLanguageCode), icon: { theme in
+                    return generateTintedImage(image: TPIconManager.shared.icon(.contextMenuExclude), color: theme.actionSheet.primaryTextColor)
+                }, action: { c, f in
+                    
+                    let _ = (context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
+                             |> take(1)
+                             |> deliverOnMainQueue).start(next: { sharedData in
+                        let dahlSettings = sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? .defaultSettings
+                        var excludedChannels = dahlSettings.wallSettings.excludedChannels
+                        let peerId = message.id.peerId
+                        
+                        if !excludedChannels.contains(peerId) {
+                            excludedChannels.append(peerId)
+                            let _ = updateDalSettingsInteractively(
+                                accountManager: context.sharedContext.accountManager,
+                                { settings in
+                                    var updatedSettings = settings
+                                    var updatedWallSettings = settings.wallSettings
+                                    updatedWallSettings.excludedChannels = excludedChannels
+                                    updatedSettings.wallSettings = updatedWallSettings
+                                    return updatedSettings
+                                }
+                            ).startStandalone(completed: {
+                                Queue.mainQueue().after(0.2) {
+                                    let icon = TPIconManager.shared.icon(.wallDismiss)
+                                    let content = UndoOverlayContent.universalImage(
+                                        image: icon ?? UIImage(),
+                                        size: CGSize(width: 24, height: 24),
+                                        title: "Wall.ExcludeChannel.ToastMessage".tp_loc(lang: presentationData.strings.baseLanguageCode),
+                                        text: "Wall.ExcludeChannel.ToastInfo".tp_loc(lang: presentationData.strings.baseLanguageCode),
+                                        customUndoText: nil,
+                                        timeout: 5.0
+                                    )
+                                    let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+                                    controllerInteraction.presentControllerInCurrent(UndoOverlayController(presentationData: presentationData, content: content, elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), nil)
+                                }
+                            })
+                        }
+                        f(.dismissWithoutContent)
+                    })
+                })))
+            default:
+                break
+            }
+        }
+        
         if data.messageActions.options.contains(.report) {
             actions.append(.action(ContextMenuActionItem(text: chatPresentationInterfaceState.strings.Conversation_ContextMenuReport, icon: { theme in
                 return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Report"), color: theme.actionSheet.primaryTextColor)
@@ -2041,6 +2112,8 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
         
         if let message = messages.first, case let .customChatContents(customChatContents) = chatPresentationInterfaceState.subject {
             switch customChatContents.kind {
+            case .wall:
+                break
             case .hashTagSearch:
                 break
             case .quickReplyMessageInput:

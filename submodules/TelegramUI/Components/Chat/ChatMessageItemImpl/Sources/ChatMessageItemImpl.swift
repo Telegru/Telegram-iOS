@@ -536,7 +536,7 @@ public final class ChatMessageItemImpl: ChatMessageItem, CustomStringConvertible
             if top.dateHeader.id != self.dateHeader.id {
                 mergedBottom = .none
             } else {
-                mergedBottom = messagesShouldBeMerged(accountPeerId: self.context.account.peerId, message, top.message)
+                mergedBottom = controllerInteraction.disableMessageMerge ? .none : messagesShouldBeMerged(accountPeerId: self.context.account.peerId, message, top.message)
             }
         }
         if let bottom = bottom as? ChatMessageItemImpl {
@@ -544,7 +544,7 @@ public final class ChatMessageItemImpl: ChatMessageItem, CustomStringConvertible
                 mergedTop = .none
                 dateAtBottom = true
             } else {
-                mergedTop = messagesShouldBeMerged(accountPeerId: self.context.account.peerId, bottom.message, message)
+                mergedTop = controllerInteraction.disableMessageMerge ? .none : messagesShouldBeMerged(accountPeerId: self.context.account.peerId, bottom.message, message)
             }
         } else if let bottom = bottom as? ChatUnreadItem {
             if bottom.header.id != self.dateHeader.id {

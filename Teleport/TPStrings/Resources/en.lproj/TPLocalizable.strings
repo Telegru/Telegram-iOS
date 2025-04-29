@@ -83,6 +83,24 @@
 "DahlSettings.General.Premium.Stories.HideStoriesPublishButton" = "Hide the publish button";
 "DahlSettings.General.Premium.Stories.HideViewedStories" = "Hide viewed";
 
+"DahlSettings.General.Wall" = "Wall Settings";
+"DahlSettings.Wall.Title" = "Wall Settings";
+"DahlSettings.Wall.Display.Header" = "Show";
+"DahlSettings.Wall.Display.ArchivedChannels" = "Channels from Archive";
+"DahlSettings.Wall.Display.Footer" = "Channel posts from your Archive will appear on your Wall along with other posts.";
+"DahlSettings.Wall.Display.MarkAsRead" = "Mark as read when viewing in wall";
+
+"DahlSettings.Wall.Excluded.Header" = "EXCLUDED CHANNELS";
+"DahlSettings.Wall.Excluded.ExcludedChannels" = "Add Exclusions";
+"DahlSettings.Wall.Excluded.Footer" = "By default, posts from all channels you are subscribed to are displayed.";
+"DahlSettings.Wall.Excluded.AddExclusion" = "Add Exclusions";
+"DahlSettings.Wall.Excluded.RemoveAll" = "Remove All Exclusions";
+"DahlSettings.Wall.Excluded.RemoveAllConfirmation" = "Are you sure you want to remove all exclusions?";
+"DahlSettings.Wall.Excluded.Title" = "Excluded Channels";
+"DahlSettings.Wall.Excluded.Search" = "Search channels";
+"DahlSettings.Wall.Excluded.RemoveFromList" = "Remove from list";
+"DahlSettings.Wall.Excluded.RemoveFromList" = "Remove from list";
+
 "DahlSettings.Appearance.Title" = "Appearance";
 
 "DahlSettings.Appearance.Chats.Header" = "Enable in chats and channels";
@@ -117,6 +135,9 @@
 "DahlSettings.Chats.Folders.InfiniteScroll" = "Scroll around in a circle";
 "DahlSettings.Chats.Folders.HideAllChats" = "Hide folder “All chats”";
 "DahlSettings.Chats.Folders.ShowChatFolders" = "Show all folders";
+
+"DahlSettings.Chats.Keyboard.Header" = "KEYBOARD";
+"DahlSettings.Chats.Keyboard.ChatFullscreenInput" = "Full screen input";
 
 "DahlSettings.Support.Title" = "Support";
 "DahlSettings.Support.Alert.Title" = "Please note that volunteers are responsible for supporting Dahl. We will try to help as soon as possible, but waiting may take time.";
@@ -164,6 +185,24 @@
 
 // Apps
 "Apps.TabTitle" = "Apps";
+
+// Wall
+"Wall.TabTitle" = "Wall";
+"Wall.Title" = "Wall";
+"Wall.Reload" = "Update";
+"Wall.EmptyWallInfo.Title" = "You don't have any unread channels";
+"Wall.Load.ManyPosts" = "Wow, you have\nso many new posts";
+"Wall.Load.FormingFeed" = "We need time to form\nthem into a Feed...";
+"Wall.Conversation.ContextMenuLeaveChannel" = "Leave channel";
+"Wall.Conversation.ContextMenuExcludeChannel" = "Exclude channel";
+
+"Wall.ExcludeChannel.ToastMessage" = "Channel excluded from Wall";
+"Wall.ExcludeChannel.ToastInfo" = "To make channel posts appear on Wall again, go to **Wall Settings — Excluded Channels**";
+
+"Wall.LeaveChannel.Title" = "Unsubscribe from channel";
+"Wall.LeaveChannel.Text" = "Are you sure you want to leave the channel\n%@";
+"Wall.LeaveChannel.Confirm" = "Leave";
+"Wall.LeaveChannel.Cancel" = "Cancel";
 
 // Chat
 "Chat.FrontCamera" = "Front camera";

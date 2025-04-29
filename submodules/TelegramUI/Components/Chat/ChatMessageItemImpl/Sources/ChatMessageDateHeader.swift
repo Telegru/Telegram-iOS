@@ -388,6 +388,7 @@ public final class ChatMessageAvatarHeader: ListViewItemHeader {
     public let context: AccountContext
     public let controllerInteraction: ChatControllerInteraction?
     public let storyStats: PeerStoryStats?
+    private let disableMessageMerge: Bool
 
     public init(timestamp: Int32, peerId: PeerId, peer: Peer?, messageReference: MessageReference?, message: Message, presentationData: ChatPresentationData, context: AccountContext, controllerInteraction: ChatControllerInteraction?, storyStats: PeerStoryStats?) {
         self.peerId = peerId
@@ -412,7 +413,7 @@ public final class ChatMessageAvatarHeader: ListViewItemHeader {
         self.storyStats = storyStats
         
         let isRotated = controllerInteraction?.chatIsRotated ?? true
-        
+        self.disableMessageMerge = controllerInteraction?.disableMessageMerge ?? false
         self.stickDirection = isRotated ? .top : .bottom
     }
     
@@ -426,7 +427,7 @@ public final class ChatMessageAvatarHeader: ListViewItemHeader {
             if abs(self.effectiveTimestamp - other.effectiveTimestamp) >= 10 * 60 {
                 return false
             }
-            return true
+            return !disableMessageMerge
         } else {
             return false
         }

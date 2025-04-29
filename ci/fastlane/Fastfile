@@ -94,13 +94,33 @@ lane :generate_proj do |options|
   source_path = ENV['SOURCE_PATH'] || File.expand_path('../../.')
   cache_dir = ENV['BAZEL_LOCAL_CACHE'] || '$HOME/telegram-bazel-cache'
 
-  sh "cd #{source_path} && python3 build-system/Make/Make.py \
-  --cacheDir=#{cache_dir} \
-  generateProject \
+  shell_command = "cd #{source_path} && python3 build-system/Make/Make.py "
+
+  shell_command += "--cacheDir=#{cache_dir} "
+
+  unless ENV['BAZEL_PATH'].nil?
+    shell_command += "--bazel=#{ENV['BAZEL_PATH']} "
+  end
+
+  unless ENV['BAZEL_USER_ROOT'].nil?
+    shell_command += "--bazelUserRoot=#{ENV['BAZEL_USER_ROOT']} "
+  end
+
+  unless ENV['BAZEL_REMOTE_CACHE'].nil?
+    shell_command += "--cacheHost=#{ENV['BAZEL_REMOTE_CACHE']} "
+  end
+
+  shell_command += "generateProject \
   --configurationPath=#{configuration_path} \
   --buildNumber=10000 \
   --gitCodesigningRepository=#{ENV['CERTS_GIT_URL']} \
   --gitCodesigningType=#{build_type}"
+
+  error_callback = lambda do |result|
+    raise "❌ Gen script error\n#{result}"
+  end
+
+  sh shell_command, error_callback: error_callback
 end
 
 lane :build do |options|
@@ -167,7 +187,7 @@ lane :match_certs do |options|
   team_id = team_id(build_type: type)
   match(
     type: type,
-    app_identifier: app_bundle_ids(),
+    app_identifier: app_bundle_ids(build_type: type),
     team_id: team_id,
     git_url: ENV['CERTS_GIT_URL'],
     git_branch: team_id,
@@ -188,12 +208,12 @@ lane :update_certs_for_new_devices do |options|
     team_id = team_id(build_type: type)
     match(
       type: type,
-      app_identifier: app_bundle_ids(),
+      app_identifier: app_bundle_ids(build_type: type),
       team_id: team_id,
       git_url: ENV['CERTS_GIT_URL'],
       git_branch: team_id,
       api_key: generate_app_store_connect_api_key(),
-      force_for_new_devices: true,
+      force_for_new_devices: true
     )
   end
 end

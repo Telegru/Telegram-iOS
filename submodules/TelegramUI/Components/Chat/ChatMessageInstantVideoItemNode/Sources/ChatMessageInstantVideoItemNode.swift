@@ -695,7 +695,7 @@ public class ChatMessageInstantVideoItemNode: ChatMessageItemView, ASGestureReco
                                     strongSelf?.shareButtonPressed()
                                 }
                             }
-                            let buttonSize = updatedShareButtonNode.update(presentationData: item.presentationData, controllerInteraction: item.controllerInteraction, chatLocation: item.chatLocation, subject: item.associatedData.subject, message: item.message, account: item.context.account)
+                            let buttonSize = updatedShareButtonNode.update(presentationData: item.presentationData, controllerInteraction: item.controllerInteraction, chatLocation: item.chatLocation, subject: item.associatedData.subject, message: item.message, account: item.context.account, isPrimairyButton: true)
                             updatedShareButtonNode.frame = CGRect(origin: CGPoint(x: min(params.width - buttonSize.width - 8.0, videoFrame.maxX - 7.0), y: videoFrame.maxY - 24.0 - buttonSize.height), size: buttonSize)
                         } else if let shareButtonNode = strongSelf.shareButtonNode {
                             shareButtonNode.removeFromSupernode()

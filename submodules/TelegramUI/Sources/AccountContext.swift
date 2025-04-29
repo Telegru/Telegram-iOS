@@ -23,6 +23,8 @@ import MultiAnimationRenderer
 import AppBundle
 import DirectMediaImageCache
 
+import DAnalytics
+
 private final class DeviceSpecificContactImportContext {
     let disposable = MetaDisposable()
     var reference: DeviceContactBasicDataWithReference?
@@ -360,7 +362,16 @@ public final class AccountContextImpl: AccountContext {
         
         let currentDahlSettings = self.currentDahlSettings
         self.dahlSettingsDisposable = (self._dahlSettings.get() |> deliverOnMainQueue).start(next: { value in
-            let _ = currentDahlSettings.swap(value)
+            let oldSettings = currentDahlSettings.swap(value)
+            let isWallEnabledInOld = oldSettings.tabBarSettings.activeTabs.contains(where: { $0 == .wall })
+            let isWallEnabledCurrnent = value.tabBarSettings.activeTabs.contains(where: { $0 == .wall })
+            if isWallEnabledInOld != isWallEnabledCurrnent {
+                if  isWallEnabledCurrnent {
+                    Analytics.trackEnableMenuWall()
+                } else {
+                    Analytics.trackDisableMenuWall()
+                }
+            }
         })
         
         let updatedAppConfiguration = getAppConfiguration(postbox: account.postbox)
@@ -583,6 +594,57 @@ public final class AccountContextImpl: AccountContext {
             }
         case .customChatContents:
             return .single(0)
+        }
+    }
+    
+    public func totalUnreadCount(filterPredicate: ChatListFilterPredicate) -> Signal<Int, NoError> {
+        let updateTrigger = self.account.postbox.tailChatListView(
+            groupId: .root,
+            count: 1,
+            summaryComponents: ChatListEntrySummaryComponents(),
+            extractCachedData: nil,
+            accountPeerId: nil
+        )
+        
+        let peerIdsSignal = updateTrigger
+        |> mapToSignal { _ in
+            return combineLatest(
+                self.account.postbox.getChatListPeers(
+                    groupId: .root,
+                    filterPredicate: filterPredicate
+                ),
+                self.account.postbox.getChatListPeers(
+                    groupId: Namespaces.PeerGroup.archive,
+                    filterPredicate: filterPredicate
+                )
+            )
+        }
+        |> distinctUntilChanged(isEqual: { lhs, rhs in
+            return lhs == rhs
+        })
+        
+        return peerIdsSignal
+        |> mapToSignal { [weak self] rootPeers, archivePeers -> Signal<Int, NoError> in
+            let peerIds = rootPeers + archivePeers
+            guard let strongSelf = self else {
+                return .single(0)
+            }
+            let peerSignals = peerIds.map { peerId -> Signal<Int, NoError> in
+                let unreadCountsKey: PostboxViewKey = .unreadCounts(items: [.peer(id: peerId, handleThreads: false)])
+                
+                return strongSelf.account.postbox.combinedView(keys: [unreadCountsKey])
+                |> map { views in
+                    if let view = views.views[unreadCountsKey] as? UnreadMessageCountsView,
+                       let count = view.count(for: .peer(id: peerId, handleThreads: false)) {
+                        return Int(count)
+                    }
+                    return 0
+                }
+            }
+            return combineLatest(peerSignals)
+            |> map { counts in
+                counts.reduce(0, +)
+            }
         }
     }
     

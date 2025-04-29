@@ -5,6 +5,7 @@ public enum IconType: String, CaseIterable {
     case chatsTab
     case contactsTab
     case settingsTab
+    case wallTab
     case addStory
     case storyCompose
     case peerPinnedIcon
@@ -43,6 +44,12 @@ public enum IconType: String, CaseIterable {
     case contextMenuClear
     case contextMenuDelete
     case contextMenuEye
+    case contextMenuLeave
+    case contextMenuExclude
+    case chatAdd
+    case chatDelete
+    case wallGear
+    case wallDismiss
 }
 
 public enum IconRef: Equatable {

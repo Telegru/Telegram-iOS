@@ -82,6 +82,10 @@ public struct DahlIconSet: IconSet {
             return UIImage(bundleImageName: "Context Menu/Delete")!
         case .contextMenuEye:
             return UIImage(bundleImageName: "Context Menu/Eye")!
+        case .contextMenuLeave:
+            return UIImage(bundleImageName: "Context Menu/Leave")!
+        case .contextMenuExclude:
+            return UIImage(bundleImageName: "Context Menu/Exclude")!
         case .callsTab:
             return UIImage(bundleImageName: "Chat List/Tabs/DIconCalls")
         case .contactsTab:
@@ -90,6 +94,16 @@ public struct DahlIconSet: IconSet {
             return UIImage(bundleImageName: "Chat List/Tabs/DIconChats")
         case .settingsTab:
             return UIImage(bundleImageName: "Chat List/Tabs/DIconSettings")
+        case .wallTab:
+            return UIImage(bundleImageName: "Chat List/Tabs/IconWall")
+        case .chatAdd:
+            return UIImage(bundleImageName: "TPChat List/Add")!
+        case .chatDelete:
+            return UIImage(bundleImageName: "TPChat List/Delete")!
+        case .wallGear:
+            return UIImage(bundleImageName: "Wall/WallGear")!
+        case .wallDismiss:
+            return UIImage(bundleImageName: "Wall/Dismiss")!
         }
     }
 }
