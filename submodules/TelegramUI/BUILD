@@ -53,6 +53,8 @@ swift_library(
         "//Teleport/TPSettings:TPSettings",
         "//Teleport/DWallpaper:DWallpaper",
         "//Teleport/DAnalytics:DAnalytics",
+        "//Teleport/DClient:DClient",
+        "//Teleport/DWall:DWall",
         "@FirebaseSDK//:FirebaseCore",
         "@FirebaseSDK//:FirebaseCrashlytics",
 

@@ -16,9 +16,11 @@ import TelegramPresentationData
 import LegacyComponents
 import SolidRoundedButtonNode
 import RMIntro
+import AccountContext
+
 import DAuth
 import DOnboarding
-import AccountContext
+import DClient
 
 public final class DAuthorizationSequenceSplashController: ViewController {
     
@@ -39,7 +41,8 @@ public final class DAuthorizationSequenceSplashController: ViewController {
     
     private let suggestedLocalization = Promise<SuggestedLocalizationInfo?>()
     private let activateLocalizationDisposable = MetaDisposable()
-    
+    private let checkConnectionDisposable = MetaDisposable()
+
     private let startButton: SolidRoundedButtonNode
     
     init(
@@ -113,6 +116,13 @@ public final class DAuthorizationSequenceSplashController: ViewController {
             _ = startButton.updateLayout(width: width, transition: .immediate)
             return startButton.view
         }
+        
+        checkConnectionDisposable.set(DConnectionChecker.shared.status.start() {
+            if $0 == .idle {
+                DConnectionChecker.shared.configure(with: DProxyManagerFactory.makeDefaultManager())
+                DConnectionChecker.shared.checkAndEnableProxyIfNeeded(network: account.network, sharedContext: sharedContext)
+            }
+        })
     }
     
     required init(coder aDecoder: NSCoder) {
@@ -120,6 +130,7 @@ public final class DAuthorizationSequenceSplashController: ViewController {
     }
     
     deinit {
+        checkConnectionDisposable.dispose()
         activateLocalizationDisposable.dispose()
     }
     

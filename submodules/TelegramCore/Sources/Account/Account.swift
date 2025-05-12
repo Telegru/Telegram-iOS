@@ -413,7 +413,7 @@ public func dataWithHexString(_ string: String) -> Data {
     return data
 }
 
-func sha1Digest(_ data : Data) -> Data {
+public func sha1Digest(_ data : Data) -> Data {
     return data.withUnsafeBytes { rawBytes -> Data in
         let bytes = rawBytes.baseAddress!
         return CryptoSHA1(bytes, Int32(data.count))
@@ -1284,7 +1284,8 @@ public class Account {
                 let dahlServer = ProxyServerSettings(
                     host: buildConfig.dProxyServer,
                     port: buildConfig.dProxyPort,
-                    connection: .mtp(secret: parsedSecret.serialize())
+                    connection: .mtp(secret: parsedSecret.serialize()),
+                    isDahlServer: true
                 )
                 if !updatedProxySettings.servers.contains(dahlServer) {
                     updatedProxySettings.servers.insert(dahlServer, at: 0)

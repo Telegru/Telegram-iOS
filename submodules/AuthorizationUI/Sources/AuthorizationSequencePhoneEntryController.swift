@@ -12,6 +12,7 @@ import CountrySelectionUI
 import PhoneNumberFormat
 import DebugSettingsUI
 import MessageUI
+import AlertUI
 
 import DAuth
 
@@ -33,7 +34,9 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     private let back: () -> Void
     
     private var currentData: (Int32, String?, String)?
-        
+    
+    private let connectionStatusDisposable = MetaDisposable()
+    
     var codeNode: ASDisplayNode {
         return self.controllerNode.codeNode
     }
@@ -130,6 +133,56 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     deinit {
         self.termsDisposable.dispose()
         self.proxyDisposable.dispose()
+        self.connectionStatusDisposable.dispose()
+    }
+    
+    private func subscribeToConnectionStatus() {
+        connectionStatusDisposable.set(
+            DConnectionChecker.shared.status.start(next: { [weak self] status in
+                guard let self = self else { return }
+                
+                switch status {
+                case .failed:
+                    Queue.mainQueue().async {
+                        self.showConnectionErrorAlert()
+                    }
+                case .idle:
+                    if let account {
+                        DConnectionChecker.shared.checkAndEnableProxyIfNeeded(network: account.network, sharedContext: sharedContext)
+                    }
+                default:
+                    break
+                }
+            })
+        )
+    }
+    
+    private func showConnectionErrorAlert() {
+        let text = self.presentationData.strings.Login_NetworkError
+        var actions: [TextAlertAction] = []
+        
+        actions.append(TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {}))
+        actions.append(TextAlertAction(type: .genericAction, title: presentationData.strings.ChatSettings_ConnectionType_UseProxy, action: { [weak self] in
+            guard let self = self, let account = self.account else { return }
+            self.present(
+                self.sharedContext.makeProxySettingsController(
+                    sharedContext: self.sharedContext,
+                    account: account
+                ),
+                in: .window(.root),
+                with: ViewControllerPresentationArguments(presentationAnimation: .modalSheet)
+            )
+        }))
+        
+        self.present(
+            standardTextAlertController(
+                theme: AlertControllerTheme(presentationData: self.presentationData),
+                title: nil,
+                text: text,
+                actions: actions
+            ),
+            in: .window(.root)
+        )
     }
     
     @objc private func cancelPressed() {
@@ -259,6 +312,8 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         if !self.animatingIn {
             self.controllerNode.activateInput()
         }
+        
+        subscribeToConnectionStatus()
         
         AppReviewLogin.shared.isAuthorized = false
         if AppReviewLogin.shared.isActive, let phone = AppReviewLogin.shared.phoneWithCode {

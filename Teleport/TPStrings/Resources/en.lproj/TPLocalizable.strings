@@ -4,6 +4,9 @@
 "RootTabs.News" = "News";
 
 // Intro
+"Intro.Consent.FormattedText" = "By tapping \"Start Messaging\" or \"Продолжить на русском\", I agree to the processing of my personal data in accordance with the Privacy Policy and to the Terms of Service";
+"Intro.Consent.PrivacyPolicy" = "Privacy Policy";
+"Intro.Consent.TermsOfService" = "Terms of Service";
 "Intro.Page1.Title" = "Dahl";
 "Intro.Page1.Description" = "A messenger **created with an understanding of the needs** of the Russian audience.";
 "Intro.Page2.Title" = "Communication";
@@ -48,6 +51,17 @@
 "DahlSettings.TabBarSettings" = "Tab bar";
 "DahlSettings.Proxy" = "Dahl proxy";
 "DahlSettings.MenuItems" = "Settings menu";
+
+"DahlSettings.ContextMenu.Title" = "Context Menu";
+"DahlSettings.ContextMenu.MessageMenu" = "Message Menu";
+"DahlSettings.ContextMenu.Footer" = "Configure which options are available in the context menu.";
+
+"DahlSettings.MessageMenu.Title" = "Message Menu";
+"DahlSettings.MessageMenu.SaveSound" = "Save Sound";
+"DahlSettings.MessageMenu.Reply" = "Reply";
+"DahlSettings.MessageMenu.Report" = "Report";
+"DahlSettings.MessageMenu.ReportGroups" = "Groups, Channels";
+"DahlSettings.MessageMenu.Footer" = "Configure which options appear in the context menu for messages and posts.";
 
 "DahlSettings.Common.RestartRequired" = "Restart required";
 "DahlSettings.Common.RestartNow" = "Restart Now";

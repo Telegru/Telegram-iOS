@@ -25,7 +25,7 @@ public struct DalSettings: Codable, Equatable {
     public var premiumSettings: DPremiumSettings
     public var appearanceSettings: DAppearanceSettings
     public var wallSettings: DWallSettings
-    
+    public var messageMenuSettings: DMessageMenuSettings
     // Раздел Stories
     public var hidePublishStoriesButton: Bool
     public var hideStories: Bool
@@ -60,6 +60,7 @@ public struct DalSettings: Codable, Equatable {
             premiumSettings: .default,
             appearanceSettings: .default,
             wallSettings: .default,
+            messageMenuSettings: .default,
             hidePublishStoriesButton: false,
             hideStories: false,
             hideViewedStories: false,
@@ -86,6 +87,7 @@ public struct DalSettings: Codable, Equatable {
         premiumSettings: DPremiumSettings,
         appearanceSettings: DAppearanceSettings,
         wallSettings: DWallSettings,
+        messageMenuSettings: DMessageMenuSettings,
         hidePublishStoriesButton: Bool,
         hideStories: Bool,
         hideViewedStories: Bool,
@@ -109,6 +111,7 @@ public struct DalSettings: Codable, Equatable {
         self.premiumSettings = premiumSettings
         self.appearanceSettings = appearanceSettings
         self.wallSettings = wallSettings
+        self.messageMenuSettings = messageMenuSettings
         self.hidePublishStoriesButton = hidePublishStoriesButton
         self.hideStories = hideStories
         self.hideViewedStories = hideViewedStories
@@ -135,6 +138,7 @@ public struct DalSettings: Codable, Equatable {
         self.premiumSettings = (try container.decodeIfPresent(DPremiumSettings.self, forKey: "premiumSettings") ?? .default)
         self.appearanceSettings = (try container.decodeIfPresent(DAppearanceSettings.self, forKey: "appearanceSettings") ?? .default)
         self.wallSettings = (try container.decodeIfPresent(DWallSettings.self, forKey: "wallSettings") ?? .default)
+        self.messageMenuSettings = (try container.decodeIfPresent(DMessageMenuSettings.self, forKey: "messageMenuSettings") ?? .default)
         // Раздел Stories
         self.hidePublishStoriesButton = (try container.decodeIfPresent(Int32.self, forKey: "hidePublishStoriesButton") ?? 0) != 0
         self.hideStories = (try container.decodeIfPresent(Int32.self, forKey: "hideStories") ?? 0) != 0
@@ -177,6 +181,8 @@ public struct DalSettings: Codable, Equatable {
         try container.encode(self.premiumSettings, forKey: "premiumSettings")
         try container.encode(self.appearanceSettings, forKey: "appearanceSettings")
         try container.encode(self.wallSettings, forKey: "wallSettings")
+        try container.encode(self.messageMenuSettings, forKey: "messageMenuSettings")  // Add this line
+        
         // Раздел Stories
         try container.encode((self.hidePublishStoriesButton ? 1 : 0) as Int32, forKey: "hidePublishStoriesButton")
         try container.encode((self.hideStories ? 1 : 0) as Int32, forKey: "hideStories")

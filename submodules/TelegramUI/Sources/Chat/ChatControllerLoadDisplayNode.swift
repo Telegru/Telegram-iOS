@@ -123,6 +123,7 @@ import PeerNameColorScreen
 import ChatEmptyNode
 import ChatMediaInputStickerGridItem
 import AdsInfoScreen
+import DWall
 
 extension ChatControllerImpl {
     func loadDisplayNodeImpl() {

@@ -12,6 +12,7 @@ import AccountContext
 import UrlEscaping
 import ShareController
 import BuildConfig
+import DClient
 
 private final class ProxySettingsControllerArguments {
     let toggleEnabled: (Bool) -> Void
@@ -300,9 +301,9 @@ private enum ProxySettingsControllerEntry: ItemListNodeEntry {
 private func proxySettingsControllerEntries(theme: PresentationTheme, strings: PresentationStrings, state: ProxySettingsControllerState, proxySettings: ProxySettings, statuses: [ProxyServerSettings: ProxyServerStatus], connectionStatus: ConnectionStatus, buildConfig: BuildConfig) -> [ProxySettingsControllerEntry] {
     var entries: [ProxySettingsControllerEntry] = []
 
-    let savedProxyServers = proxySettings.servers.filter { $0.host != buildConfig.dProxyServer }
-    let proxyEnabled = proxySettings.enabled && proxySettings.activeServer?.host != buildConfig.dProxyServer
-    let dahlProxyEnabled = proxySettings.enabled && proxySettings.activeServer?.host == buildConfig.dProxyServer
+    let savedProxyServers = proxySettings.servers.filter { $0.host != buildConfig.dProxyServer && !$0.isDahlServer }
+    let proxyEnabled = proxySettings.enabled && proxySettings.activeServer?.host != buildConfig.dProxyServer && proxySettings.activeServer?.isDahlServer != true
+    let dahlProxyEnabled = proxySettings.enabled && (proxySettings.activeServer?.host == buildConfig.dProxyServer || proxySettings.activeServer?.isDahlServer == true)
     entries.append(.proxyTogglesHeader(theme, strings.ChatSettings_ConnectionType_Title.uppercased()))
     entries.append(.dahlEnabled(theme, "DahlSettings.Proxy".tp_loc(lang: strings.baseLanguageCode), dahlProxyEnabled))
     entries.append(.enabled(theme, "ChatSettings.ConnectionType.UseProxy".tp_loc(lang: strings.baseLanguageCode), proxyEnabled, savedProxyServers.isEmpty))
@@ -348,7 +349,7 @@ private func proxySettingsControllerEntries(theme: PresentationTheme, strings: P
                     displayStatus = DisplayProxyServerStatus(activity: false, text: text, textActive: false)
             }
         }
-        let isDahlProxy = server.host == buildConfig.dProxyServer
+        let isDahlProxy = server.host == buildConfig.dProxyServer || server.isDahlServer
         let title = isDahlProxy ? "DahlSettings.Proxy".tp_loc(lang: strings.baseLanguageCode) : nil
         entries.append(.server(index, theme, strings, title, server, server == proxySettings.activeServer, displayStatus, ProxySettingsServerItemEditing(editable: !isDahlProxy, editing: !isDahlProxy && state.editing, revealed: !isDahlProxy && state.revealedServer == server, infoAvailable: !isDahlProxy), proxySettings.enabled))
         index += 1
@@ -380,7 +381,7 @@ public func proxySettingsController(context: AccountContext, mode: ProxySettings
     return proxySettingsController(accountManager: context.sharedContext.accountManager, sharedContext: context.sharedContext, context: context, postbox: context.account.postbox, network: context.account.network, mode: mode, presentationData: presentationData, updatedPresentationData: context.sharedContext.presentationData)
 }
 
-public func proxySettingsController(accountManager: AccountManager<TelegramAccountManagerTypes>, sharedContext: SharedAccountContext, context: AccountContext? = nil, postbox: Postbox, network: Network, mode: ProxySettingsControllerMode, presentationData: PresentationData, updatedPresentationData: Signal<PresentationData, NoError>) -> ViewController {
+public func proxySettingsController(accountManager: AccountManager<TelegramAccountManagerTypes>, sharedContext: SharedAccountContext, context: AccountContext? = nil, postbox: Postbox, network: Network, mode: ProxySettingsControllerMode, presentationData: PresentationData, proxyManager: DProxyManager = DProxyManagerFactory.makeDefaultManager(),   updatedPresentationData: Signal<PresentationData, NoError>) -> ViewController {
     var pushControllerImpl: ((ViewController) -> Void)?
     var dismissImpl: (() -> Void)?
     let stateValue = Atomic(value: ProxySettingsControllerState())
@@ -408,7 +409,7 @@ public func proxySettingsController(accountManager: AccountManager<TelegramAccou
         let _ = updateProxySettingsInteractively(accountManager: accountManager, { current in
             var current = current
             if value && current.activeServer?.host == buildConfig.dProxyServer {
-                let savedServers = current.servers.filter { $0.host != buildConfig.dProxyServer }
+                let savedServers = current.servers.filter { $0.host != buildConfig.dProxyServer && !$0.isDahlServer  }
                 current.activeServer = savedServers.first
             }
             current.enabled = value
@@ -417,19 +418,16 @@ public func proxySettingsController(accountManager: AccountManager<TelegramAccou
     }, toggleDahlEnabled: { value in
         let _ = updateProxySettingsInteractively(accountManager: accountManager, { current in
             var current = current
-            if value {
-                if let dahlServer = current.servers.first(where: { $0.host == buildConfig.dProxyServer }) {
-                    current.activeServer = dahlServer
-                } else {
-                    let parsedSecret = MTProxySecret.parse(buildConfig.dProxySecret)
-                    let dahlServer = ProxyServerSettings(
-                        host: buildConfig.dProxyServer,
-                        port: buildConfig.dProxyPort,
-                        connection: .mtp(secret: parsedSecret!.serialize())
-                    )
-                    current.servers.insert(dahlServer, at: 0)
-                    current.activeServer = dahlServer
-                }
+            if value, let (host, port, secret) = proxyManager.preferredProxyComponents,  let parsedSecret = MTProxySecret.parse(secret) {
+                let dahlServer = ProxyServerSettings(
+                    host: host,
+                    port: port,
+                    connection: .mtp(secret: parsedSecret.serialize()),
+                    isDahlServer: true
+                )
+                current.servers.removeAll { $0.host == host }
+                current.servers.insert(dahlServer, at: 0)
+                current.activeServer = dahlServer
             }
             current.enabled = value
             return current
@@ -504,7 +502,7 @@ public func proxySettingsController(accountManager: AccountManager<TelegramAccou
         }
         
         let rightNavigationButton: ItemListNavigationButton?
-        let savedProxies = proxySettings.servers.filter { $0.host != buildConfig.dProxyServer }
+        let savedProxies = proxySettings.servers.filter { $0.host != buildConfig.dProxyServer && !$0.isDahlServer }
         if savedProxies.isEmpty {
             rightNavigationButton = nil
         } else if state.editing {
@@ -565,7 +563,7 @@ public func proxySettingsController(accountManager: AccountManager<TelegramAccou
         return updateProxySettingsInteractively(accountManager: accountManager, { current in
             var current = current
             
-            let isPinnedServerExists = current.servers.firstIndex { $0.host != buildConfig.dProxyServer } != nil
+            let isPinnedServerExists = current.servers.firstIndex { $0.host != buildConfig.dProxyServer && !$0.isDahlServer } != nil
             if let index = current.servers.firstIndex(of: fromServer) {
                 current.servers.remove(at: index)
             }

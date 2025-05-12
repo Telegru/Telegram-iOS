@@ -1067,7 +1067,9 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
                         isAlreadyAdded = true
                     }
                     
-                    if !isAlreadyAdded {
+                    let showSaveSound = context.currentDahlSettings.with { $0 }.messageMenuSettings.saveSound
+
+                    if !isAlreadyAdded && showSaveSound {
                         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
                         actions.append(.action(ContextMenuActionItem(text: presentationData.strings.Chat_SaveForNotifications, icon: { theme in
                             return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/DownloadTone"), color: theme.actionSheet.primaryTextColor)
@@ -1733,7 +1735,9 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
             })))
         }
 
-        if data.messageActions.options.contains(.forward) {
+        let showReply = context.currentDahlSettings.with { $0 }.messageMenuSettings.reply
+
+        if data.messageActions.options.contains(.forward) && showReply {
             if !isCopyProtected {
                 actions.append(.action(ContextMenuActionItem(text: chatPresentationInterfaceState.strings.Conversation_ContextMenuForward, icon: { theme in
                     return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Forward"), color: theme.actionSheet.primaryTextColor)
@@ -1795,7 +1799,9 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
             }
         }
         
-        if data.messageActions.options.contains(.report) {
+        let showReport = context.currentDahlSettings.with { $0 }.messageMenuSettings.report
+        
+        if data.messageActions.options.contains(.report) && showReport {
             actions.append(.action(ContextMenuActionItem(text: chatPresentationInterfaceState.strings.Conversation_ContextMenuReport, icon: { theme in
                 return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Report"), color: theme.actionSheet.primaryTextColor)
             }, action: { controller, f in

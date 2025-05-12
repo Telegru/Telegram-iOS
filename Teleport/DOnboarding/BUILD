@@ -18,6 +18,7 @@ swift_library(
         "//submodules/SSignalKit/SSignalKit:SSignalKit",
         "//submodules/LegacyComponents:LegacyComponents",
         "//submodules/RMIntro:RMIntro",
+        "//submodules/TelegramPresentationData:TelegramPresentationData"
     ],
     copts = [
         "-warnings-as-errors",

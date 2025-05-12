@@ -206,7 +206,7 @@ final class DSettingsScreenComponent: Component {
                         let navigationController = controller.navigationController as? NavigationController
                         openHelpDisposable = (
                             context.engine.peers.resolvePeerByName(
-                                name: "@dahl_help",
+                                name: "@dahl_support_bot",
                                 referrer: nil
                             )
                             |> mapToSignal { result -> Signal<EnginePeer?, NoError> in

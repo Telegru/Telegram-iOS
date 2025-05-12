@@ -86,6 +86,12 @@ public struct DahlIconSet: IconSet {
             return UIImage(bundleImageName: "Context Menu/Leave")!
         case .contextMenuExclude:
             return UIImage(bundleImageName: "Context Menu/Exclude")!
+        case .contextMenuDownload:
+            return UIImage(bundleImageName: "Context Menu/Download")!
+        case .contextMenuReply:
+            return UIImage(bundleImageName: "Context Menu/Reply")!
+        case .contextMenuReport:
+            return UIImage(bundleImageName: "Context Menu/Report")!
         case .callsTab:
             return UIImage(bundleImageName: "Chat List/Tabs/DIconCalls")
         case .contactsTab:

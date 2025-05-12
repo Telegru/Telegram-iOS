@@ -35,3 +35,9 @@ url=https://github.com/TelegramMessenger/tgcalls.git
 [submodule "build-system/google-services-ios"]
 	path = build-system/google-services-ios
 	url = git@github.com:Telegru/google-services-ios.git
+[submodule "Teleport/DClient"]
+	path = Teleport/DClient
+	url = git@github.com:Telegru/APIClient-iOS.git
+[submodule "Teleport/DWall"]
+	path = Teleport/DWall
+	url = git@github.com:Telegru/Wall-iOS.git

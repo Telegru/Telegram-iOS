@@ -40,6 +40,7 @@ import PresentationDataUtils
 import LocalizedPeerData
 import DWallpaper
 import DSettings
+import DWall
 
 private class DetailsChatPlaceholderNode: ASDisplayNode, NavigationDetailsPlaceholderNode {
     private var presentationData: PresentationData

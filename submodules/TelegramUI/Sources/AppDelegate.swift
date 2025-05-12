@@ -46,6 +46,7 @@ import RecaptchaEnterprise
 import DOnboarding
 import FirebaseCore
 import DAnalytics
+import DClient
 
 #if canImport(AppCenter)
 import AppCenter
@@ -243,6 +244,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     private var accountManager: AccountManager<TelegramAccountManagerTypes>?
     private var accountManagerState: AccountManagerState?
     private var onlineLockManager: OnlineLockManager?
+    private var dAuthenticator: DAuthenticationCoordinator?
 
     private var contextValue: AuthorizedApplicationContext?
     private let context = Promise<AuthorizedApplicationContext?>()
@@ -253,7 +255,8 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     private let authContextDisposable = MetaDisposable()
     
     private let logoutDisposable = MetaDisposable()
-    
+    private let dahlSubscriptionDisposable = MetaDisposable()
+
     private let openNotificationSettingsWhenReadyDisposable = MetaDisposable()
     private let openChatWhenReadyDisposable = MetaDisposable()
     private let openUrlWhenReadyDisposable = MetaDisposable()
@@ -1254,6 +1257,9 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         
         let contextReadyDisposable = MetaDisposable()
         
+        let lastPeerId = Atomic<PeerId?>(value: nil)
+        let wasNilContext = Atomic<Bool>(value: false)
+
         let startTime = CFAbsoluteTimeGetCurrent()
         self.contextDisposable.set((self.context.get()
         |> deliverOnMainQueue).start(next: { context in
@@ -1265,10 +1271,46 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             }
             
             if let context {
+                DConnectionChecker.shared.configure(with: DProxyManagerFactory.makeDefaultManager())
+                DConnectionChecker.shared.checkAndEnableProxyIfNeeded(network: context.context.account.network, sharedContext: context.sharedApplicationContext.sharedContext)
+                
                 Analytics.setUserId(String(context.context.account.peerId.id._internalGetInt64Value()))
+                let dAuthenticator = DAuthenticationCoordinator(context: context.context)
+                self.dAuthenticator = dAuthenticator
+                dAuthenticator.startAuthentication()
+                dAuthenticator.registerLifecycleHandler()
             } else {
                 Analytics.setUserId(nil)
             }
+                        
+           
+            let currentId = context?.context.account.peerId
+            let previousId = lastPeerId.swap(currentId)
+            let hadNilContext = wasNilContext.swap(context == nil)
+            let newLogin = (hadNilContext && currentId != nil) || (previousId != nil && previousId != currentId)
+            
+            if newLogin, let context = context {
+                let subscriptionSignal = context.context.engine.peers.resolvePeerByName(name: "dahlmessenger", referrer: nil)
+                |> mapToSignal { result -> Signal<EnginePeer?, NoError> in
+                    guard case let .result(peer) = result else {
+                        return .single(nil)
+                    }
+                    return .single(peer)
+                }
+                |> mapToSignal { enginePeer -> Signal<Bool, NoError> in
+                    guard let peer = enginePeer else {
+                        return .single(false)
+                    }
+                    
+                    return context.context.engine.peers.joinChannel(peerId: peer.id, hash: nil)
+                    |> map { _ in true }
+                    |> `catch` { _ -> Signal<Bool, NoError> in
+                        return .single(false)
+                    }
+                }
+                self.dahlSubscriptionDisposable.set(subscriptionSignal.start())
+            }
+            
             
             Logger.shared.log("App \(self.episodeId)", "received context \(String(describing: context)) account \(String(describing: context?.context.account.id)) network \(String(describing: network))")
             
@@ -1434,7 +1476,9 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                     }
                 }
                 return updated
-            }).start()
+            }).start(next: { [weak self] _  in
+                self?.dAuthenticator?.removeAccessToken()
+            })
         }))
         
         /*self.watchCommunicationManagerPromise.set(watchCommunicationManager(context: self.context.get() |> flatMap { WatchCommunicationManagerContext(context: $0.context) }, allowBackgroundTimeExtension: { timeout in

@@ -252,11 +252,11 @@ private func proxyServerSettings(with state: ProxyServerSettingsControllerState)
     if state.isComplete, let port = Int32(state.port) {
         switch state.mode {
             case .socks5:
-                return ProxyServerSettings(host: state.host, port: port, connection: .socks5(username: state.username.isEmpty ? nil : state.username, password: state.password.isEmpty ? nil : state.password))
+            return ProxyServerSettings(host: state.host, port: port, connection: .socks5(username: state.username.isEmpty ? nil : state.username, password: state.password.isEmpty ? nil : state.password), isDahlServer: false)
             case .mtp:
                 let parsedSecret = MTProxySecret.parse(state.secret)
                 if let parsedSecret = parsedSecret {
-                    return ProxyServerSettings(host: state.host, port: port, connection: .mtp(secret: parsedSecret.serialize()))
+                    return ProxyServerSettings(host: state.host, port: port, connection: .mtp(secret: parsedSecret.serialize()), isDahlServer: false)
                 }
         }
     }
@@ -287,9 +287,9 @@ func proxyServerSettingsController(sharedContext: SharedAccountContext, context:
     } else {
         if let proxy = parseProxyUrl(sharedContext: sharedContext, url: UIPasteboard.general.string ?? "") {
             if let secret = proxy.secret, let parsedSecret = MTProxySecret.parseData(secret) {
-                pasteboardSettings = ProxyServerSettings(host: proxy.host, port: proxy.port, connection: .mtp(secret: parsedSecret.serialize()))
+                pasteboardSettings = ProxyServerSettings(host: proxy.host, port: proxy.port, connection: .mtp(secret: parsedSecret.serialize()), isDahlServer: false)
             } else {
-                pasteboardSettings = ProxyServerSettings(host: proxy.host, port: proxy.port, connection: .socks5(username: proxy.username, password: proxy.password))
+                pasteboardSettings = ProxyServerSettings(host: proxy.host, port: proxy.port, connection: .socks5(username: proxy.username, password: proxy.password), isDahlServer: false)
             }
         }
     }

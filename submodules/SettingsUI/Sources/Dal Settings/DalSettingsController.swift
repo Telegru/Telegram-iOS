@@ -18,6 +18,7 @@ import TelegramStringFormatting
 import MtProtoKit
 import TPStrings
 import BuildConfig
+import DClient
 
 public enum DahlSettingsControllerMode {
     case tab
@@ -761,15 +762,17 @@ public func dalsettingsController(
         updateProxy: { value in
             let _ = (updateProxySettingsInteractively(accountManager: context.sharedContext.accountManager) { proxySettings in
                 var proxySettings = proxySettings
-                if let parsedSecret = MTProxySecret.parse(buildConfig.dProxySecret) {
+                if  let (host, port, secret) = DProxyManagerFactory.makeDefaultManager().preferredProxyComponents,
+                    let parsedSecret = MTProxySecret.parse(secret) {
                     let dahlServer = ProxyServerSettings(
-                        host: buildConfig.dProxyServer,
-                        port: buildConfig.dProxyPort,
-                        connection: .mtp(secret: parsedSecret.serialize())
+                        host: host,
+                        port: port,
+                        connection: .mtp(secret: parsedSecret.serialize()),
+                        isDahlServer: true
                     )
-                    if !proxySettings.servers.contains(where: { $0.host == dahlServer.host }) {
-                        proxySettings.servers.insert(dahlServer, at: 0)
-                    }
+                    
+                    proxySettings.servers.removeAll { $0.host == host }
+                    proxySettings.servers.insert(dahlServer, at: 0)
                     proxySettings.activeServer = dahlServer
                     proxySettings.enabled = value
                 }
@@ -914,7 +917,7 @@ public func dalsettingsController(
         context.sharedContext.accountManager.sharedData(keys: [SharedDataKeys.proxySettings])
         |> map { sharedData -> Bool in
             let proxySettings = sharedData.entries[SharedDataKeys.proxySettings]?.get(ProxySettings.self) ?? .defaultSettings
-            return proxySettings.activeServer?.host == buildConfig.dProxyServer && proxySettings.enabled
+            return (proxySettings.activeServer?.host == buildConfig.dProxyServer || proxySettings.activeServer?.isDahlServer == true) && proxySettings.enabled
         }
     )
     

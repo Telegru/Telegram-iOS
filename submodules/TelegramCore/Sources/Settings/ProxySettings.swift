@@ -9,7 +9,7 @@ public func updateProxySettingsInteractively(accountManager: AccountManager<Tele
     }
 }
 
-extension ProxyServerSettings {
+public extension ProxyServerSettings {
     var mtProxySettings: MTSocksProxySettings {
         switch self.connection {
             case let .socks5(username, password):

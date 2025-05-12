@@ -360,9 +360,9 @@ func openResolvedUrlImpl(
         case let .proxy(host, port, username, password, secret):
             let server: ProxyServerSettings
             if let secret = secret {
-                server = ProxyServerSettings(host: host, port: abs(port), connection: .mtp(secret: secret))
+                server = ProxyServerSettings(host: host, port: abs(port), connection: .mtp(secret: secret), isDahlServer: false)
             } else {
-                server = ProxyServerSettings(host: host, port: abs(port), connection: .socks5(username: username, password: password))
+                server = ProxyServerSettings(host: host, port: abs(port), connection: .socks5(username: username, password: password), isDahlServer: false)
             }
 
             dismissInput()

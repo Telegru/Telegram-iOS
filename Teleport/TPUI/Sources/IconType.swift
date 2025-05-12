@@ -50,6 +50,9 @@ public enum IconType: String, CaseIterable {
     case chatDelete
     case wallGear
     case wallDismiss
+    case contextMenuReport
+    case contextMenuReply
+    case contextMenuDownload
 }
 
 public enum IconRef: Equatable {

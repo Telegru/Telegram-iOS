@@ -4,6 +4,10 @@
 "RootTabs.News" = "Новости";
 
 // Intro
+"Intro.Consent.FormattedText" = "Нажимая кнопки \"Начать общение\" или \"Continue in English\", я даю согласие на обработку персональных данных в соответствии с условиями Политики конфиденциальности и принимаю условия Пользовательского соглашения";
+"Intro.Consent.PrivacyPolicy" = "Политики конфиденциальности";
+"Intro.Consent.TermsOfService" = "Пользовательского соглашения";
+
 "Intro.Page1.Title" = "Даль";
 "Intro.Page1.Description" = "Мессенджер, **созданный \nс пониманием потребностей** российской аудитории.";
 "Intro.Page2.Title" = "Общение";
@@ -49,6 +53,17 @@
 "DahlSettings.TabBarSettings" = "Нижнее меню";
 "DahlSettings.Proxy" = "Прокси Даль";
 "DahlSettings.MenuItems" = "Меню настроек";
+
+"DahlSettings.ContextMenu.Title" = "Контекстное меню";
+"DahlSettings.ContextMenu.MessageMenu" = "Меню сообщений";
+"DahlSettings.ContextMenu.Footer" = "Настройте, какие опции доступны в контекстном меню.";
+
+"DahlSettings.MessageMenu.Title" = "Меню сообщений";
+"DahlSettings.MessageMenu.SaveSound" = "Сохранить звук";
+"DahlSettings.MessageMenu.Reply" = "Ответить";
+"DahlSettings.MessageMenu.Report" = "Пожаловаться";
+"DahlSettings.MessageMenu.ReportGroups" = "Группы, Каналы";
+"DahlSettings.MessageMenu.Footer" = "Настройте контекстные меню сообщений и постов под себя: отключите пункты, которыми не пользуетесь.";
 
 "DahlSettings.Common.RestartRequired" = "Требуется перезапуск";
 "DahlSettings.Common.RestartNow" = "Перезапустить";

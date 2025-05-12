@@ -37,11 +37,13 @@ public struct ProxyServerSettings: Codable, Equatable, Hashable {
     public let host: String
     public let port: Int32
     public let connection: ProxyServerConnection
-    
-    public init(host: String, port: Int32, connection: ProxyServerConnection) {
+    public let isDahlServer: Bool
+
+    public init(host: String, port: Int32, connection: ProxyServerConnection, isDahlServer: Bool) {
         self.host = host
         self.port = port
         self.connection = connection
+        self.isDahlServer = isDahlServer
     }
     
     public init(from decoder: Decoder) throws {
@@ -54,6 +56,7 @@ public struct ProxyServerSettings: Codable, Equatable, Hashable {
         } else {
             self.connection = (try? container.decodeIfPresent(ProxyServerConnection.self, forKey: "connection")) ?? ProxyServerConnection.socks5(username: nil, password: nil)
         }
+        self.isDahlServer = (try? container.decode(Bool.self, forKey: "isDahlServer")) ?? false
     }
     
     public func encode(to encoder: Encoder) throws {
@@ -62,12 +65,14 @@ public struct ProxyServerSettings: Codable, Equatable, Hashable {
         try container.encode(self.host, forKey: "host")
         try container.encode(self.port, forKey: "port")
         try container.encode(self.connection, forKey: "connection")
+        try container.encode(self.isDahlServer, forKey: "isDahlServer")
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(self.host)
         hasher.combine(self.port)
         hasher.combine(self.connection)
+        hasher.combine(self.isDahlServer)
     }
 }
 

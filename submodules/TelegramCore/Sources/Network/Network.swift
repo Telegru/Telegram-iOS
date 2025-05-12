@@ -748,7 +748,7 @@ private final class NetworkHelper: NSObject, MTContextChangeListener {
     }
 }
 
-struct NetworkContextProxyId: Equatable {
+public struct NetworkContextProxyId: Equatable {
     private let ip: String
     private let port: Int
     private let secret: Data
@@ -824,7 +824,7 @@ public final class Network: NSObject, MTRequestMessageServiceDelegate {
     }
     
     private let _contextProxyId: ValuePromise<NetworkContextProxyId?>
-    var contextProxyId: Signal<NetworkContextProxyId?, NoError> {
+    public var contextProxyId: Signal<NetworkContextProxyId?, NoError> {
         return self._contextProxyId.get()
     }
     

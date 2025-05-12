@@ -15,6 +15,7 @@ import BuildConfig
 
 import TPUI
 import TPStrings
+import DClient
 
 private struct DisplayProxyServerStatus: Equatable {
     let activity: Bool
@@ -30,6 +31,7 @@ private final class DGeneralSettingsArguments {
     let openSettingsItemsConfiguration: () -> Void
     let openTabBarSettings: () -> Void
     let openWallSettings: () -> Void
+    let openContextMenuSettings: () -> Void
     
     init(
         context: AccountContext,
@@ -38,7 +40,8 @@ private final class DGeneralSettingsArguments {
         openPremiumSettings: @escaping () -> Void,
         openSettingsItemsConfiguration: @escaping () -> Void,
         openTabBarSettings: @escaping () -> Void,
-        openWallSettings: @escaping () -> Void
+        openWallSettings: @escaping () -> Void,
+        openContextMenuSettings: @escaping () -> Void
     ) {
         self.context = context
         self.updateProxyEnableState = updateProxyEnableState
@@ -47,6 +50,7 @@ private final class DGeneralSettingsArguments {
         self.openSettingsItemsConfiguration = openSettingsItemsConfiguration
         self.openTabBarSettings = openTabBarSettings
         self.openWallSettings = openWallSettings
+        self.openContextMenuSettings = openContextMenuSettings
     }
 }
 
@@ -57,6 +61,7 @@ private enum DGeneralSettingsSection: Int32, CaseIterable {
     case wall
     case premium
     case menuItems
+    case contextMenu
     case tabBar
 }
 
@@ -92,9 +97,10 @@ private enum DGeneralSettingsEntry: ItemListNodeEntry {
     case premiumSettings(PresentationTheme, title: String)
     case premiumSettingsFooter(PresentationTheme, title: String)
     
-    case menuItemsHeader(title: String)
-    case menuItems(title: String, detail: String)
-    case tabBar(title: String, detail: String)
+    case menuItemsHeader(PresentationTheme, title: String)
+    case menuItems(PresentationTheme, title: String, detail: String)
+    case contextMenu(PresentationTheme, title: String)
+    case tabBar(PresentationTheme, title: String, detail: String)
     
     var section: ItemListSectionId {
         switch self {
@@ -115,6 +121,9 @@ private enum DGeneralSettingsEntry: ItemListNodeEntry {
             
         case .menuItemsHeader, .menuItems:
             return DGeneralSettingsSection.menuItems.rawValue
+            
+        case .contextMenu:
+            return DGeneralSettingsSection.contextMenu.rawValue
             
         case .tabBar:
             return DGeneralSettingsSection.tabBar.rawValue
@@ -137,20 +146,22 @@ private enum DGeneralSettingsEntry: ItemListNodeEntry {
             return 5
         case .menuItems:
             return 6
-        case .tabBar:
+        case .contextMenu:
             return 7
-        case .profileHeader:
+        case .tabBar:
             return 8
-        case .hidePhoneNumber:
+        case .profileHeader:
             return 9
-        case .profileFooter:
+        case .hidePhoneNumber:
             return 10
-        case .wallSettings:
-            return 11
-        case .premiumSettings:
+        case .profileFooter:
             return 12
-        case .premiumSettingsFooter:
+        case .wallSettings:
             return 13
+        case .premiumSettings:
+            return 14
+        case .premiumSettingsFooter:
+            return 15
         }
     }
     
@@ -164,7 +175,7 @@ private enum DGeneralSettingsEntry: ItemListNodeEntry {
             return DGeneralSettingsEntryTag.wallSettings
         case .premiumSettings:
             return DGeneralSettingsEntryTag.premiumSettings
-        case .server, .serversHeader, .connectionHeader, .connectionFooter, .profileHeader, .profileFooter, .premiumSettingsFooter, .menuItemsHeader, .menuItems, .tabBar:
+        case .server, .serversHeader, .connectionHeader, .connectionFooter, .profileHeader, .profileFooter, .premiumSettingsFooter, .menuItemsHeader, .menuItems, .tabBar, .contextMenu:
             return nil
         }
     }
@@ -270,23 +281,43 @@ private enum DGeneralSettingsEntry: ItemListNodeEntry {
                 return false
             }
             
-        case let .menuItemsHeader(lhsTitle):
-            if case let .menuItemsHeader(rhsTitle) = rhs {
-                return lhsTitle == rhsTitle
+        case let .menuItemsHeader(lhsTheme, lhsTitle):
+            if case let .menuItemsHeader(rhsTheme, rhsTitle) = rhs,
+               lhsTheme === rhsTheme,
+               lhsTitle == rhsTitle {
+                return true
+            } else {
+                return false
             }
-            return false
             
-        case let .menuItems(lhsTitle, lhsDetail):
-            if case let .menuItems(rhsTitle, rhsDetail) = rhs {
-                return lhsTitle == rhsTitle && lhsDetail == rhsDetail
+        case let .menuItems(lhsTheme, lhsTitle, lhsDetail):
+            if case let .menuItems(rhsTheme, rhsTitle, rhsDetail) = rhs,
+               lhsTheme === rhsTheme,
+               lhsTitle == rhsTitle,
+               lhsDetail == rhsDetail {
+                return true
+            } else {
+                return false
             }
-            return false
             
-        case let .tabBar(lhsTitle, lhsDetail):
-            if case let .tabBar(rhsTitle, rhsDetail) = rhs {
-                return lhsTitle == rhsTitle && lhsDetail == rhsDetail
+        case let .contextMenu(lhsTheme, lhsTitle):
+            if case let .contextMenu(rhsTheme, rhsTitle) = rhs,
+               lhsTheme === rhsTheme,
+               lhsTitle == rhsTitle {
+                return true
+            } else {
+                return false
             }
-            return false
+            
+        case let .tabBar(lhsTheme, lhsTitle, lhsDetail):
+            if case let .tabBar(rhsTheme, rhsTitle, rhsDetail) = rhs,
+               lhsTheme === rhsTheme,
+               lhsTitle == rhsTitle,
+               lhsDetail == rhsDetail {
+                return true
+            } else {
+                return false
+            }
         }
     }
     
@@ -412,14 +443,14 @@ private enum DGeneralSettingsEntry: ItemListNodeEntry {
                 sectionId: self.section
             )
             
-        case let .menuItemsHeader(title):
+        case let .menuItemsHeader(_, title):
             return ItemListSectionHeaderItem(
                 presentationData: presentationData,
                 text: title,
                 sectionId: self.section
             )
             
-        case let .menuItems(title, detail):
+        case let .menuItems(_, title, detail):
             return ItemListDisclosureItem(
                 presentationData: presentationData,
                 title: title,
@@ -431,7 +462,19 @@ private enum DGeneralSettingsEntry: ItemListNodeEntry {
                 }
             )
             
-        case let .tabBar(title, detail):
+        case let .contextMenu(_, title):
+            return ItemListDisclosureItem(
+                presentationData: presentationData,
+                title: title,
+                label: "",
+                sectionId: section,
+                style: .blocks,
+                action: {
+                    arguments.openContextMenuSettings()
+                }
+            )
+            
+        case let .tabBar(_, title, detail):
             return ItemListDisclosureItem(
                 presentationData: presentationData,
                 title: title,
@@ -530,18 +573,30 @@ private func dGeneralSettingsEntries(
     }
     
     entries.append(
-        .menuItemsHeader(title: "DahlSettings.Appearance.MenuItems.Header".tp_loc(lang: lang).uppercased())
+        .menuItemsHeader(
+            presentationData.theme,
+            title: "DahlSettings.Appearance.MenuItems.Header".tp_loc(lang: lang).uppercased()
+        )
     )
     
     entries.append(
         .menuItems(
+            presentationData.theme,
             title: "DahlSettings.Appearance.MenuItems".tp_loc(lang: lang),
             detail: "\(activeItemsCount)"
         )
     )
     
+//    entries.append(
+//        .contextMenu(
+//            presentationData.theme,
+//            title: "DahlSettings.ContextMenu.Title".tp_loc(lang: lang)
+//        )
+//    )
+    
     entries.append(
         .tabBar(
+            presentationData.theme,
             title: "DahlSettings.TabBarSettings.Title".tp_loc(lang: lang),
             detail: "\(activeTabsCount)"
         )
@@ -564,8 +619,7 @@ private func dGeneralSettingsEntries(
     
     entries.append(
         .profileFooter(
-            presentationData
-                .theme,
+            presentationData.theme,
             title: "DahlSettings.General.Profile.Footer".tp_loc(lang: lang)
         )
     )
@@ -605,15 +659,18 @@ public func dGeneralSettingsController(
     
     var openSettingsItemsConfiguration: (() -> Void)?
     var openTabBarSettings: (() -> Void)?
+    var openContextMenuSettings: (() -> Void)?
     
     let proxyServer: ProxyServerSettings? = {
-        guard let parsedSecret = MTProxySecret.parse(buildConfig.dProxySecret) else {
+        let proxyManager = DProxyManagerFactory.makeDefaultManager()
+        guard let (host, port, secret) = proxyManager.preferredProxyComponents, let parsedSecret = MTProxySecret.parse(secret) else {
             return nil
         }
         return ProxyServerSettings(
-            host: buildConfig.dProxyServer,
-            port: buildConfig.dProxyPort,
-            connection: .mtp(secret: parsedSecret.serialize())
+            host: host,
+            port: port,
+            connection: .mtp(secret: parsedSecret.serialize()),
+            isDahlServer: true
         )
     }()
     
@@ -653,6 +710,9 @@ public func dGeneralSettingsController(
         },
         openWallSettings: {
             openWallSettings?()
+        },
+        openContextMenuSettings: {
+            openContextMenuSettings?()
         }
     )
     
@@ -667,7 +727,7 @@ public func dGeneralSettingsController(
         context.sharedContext.accountManager.sharedData(keys: [SharedDataKeys.proxySettings])
         |> map { sharedData -> Bool in
             let proxySettings = sharedData.entries[SharedDataKeys.proxySettings]?.get(ProxySettings.self) ?? .defaultSettings
-            return proxySettings.activeServer?.host == buildConfig.dProxyServer && proxySettings.enabled
+            return (proxySettings.activeServer?.host == buildConfig.dProxyServer || proxySettings.activeServer?.isDahlServer == true) && proxySettings.enabled
         }
     )
     
@@ -731,6 +791,11 @@ public func dGeneralSettingsController(
     openWallSettings = { [weak controller] in
         let wallSettings = dWallSettingsController(context: context)
         controller?.push(wallSettings)
+    }
+            
+    openContextMenuSettings = { [weak controller] in
+        let contextMenuSettings = dContextMenuSettingsController(context: context)
+        controller?.push(contextMenuSettings)
     }
     
     return controller
