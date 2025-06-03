@@ -23,6 +23,7 @@ protocol ChatListSearchPaneNode: ASDisplayNode {
     func updateSelectedMessages(animated: Bool)
     func previewViewAndActionAtLocation(_ location: CGPoint) -> (UIView, CGRect, Any)?
     func didBecomeFocused()
+    func removeAds()
     var searchCurrentMessages: [EngineMessage]? { get }
 }
 
@@ -53,13 +54,14 @@ public enum ChatListSearchPaneKey {
     case topics
     case publicPosts
     case channels
-//    case apps
+    case apps
     case media
     case downloads
     case links
     case files
     case music
     case voice
+    case instantVideo
 }
 
 extension ChatListSearchPaneKey {
@@ -73,8 +75,8 @@ extension ChatListSearchPaneKey {
             return .publicPosts
         case .channels:
             return .channels
-//        case .apps:
-//            return .apps
+        case .apps:
+            return .apps
         case .media:
             return .media
         case .downloads:
@@ -87,11 +89,13 @@ extension ChatListSearchPaneKey {
             return .music
         case .voice:
             return .voice
+        case .instantVideo:
+            return .instantVideo
         }
     }
 }
 
-func defaultAvailableSearchPanes(isForum: Bool, hasDownloads: Bool, hasPublicPosts: Bool) -> [ChatListSearchPaneKey] {
+func defaultAvailableSearchPanes(isForum: Bool, hasDownloads: Bool, hasPublicPosts: Bool, isChildModeActive: Bool) -> [ChatListSearchPaneKey] {
     var result: [ChatListSearchPaneKey] = []
     if isForum {
         result.append(.topics)
@@ -102,7 +106,9 @@ func defaultAvailableSearchPanes(isForum: Bool, hasDownloads: Bool, hasPublicPos
         result.append(.publicPosts)
     }
     result.append(.channels)
-//    result.append(.apps)
+    if !isChildModeActive {
+        result.append(.apps)
+    }
     result.append(contentsOf: [.media, .downloads, .links, .files, .music, .voice])
         
     if !hasDownloads {
@@ -236,9 +242,9 @@ final class ChatListSearchPaneContainerNode: ASDisplayNode, ASGestureRecognizerD
                 self.update(size: size, sideInset: sideInset, bottomInset: bottomInset, visibleHeight: visibleHeight, presentationData: presentationData, availablePanes: availablePanes, transition: .animated(duration: 0.4, curve: .spring))
             }
             
-//            if case .apps = key {
-//                self.requesDismissInput?()
-//            }
+            if case .apps = key {
+                self.requesDismissInput?()
+            }
         } else if self.pendingSwitchToPaneKey != key {
             self.pendingSwitchToPaneKey = key
 
@@ -246,9 +252,9 @@ final class ChatListSearchPaneContainerNode: ASDisplayNode, ASGestureRecognizerD
                 self.update(size: size, sideInset: sideInset, bottomInset: bottomInset, visibleHeight: visibleHeight, presentationData: presentationData, availablePanes: availablePanes, transition: .animated(duration: 0.4, curve: .spring))
             }
             
-//            if case .apps = key {
-//                self.requesDismissInput?()
-//            }
+            if case .apps = key {
+                self.requesDismissInput?()
+            }
         }
     }
     
@@ -339,9 +345,9 @@ final class ChatListSearchPaneContainerNode: ASDisplayNode, ASGestureRecognizerD
                     if switchToKey != self.currentPaneKey && self.currentPanes[switchToKey] != nil{
                         self.currentPaneKey = switchToKey
                         
-//                        if case .apps = switchToKey {
-//                            self.requesDismissInput?()
-//                        }
+                        if case .apps = switchToKey {
+                            self.requesDismissInput?()
+                        }
                     }
                 }
                 self.transitionFraction = 0.0

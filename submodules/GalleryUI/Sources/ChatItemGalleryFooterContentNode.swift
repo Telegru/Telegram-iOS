@@ -851,7 +851,7 @@ final class ChatItemGalleryFooterContentNode: GalleryFooterContentNode, ASScroll
         }
     }
     
-    func setMessage(_ message: Message, displayInfo: Bool = true, translateToLanguage: String? = nil, peerIsCopyProtected: Bool = false) {
+    func setMessage(_ message: Message, displayInfo: Bool = true, translateToLanguage: String? = nil, peerIsCopyProtected: Bool = false, blurred: Bool = false) {
         self.currentMessage = message
         
         var displayInfo = displayInfo
@@ -1044,6 +1044,16 @@ final class ChatItemGalleryFooterContentNode: GalleryFooterContentNode, ASScroll
             dateText = ""
             canEdit = false
         }
+        
+        if blurred {
+            authorNameText = ""
+            dateText = ""
+            canEdit = false
+            messageText = NSMutableAttributedString(string: "")
+            canShare = false
+            canFullscreen = false
+            canDelete = false
+        }
                         
         if self.currentMessageText != messageText || canDelete != !self.deleteButton.isHidden || canFullscreen != !self.fullscreenButton.isHidden || canShare != !self.actionButton.isHidden || canEdit != !self.editButton.isHidden || self.currentAuthorNameText != authorNameText || self.currentDateText != dateText {
             self.currentMessageText = messageText
@@ -1105,6 +1115,15 @@ final class ChatItemGalleryFooterContentNode: GalleryFooterContentNode, ASScroll
             
             self.requestLayout?(.immediate)
         }
+    }
+    
+    private var shouldHideCompletely = false
+    
+    func setCompletelyHidden(_ hidden: Bool) {
+        self.shouldHideCompletely = hidden
+        self.contentNode.alpha = hidden ? 0.0 : self.visibilityAlpha
+        self.scrubberView?.alpha = hidden ? 0.0 : 1.0
+        self.requestLayout?(.immediate)
     }
     
     private func updateSpoilers(textFrame: CGRect) {
@@ -1173,6 +1192,10 @@ final class ChatItemGalleryFooterContentNode: GalleryFooterContentNode, ASScroll
     
     override func updateLayout(size: CGSize, metrics: LayoutMetrics, leftInset: CGFloat, rightInset: CGFloat, bottomInset: CGFloat, contentInset: CGFloat, transition: ContainedViewLayoutTransition) -> CGFloat {
         self.validLayout = (size, metrics, leftInset, rightInset, bottomInset, contentInset)
+        
+        if self.shouldHideCompletely {
+            return 0.0 
+        }
         
         let width = size.width
         var bottomInset = bottomInset

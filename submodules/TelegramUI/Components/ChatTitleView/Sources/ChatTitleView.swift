@@ -35,8 +35,9 @@ public enum ChatTitleContent: Equatable {
         public var notificationSettings: TelegramPeerNotificationSettings?
         public var peerPresences: [PeerId: PeerPresence]
         public var cachedData: CachedPeerData?
+        public var hideIcons: Bool = false
         
-        public init(peerId: PeerId, peer: Peer?, isContact: Bool, isSavedMessages: Bool, notificationSettings: TelegramPeerNotificationSettings?, peerPresences: [PeerId: PeerPresence], cachedData: CachedPeerData?) {
+        public init(peerId: PeerId, peer: Peer?, isContact: Bool, isSavedMessages: Bool, notificationSettings: TelegramPeerNotificationSettings?, peerPresences: [PeerId: PeerPresence], cachedData: CachedPeerData?, hideIcons: Bool = false) {
             self.peerId = peerId
             self.peer = peer
             self.isContact = isContact
@@ -47,7 +48,7 @@ public enum ChatTitleContent: Equatable {
         }
         
         public init(peerView: PeerView) {
-            self.init(peerId: peerView.peerId, peer: peerViewMainPeer(peerView), isContact: peerView.peerIsContact, isSavedMessages: false, notificationSettings: peerView.notificationSettings as? TelegramPeerNotificationSettings, peerPresences: peerView.peerPresences, cachedData: peerView.cachedData)
+            self.init(peerId: peerView.peerId, peer: peerViewMainPeer(peerView), isContact: peerView.peerIsContact, isSavedMessages: false, notificationSettings: peerView.notificationSettings as? TelegramPeerNotificationSettings, peerPresences: peerView.peerPresences, cachedData: peerView.cachedData, hideIcons: false)
         }
         
         public static func ==(lhs: PeerData, rhs: PeerData) -> Bool {
@@ -65,6 +66,9 @@ public enum ChatTitleContent: Equatable {
                 return false
             }
             if lhs.notificationSettings != rhs.notificationSettings {
+                return false
+            }
+            if lhs.hideIcons != rhs.hideIcons {
                 return false
             }
             if lhs.peerPresences.count != rhs.peerPresences.count {
@@ -271,7 +275,7 @@ public final class ChatTitleView: UIView, NavigationBarTitleView {
                                 
                                 let isPremiumStatusEnabled = self.context.currentDahlSettings.with { $0 }.premiumSettings.showStatusIcon
                                 
-                                if peer.id != self.context.account.peerId {
+                                if peer.id != self.context.account.peerId, !peerView.hideIcons {
                                     let premiumConfiguration = PremiumConfiguration.with(appConfiguration: self.context.currentAppConfiguration.with { $0 })
                                     if peer.isFake {
                                         titleCredibilityIcon = .fake
@@ -308,6 +312,9 @@ public final class ChatTitleView: UIView, NavigationBarTitleView {
                                         }
                                     }
                                 }
+                            }
+                            if peerView.hideIcons {
+                                titleRightIcon = .none
                             }
                             if peerView.peerId.isVerificationCodes {
                                 isEnabled = false
@@ -961,6 +968,7 @@ public final class ChatTitleView: UIView, NavigationBarTitleView {
             titleTransition = .immediate
         }
         
+        let statusSpacing: CGFloat = 3.0
         let titleSideInset: CGFloat = 6.0
         var titleFrame: CGRect
         if size.height > 40.0 {
@@ -972,7 +980,12 @@ public final class ChatTitleView: UIView, NavigationBarTitleView {
             var titleSize = self.titleTextNode.updateLayout(size: CGSize(width: clearBounds.width - leftIconWidth - credibilityIconWidth - verifiedIconWidth - statusIconWidth - rightIconWidth - titleSideInset * 2.0, height: size.height), insets: titleInsets, animated: titleTransition.isAnimated)
             titleSize.width += credibilityIconWidth
             titleSize.width += verifiedIconWidth
-            titleSize.width += statusIconWidth
+            if statusIconWidth > 0.0 {
+                titleSize.width += statusIconWidth
+                if credibilityIconWidth > 0.0 {
+                    titleSize.width += statusSpacing
+                }
+            }
             
             let activitySize = self.activityNode.updateLayout(CGSize(width: clearBounds.size.width - titleSideInset * 2.0, height: clearBounds.size.height), alignment: .center)
             let titleInfoSpacing: CGFloat = 0.0
@@ -1012,6 +1025,9 @@ public final class ChatTitleView: UIView, NavigationBarTitleView {
             
             self.titleCredibilityIconView.frame = CGRect(origin: CGPoint(x: nextIconX - titleCredibilitySize.width, y: floor((titleFrame.height - titleCredibilitySize.height) / 2.0)), size: titleCredibilitySize)
             nextIconX -= titleCredibilitySize.width
+            if credibilityIconWidth > 0.0 {
+                nextIconX -= statusSpacing
+            }
             
             self.titleStatusIconView.frame = CGRect(origin: CGPoint(x: nextIconX - titleStatusSize.width, y: floor((titleFrame.height - titleStatusSize.height) / 2.0)), size: titleStatusSize)
             nextIconX -= titleStatusSize.width
@@ -1231,5 +1247,35 @@ public final class ChatTitleComponent: Component {
     
     public func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
         return view.update(component: self, availableSize: availableSize, state: state, environment: environment, transition: transition)
+    }
+}
+
+
+extension ChatTitleView {
+
+    public func hideAllIcons(_ hide: Bool) {
+        if var currentContent = self.titleContent {
+            switch currentContent {
+            case let .peer(peerView, customTitle, onlineMemberCount, isScheduledMessages, isMuted, customMessageCount, isEnabled):
+                var peerView = peerView
+                peerView.hideIcons = hide
+                currentContent = .peer(peerView: peerView, customTitle: customTitle, onlineMemberCount: onlineMemberCount, isScheduledMessages: isScheduledMessages, isMuted: isMuted, customMessageCount: customMessageCount, isEnabled: isEnabled)
+                self.titleContent = currentContent
+            default:
+                break
+            }
+        }
+    }
+    
+    public var iconsHidden: Bool {
+        if let titleContent = self.titleContent {
+            switch titleContent {
+            case let .peer(peerView, _, _, _, _, _, _):
+                return peerView.hideIcons
+            default:
+                return false
+            }
+        }
+        return false
     }
 }

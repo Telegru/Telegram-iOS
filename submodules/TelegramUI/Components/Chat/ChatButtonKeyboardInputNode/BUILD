@@ -21,6 +21,8 @@ swift_library(
         "//submodules/WallpaperBackgroundNode",
         "//submodules/TelegramUI/Components/ChatControllerInteraction",
         "//submodules/TelegramUI/Components/ChatInputNode",
+        
+        "//Teleport/DChat:DChat",
     ],
     visibility = [
         "//visibility:public",

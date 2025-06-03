@@ -60,8 +60,12 @@
 "DahlSettings.MessageMenu.SaveSound" = "Save Sound";
 "DahlSettings.MessageMenu.Reply" = "Reply";
 "DahlSettings.MessageMenu.Report" = "Report";
+"DahlSettings.MessageMenu.Saved" = "Forward to Favorites";
 "DahlSettings.MessageMenu.ReportGroups" = "Groups, Channels";
+"DahlSettings.MessageMenu.ForwardWithoutName" = "Forward without name";
 "DahlSettings.MessageMenu.Footer" = "Configure which options appear in the context menu for messages and posts.";
+"DahlSettings.MessageMenu.ReplyPrivately" = "Reply privately";
+"DahlSettings.MessageMenu.ReplyPrivatelyGroups" = "Groups";
 
 "DahlSettings.Common.RestartRequired" = "Restart required";
 "DahlSettings.Common.RestartNow" = "Restart Now";
@@ -122,6 +126,7 @@
 "DahlSettings.Appearance.Chats.ChannelBottomPanel" = "Channel bottom panel";
 
 "DahlSettings.Appearance.ChatsList.Header" = "View of the chat list";
+"DahlSettings.Appearance.ChatsList.ShowSeparators" = "Show separators";
 
 "DahlSettings.Appearance.MenuItems.Header" = "Telegram Settings Menu";
 "DahlSettings.Appearance.MenuItems" = "Menu items";
@@ -150,8 +155,21 @@
 "DahlSettings.Chats.Folders.HideAllChats" = "Hide folder “All chats”";
 "DahlSettings.Chats.Folders.ShowChatFolders" = "Show all folders";
 
+"DahlSettings.Chats.Message.Header" = "Message";
+"DahlSettings.Chats.Message.DoubleTapAction.Title" = "Double tap";
+"DahlSettings.Chats.Message.DoubleTapAction.Disabled" = "Disabled";
+"DahlSettings.Chats.Message.DoubleTapAction.EditMessage" = "Edit message";
+"DahlSettings.Chats.Message.DoubleTapAction.ForwardMessage" = "Forward message";
+"DahlSettings.Chats.Message.DoubleTapAction.ForwardToSavedMessage" = "Save message";
+"DahlSettings.Chats.Message.DoubleTapAction.QuickReaction" = "Quick reaction";
+"DahlSettings.Chats.Message.DoubleTapAction.Header" = "Double tap action";
+"DahlSettings.Chats.Message.DoubleTapAction.Footer" = "You can choose to double-tap a message or disable it completely. If the action cannot be applied, “Quick Response” will be used.";
+
 "DahlSettings.Chats.Keyboard.Header" = "KEYBOARD";
 "DahlSettings.Chats.Keyboard.ChatFullscreenInput" = "Full screen input";
+"DahlSettings.Chats.Keyboard.TextFormatting" = "Text formatting";
+
+"DahlSettings.Chats.Keyboard.TextFormatting.Toolbar" = "Toolbar";
 
 "DahlSettings.Support.Title" = "Support";
 "DahlSettings.Support.Alert.Title" = "Please note that volunteers are responsible for supporting Dahl. We will try to help as soon as possible, but waiting may take time.";
@@ -251,3 +269,38 @@
 "Settings.AppIcon.Tatarstan" = "Tatarstan";
 "Settings.AppIcon.Russia" = "Russia";
 "Settings.AppIcon.Birch" = "Birch";
+
+// Child Mode
+
+"ChildMode.RequestAccessButton" = "Ask Permission";
+
+"ChildMode.Request.Sent" = "Request sent";
+"ChildMode.Chat.AvailableAfterConfirmation" = "Chat will be available after confirmation";
+"ChildMode.Request.FailedToSend" = "Failed to send request";
+"ChildMode.Internet.CheckConnection" = "Check your internet connection";
+
+"ChildMode.RequestPermission" = "Ask Permission";
+
+"ChildMode.ChatHidden" = "Chat hidden";
+"ChildMode.MessageHidden" = "Message hidden";
+"ChildMode.MediaHidden" = "Media hidden";
+"ChildMode.FileHidden" = "File hidden";
+"ChildMode.LinkHidden" = "Link hidden";
+"ChildMode.GroupHidden" = "Group hidden";
+"ChildMode.ChannelHidden" = "Channel hidden";
+"ChildMode.ContentHidden" = "Contact hidden";
+
+"ChildMode.LinkHiddenDescription" = "Tap \"Ask Permission\"\nand wait for confirmation\nto see the link from chat";
+"ChildMode.FileHiddenDescription" = "Tap \"Ask Permission\"\nand wait for confirmation\nto see the file from chat";
+"ChildMode.MediaHiddenDescription" = "Tap \"Ask Permission\"\nand wait for confirmation\nto see the media from chat";
+"ChildMode.ContentHiddenDescription" = "Tap \"Ask Permission\"\nand wait for confirmation\nto see the information";
+"ChildMode.ChatHiddenDescription" = "Tap \"Ask Permission\"\nand wait for confirmation\nto read messages";
+"ChildMode.ChannelHiddenDescription" = "Tap \"Ask Permission\"\nand wait for confirmation\nto start reading channel messages";
+"ChildMode.GroupHiddenDescription" = "Tap \"Ask Permission\"\nand wait for confirmation\nto start chatting";
+
+"ChildMode.Link.AvailableAfterConfirmation" = "Chat and link will be available after confirmation";
+"ChildMode.File.AvailableAfterConfirmation" = "Chat and file will be available after confirmation";
+"ChildMode.Media.AvailableAfterConfirmation" = "Chat and media will be available after confirmation";
+"ChildMode.Chat.AvailableAfterConfirmation" = "Chat will be available after confirmation";
+"ChildMode.Channel.AvailableAfterConfirmation" = "Channel will be available after confirmation";
+"ChildMode.Group.AvailableAfterConfirmation" = "Group will be available after confirmation";

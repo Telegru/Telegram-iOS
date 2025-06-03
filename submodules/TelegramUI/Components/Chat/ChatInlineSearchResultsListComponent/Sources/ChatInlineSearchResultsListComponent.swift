@@ -686,7 +686,10 @@ public final class ChatInlineSearchResultsListComponent: Component {
                         },
                         openPhotoSetup: {
                         },
-                        openAdInfo: { _ in
+                        openAdInfo: { _, _ in
+                        },
+                        openAccountFreezeInfo: {
+                        }, openUrl: { _ in
                         }
                     )
                     self.chatListNodeInteraction = chatListNodeInteraction
@@ -757,6 +760,7 @@ public final class ChatInlineSearchResultsListComponent: Component {
                             editing: ContactsPeerItemEditing(editable: false, editing: false, revealed: false),
                             index: nil,
                             header: displayMessagesHeader ? ChatListSearchItemHeader(type: .chats, theme: listPresentationData.theme, strings: listPresentationData.strings) : nil,
+                            blurred: false,
                             action: { [weak self] peer in
                                 self?.listNode.clearHighlightAnimated(true)
                                 
@@ -841,7 +845,9 @@ public final class ChatInlineSearchResultsListComponent: Component {
                             enableContextActions: false,
                             hiddenOffset: false,
                             interaction: chatListNodeInteraction,
-                            chatListItemTextLineCount: 2
+                            chatListItemTextLineCount: 2,
+                            showSeparator: true,
+                            blurred: false
                         )
                     }
                 }

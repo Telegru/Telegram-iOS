@@ -2,7 +2,9 @@ load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
 
 tpdeps = [
     "//Teleport/TPSettings:TPSettings",
-    "//Teleport/TPStrings:TPStrings"
+    "//Teleport/TPStrings:TPStrings",
+	"//submodules/TelegramUI/Components/DSettings",
+        "//submodules/TelegramUI/Components/ContentHiddenOverlayNode",
 ]
 
 swift_library(
@@ -160,8 +162,9 @@ swift_library(
         "//submodules/TelegramUI/Components/CameraScreen",
         "//submodules/TelegramUI/Components/PeerInfo/VerifyAlertController",
         "//submodules/TelegramUI/Components/Gifts/GiftViewScreen",
-        
-        "//submodules/TelegramUI/Components/DSettings",
+        "//submodules/TelegramUI/Components/BatchVideoRendering",
+        "//submodules/TelegramUI/Components/GifVideoLayer",
+        "//submodules/Components/HierarchyTrackingLayer",        
     ],
     visibility = [
         "//visibility:public",

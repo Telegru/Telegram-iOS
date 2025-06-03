@@ -74,6 +74,9 @@ public final class ChatPanelInterfaceInteraction {
     public let forwardSelectedMessages: () -> Void
     public let forwardCurrentForwardMessages: () -> Void
     public let forwardMessages: ([Message]) -> Void
+    public let forwardMessagesWithoutName: ([Message]) -> Void
+    public let forwardMessagesToSaved: ([Message]) -> Void
+    public let replyPrivately: (Message) -> Void
     public let updateForwardOptionsState: ((ChatInterfaceForwardOptionsState) -> ChatInterfaceForwardOptionsState) -> Void
     public let presentForwardOptions: (ASDisplayNode) -> Void
     public let presentReplyOptions: (ASDisplayNode) -> Void
@@ -151,6 +154,7 @@ public final class ChatPanelInterfaceInteraction {
     public let joinGroupCall: (CachedChannelData.ActiveCall) -> Void
     public let presentInviteMembers: () -> Void
     public let presentGigagroupHelp: () -> Void
+    public let openSuggestPost: () -> Void
     public let updateShowCommands: ((Bool) -> Bool) -> Void
     public let updateShowSendAsPeers: ((Bool) -> Bool) -> Void
     public let openInviteRequests: () -> Void
@@ -191,6 +195,9 @@ public final class ChatPanelInterfaceInteraction {
         forwardSelectedMessages: @escaping () -> Void,
         forwardCurrentForwardMessages: @escaping () -> Void,
         forwardMessages: @escaping ([Message]) -> Void,
+        forwardMessagesWithoutName: @escaping ([Message]) -> Void,
+        forwardMessagesToSaved: @escaping ([Message]) -> Void,
+        replyPrivately: @escaping (Message) -> Void,
         updateForwardOptionsState: @escaping ((ChatInterfaceForwardOptionsState) -> ChatInterfaceForwardOptionsState) -> Void,
         presentForwardOptions: @escaping (ASDisplayNode) -> Void,
         presentReplyOptions: @escaping (ASDisplayNode) -> Void,
@@ -267,6 +274,7 @@ public final class ChatPanelInterfaceInteraction {
         joinGroupCall: @escaping (CachedChannelData.ActiveCall) -> Void,
         presentInviteMembers: @escaping () -> Void,
         presentGigagroupHelp: @escaping () -> Void,
+        openSuggestPost: @escaping () -> Void,
         editMessageMedia: @escaping (MessageId, Bool) -> Void,
         updateShowCommands: @escaping ((Bool) -> Bool) -> Void,
         updateShowSendAsPeers: @escaping ((Bool) -> Bool) -> Void,
@@ -306,7 +314,10 @@ public final class ChatPanelInterfaceInteraction {
         self.deleteMessages = deleteMessages
         self.forwardSelectedMessages = forwardSelectedMessages
         self.forwardCurrentForwardMessages = forwardCurrentForwardMessages
+        self.forwardMessagesToSaved = forwardMessagesToSaved
         self.forwardMessages = forwardMessages
+        self.forwardMessagesWithoutName = forwardMessagesWithoutName
+        self.replyPrivately = replyPrivately
         self.updateForwardOptionsState = updateForwardOptionsState
         self.presentForwardOptions = presentForwardOptions
         self.presentReplyOptions = presentReplyOptions
@@ -384,6 +395,7 @@ public final class ChatPanelInterfaceInteraction {
         self.joinGroupCall = joinGroupCall
         self.presentInviteMembers = presentInviteMembers
         self.presentGigagroupHelp = presentGigagroupHelp
+        self.openSuggestPost = openSuggestPost
         self.updateShowCommands = updateShowCommands
         self.updateShowSendAsPeers = updateShowSendAsPeers
         self.openInviteRequests = openInviteRequests
@@ -431,6 +443,9 @@ public final class ChatPanelInterfaceInteraction {
         }, forwardSelectedMessages: {
         }, forwardCurrentForwardMessages: {
         }, forwardMessages: { _ in
+        }, forwardMessagesWithoutName: { _ in
+        }, forwardMessagesToSaved: { _ in 
+        }, replyPrivately: { _ in
         }, updateForwardOptionsState: { _ in
         }, presentForwardOptions: { _ in
         }, presentReplyOptions: { _ in
@@ -507,6 +522,7 @@ public final class ChatPanelInterfaceInteraction {
         }, joinGroupCall: { _ in
         }, presentInviteMembers: {
         }, presentGigagroupHelp: {
+        }, openSuggestPost: {
         }, editMessageMedia: { _, _ in
         }, updateShowCommands: { _ in
         }, updateShowSendAsPeers: { _ in

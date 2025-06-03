@@ -381,7 +381,9 @@ final class ThemePreviewControllerNode: ASDisplayNode, ASScrollViewDelegate {
         }, editPeer: { _ in
         }, openWebApp: { _ in
         }, openPhotoSetup: {
-        }, openAdInfo: { _ in
+        }, openAdInfo: { _, _ in
+        }, openAccountFreezeInfo: {
+        }, openUrl: { _ in
         })
 
         func makeChatListItem(
@@ -460,7 +462,9 @@ final class ThemePreviewControllerNode: ASDisplayNode, ASScrollViewDelegate {
                 enableContextActions: false,
                 hiddenOffset: false,
                 interaction: interaction,
-                chatListItemTextLineCount: 2
+                chatListItemTextLineCount: 2,
+                showSeparator: true,
+                blurred: false
             )
         }
 

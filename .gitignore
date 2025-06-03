@@ -71,6 +71,11 @@ submodules/FFMpegBinding/SharedHeaders/*
 submodules/OpenSSLEncryptionProvider/SharedHeaders/*
 submodules/TelegramCore/FlatSerialization/Sources/*
 buildServer.json
+.build/**
+submodules/TelegramCore/.build/**
+Telegram.LSP.json
+**/.build/**
+spm-files
 
 ci/Gemfile.lock
 ci/.env.default

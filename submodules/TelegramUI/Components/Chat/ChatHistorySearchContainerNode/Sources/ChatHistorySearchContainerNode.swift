@@ -18,7 +18,7 @@ private extension ListMessageItemInteraction {
     convenience init(controllerInteraction: ChatControllerInteraction) {
         self.init(openMessage: { message, mode -> Bool in
             return controllerInteraction.openMessage(message, OpenMessageParams(mode: mode))
-        }, openMessageContextMenu: { message, bool, node, rect, gesture in
+        }, openMessageContextMenu: { message, bool, node, rect, gesture, blurred in
             controllerInteraction.openMessageContextMenu(message, bool, node, rect, gesture, nil)
         }, toggleMessagesSelection: { messageId, selected in
             controllerInteraction.toggleMessagesSelection(messageId, selected)
@@ -26,6 +26,8 @@ private extension ListMessageItemInteraction {
             controllerInteraction.openUrl(ChatControllerInteraction.OpenUrl(url: url, concealed: param1, external: param2, message: message))
         }, openInstantPage: { message, data in
             controllerInteraction.openInstantPage(message, data)
+        }, openRequiredPermissionDialog: { _, _, _ in
+            
         }, longTap: { action, message in
             controllerInteraction.longTap(action, ChatControllerInteraction.LongTapParams(message: message))
         }, getHiddenMedia: {

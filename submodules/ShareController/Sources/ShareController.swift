@@ -23,6 +23,8 @@ import ObjectiveC
 import UndoUI
 import ChatMessagePaymentAlertController
 
+import DChildMode
+
 private var ObjCKey_DeinitWatcher: Int?
 
 public struct ShareControllerAction {
@@ -321,6 +323,7 @@ public final class ShareControllerAppEnvironment: ShareControllerEnvironment {
 }
 
 public final class ShareControllerAppAccountContext: ShareControllerAccountContext {
+    
     public let context: AccountContext
     
     public var accountId: AccountRecordId {
@@ -346,6 +349,10 @@ public final class ShareControllerAppAccountContext: ShareControllerAccountConte
     }
     public var appConfiguration: AppConfiguration {
         return self.context.currentAppConfiguration.with { $0 }
+    }
+    
+    public var childManager: DChildModeManager? {
+        return self.context.childModeManager
     }
     
     public init(context: AccountContext) {

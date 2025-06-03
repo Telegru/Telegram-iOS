@@ -54,6 +54,9 @@ public final class BrowserBookmarksScreen: ViewController {
                 openContextMenuImpl?(message, sourceView, rect, gesture)
             }, openMessageReactionContextMenu: { _, _, _, _ in
             }, updateMessageReaction: { _, _, _, _ in
+            }, editMessage: { _ in return false
+            }, forwardMessage: { _, _ in
+            }, forwardMessageToSaved: { _, _ in
             }, activateMessagePinch: { _ in
             }, openMessageContextActions: { _, _, _, _ in
             }, navigateToMessage: { _, _, _ in
@@ -99,6 +102,7 @@ public final class BrowserBookmarksScreen: ViewController {
                 return nil
             }, presentGlobalOverlayController: { _, _ in
             }, callPeer: { _, _ in
+            }, openConferenceCall: { _ in                
             }, longTap: { _, _ in
             }, openCheckoutOrReceipt: { _, _ in
             }, openSearch: {
@@ -173,6 +177,7 @@ public final class BrowserBookmarksScreen: ViewController {
             }, attemptedNavigationToPrivateQuote: { _ in
             }, forceUpdateWarpContents: {
             }, playShakeAnimation: {
+            }, displayQuickShare: { _, _ ,_ in
             }, automaticMediaDownloadSettings: MediaAutoDownloadSettings.defaultSettings, pollActionState: ChatInterfacePollActionState(), stickerSettings: ChatInterfaceStickerSettings(), presentationContext: ChatPresentationContext(context: context, backgroundNode: nil))
             
             

@@ -92,6 +92,12 @@ public struct TGIconSet: IconSet {
             return UIImage(bundleImageName: "Context Menu/Reply")!
         case .contextMenuReport:
             return UIImage(bundleImageName: "Context Menu/Report")!
+        case .contextMenuForwardWithoutName:
+            return UIImage(bundleImageName: "Context Menu/ForwardWithoutName")!
+        case .contextMenuSaved:
+            return UIImage(bundleImageName: "Context Menu/Saved")!
+        case .contextMenuReplyPrivately:
+            return UIImage(bundleImageName: "Context Menu/ReplyPrivately")!
         case .callsTab:
             return UIImage(bundleImageName: "Chat List/Tabs/IconCalls")
         case .contactsTab:

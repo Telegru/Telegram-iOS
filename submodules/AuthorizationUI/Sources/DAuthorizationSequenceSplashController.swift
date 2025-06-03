@@ -20,7 +20,7 @@ import AccountContext
 
 import DAuth
 import DOnboarding
-import DClient
+import DNetwork
 
 public final class DAuthorizationSequenceSplashController: ViewController {
     
@@ -214,9 +214,19 @@ public final class DAuthorizationSequenceSplashController: ViewController {
         
         activateLocalizationDisposable.set(
             (
-                TelegramEngineUnauthorized(account: account)
-                    .localization
-                    .downloadAndApplyLocalization(accountManager: accountManager, languageCode: code)
+                account.network.connectionStatus
+                |> filter { status in
+                    if case .online = status {
+                        return true
+                    }
+                    return false
+                }
+                |> take(1)
+                |> mapToSignalPromotingError { [account] _ in
+                    return TelegramEngineUnauthorized(account: account)
+                        .localization
+                        .downloadAndApplyLocalization(accountManager: accountManager, languageCode: code)
+                }
                 |> timeout(60.0, queue: Queue.concurrentDefaultQueue(), alternate: .fail(.generic))
                 |> deliverOnMainQueue
             )

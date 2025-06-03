@@ -448,7 +448,226 @@ private func chatMessageImageFileThumbnailDatas(account: Account, userLocation: 
     return signal
 }
 
-private func chatMessageVideoDatas(postbox: Postbox, userLocation: MediaResourceUserLocation, customUserContentType: MediaResourceUserContentType? = nil, fileReference: FileMediaReference, previewSourceFileReference: FileMediaReference?, thumbnailSize: Bool = false, onlyFullSize: Bool = false, useLargeThumbnail: Bool = false, synchronousLoad: Bool = false, autoFetchFullSizeThumbnail: Bool = false, forceThumbnail: Bool = false) -> Signal<Tuple3<Data?, Tuple2<Data, String>?, Bool>, NoError> {
+private func fileQualityPreloadData(postbox: Postbox, playlistFile: FileMediaReference, videoFile: FileMediaReference, userLocation: MediaResourceUserLocation, autofetchPlaylist: Bool, isOnce: Bool) -> Signal<(FileMediaReference, Range<Int64>)?, NoError> {
+    let playlistData: Signal<Range<Int64>?, NoError> = Signal { subscriber in
+        var fetchDisposable: Disposable?
+        if autofetchPlaylist {
+            fetchDisposable = freeMediaFileResourceInteractiveFetched(postbox: postbox, userLocation: userLocation, fileReference: playlistFile, resource: playlistFile.media.resource).start()
+        }
+        let dataDisposable = postbox.mediaBox.resourceData(playlistFile.media.resource).start(next: { data in
+            if !data.complete {
+                if isOnce {
+                    subscriber.putNext(nil)
+                    subscriber.putCompletion()
+                }
+                return
+            }
+            guard let data = try? Data(contentsOf: URL(fileURLWithPath: data.path)) else {
+                subscriber.putNext(nil)
+                subscriber.putCompletion()
+                return
+            }
+            guard let playlistString = String(data: data, encoding: .utf8) else {
+                subscriber.putNext(nil)
+                subscriber.putCompletion()
+                return
+            }
+            
+            var durations: [Int] = []
+            var byteRanges: [Range<Int>] = []
+            
+            let extinfRegex = try! NSRegularExpression(pattern: "EXTINF:(\\d+)", options: [])
+            let byteRangeRegex = try! NSRegularExpression(pattern: "EXT-X-BYTERANGE:(\\d+)@(\\d+)", options: [])
+            
+            let extinfResults = extinfRegex.matches(in: playlistString, range: NSRange(playlistString.startIndex..., in: playlistString))
+            for result in extinfResults {
+                if let durationRange = Range(result.range(at: 1), in: playlistString) {
+                    if let duration = Int(String(playlistString[durationRange])) {
+                        durations.append(duration)
+                    }
+                }
+            }
+            
+            let byteRangeResults = byteRangeRegex.matches(in: playlistString, range: NSRange(playlistString.startIndex..., in: playlistString))
+            for result in byteRangeResults {
+                if let lengthRange = Range(result.range(at: 1), in: playlistString), let upperBoundRange = Range(result.range(at: 2), in: playlistString) {
+                    if let length = Int(String(playlistString[lengthRange])), let lowerBound = Int(String(playlistString[upperBoundRange])) {
+                        byteRanges.append(lowerBound ..< (lowerBound + length))
+                    }
+                }
+            }
+            
+            if durations.count != byteRanges.count {
+                subscriber.putNext(nil)
+                subscriber.putCompletion()
+                return
+            }
+            
+            var rangeUpperBound: Int64 = 0
+            
+            for i in 0 ..< durations.count {
+                let byteRange = byteRanges[i]
+                
+                rangeUpperBound = max(rangeUpperBound, Int64(byteRange.upperBound))
+
+                if durations[i] != 0 {
+                    break
+                }
+            }
+            
+            if rangeUpperBound != 0 {
+                subscriber.putNext(0 ..< rangeUpperBound)
+                subscriber.putCompletion()
+            } else {
+                subscriber.putNext(nil)
+                subscriber.putCompletion()
+            }
+            
+            return
+        })
+        
+        return ActionDisposable {
+            fetchDisposable?.dispose()
+            dataDisposable.dispose()
+        }
+    }
+    
+    return playlistData
+    |> map { range -> (FileMediaReference, Range<Int64>)? in
+        guard let range else {
+            return nil
+        }
+        return (videoFile, range)
+    }
+}
+
+private func minimizedHLSQuality(hlsFiles: [(playlist: TelegramMediaFile, video: TelegramMediaFile)]) -> (playlist: TelegramMediaFile, file: TelegramMediaFile)? {
+    let sortedQualities = hlsFiles
+    for (playlist, video) in sortedQualities {
+        guard let dimensions = video.dimensions else {
+            continue
+        }
+        
+        if max(dimensions.width, dimensions.height) >= 600 {
+            return (playlist, video)
+        }
+    }
+    if let (playlist, video) = hlsFiles.first {
+        return (playlist, video)
+    }
+    return nil
+}
+
+private func chatMessageVideoDatas(postbox: Postbox, userLocation: MediaResourceUserLocation, customUserContentType: MediaResourceUserContentType? = nil, fileReference: FileMediaReference, hlsFiles: [(playlist: TelegramMediaFile, video: TelegramMediaFile)] = [], previewSourceFileReference: FileMediaReference?, alternativeFileAndRange: Signal<(TelegramMediaFile, Range<Int64>), NoError>? = nil, thumbnailSize: Bool = false, onlyFullSize: Bool = false, useLargeThumbnail: Bool = false, synchronousLoad: Bool = false, autoFetchFullSizeThumbnail: Bool = false, forceThumbnail: Bool = false) -> Signal<Tuple3<Data?, Tuple2<Data, String>?, Bool>, NoError> {
+    if !hlsFiles.isEmpty {
+        var possibleFiles: [TelegramMediaFile] = [fileReference.media]
+        
+        let filteredHlsFiles = hlsFiles.filter { hlsFile in
+            guard let dimensions = hlsFile.video.dimensions else {
+                return false
+            }
+            if !thumbnailSize && hlsFiles.count > 1 {
+                if max(dimensions.width, dimensions.height) < 200 {
+                    return false
+                }
+            }
+            return true
+        }
+        
+        for item in filteredHlsFiles {
+            possibleFiles.append(item.video)
+        }
+        var possibleReadyFiles: [Signal<MediaResourceData, NoError>] = []
+        for possibleFile in possibleFiles {
+            if possibleFile.fileId == fileReference.media.fileId {
+                possibleReadyFiles.append(
+                    postbox.mediaBox.cachedResourceRepresentation(possibleFile.resource, representation: CachedVideoFirstFrameRepresentation(), complete: false, fetch: false, attemptSynchronously: synchronousLoad)
+                    |> take(1)
+                )
+            } else {
+                possibleReadyFiles.append(
+                    postbox.mediaBox.cachedResourceRepresentation(possibleFile.resource, representation: CachedVideoPrefixFirstFrameRepresentation(prefixLength: 0), complete: false, fetch: false, attemptSynchronously: synchronousLoad)
+                    |> take(1)
+                )
+            }
+        }
+        return combineLatest(possibleReadyFiles)
+        |> mapToSignal { possibleReadyFiles -> Signal<Tuple3<Data?, Tuple2<Data, String>?, Bool>, NoError> in
+            for possibleReadyFile in possibleReadyFiles {
+                if possibleReadyFile.complete {
+                    if let data = try? Data(contentsOf: URL(fileURLWithPath: possibleReadyFile.path), options: .mappedIfSafe) {
+                        return .single(Tuple(nil, Tuple(data, possibleReadyFile.path), true))
+                    }
+                }
+            }
+
+            let previewPrefixes: Signal<[(FileMediaReference, Range<Int64>)?], NoError> = combineLatest(hlsFiles.map { hlsFile in
+                return fileQualityPreloadData(postbox: postbox, playlistFile: fileReference.withMedia(hlsFile.playlist), videoFile: fileReference.withMedia(hlsFile.video), userLocation: userLocation, autofetchPlaylist: false, isOnce: true)
+                |> take(1)
+            })
+
+            let loadSignal = previewPrefixes
+            |> mapToSignal { previewPrefixes -> Signal<Tuple3<Data?, Tuple2<Data, String>?, Bool>, NoError> in
+                let possibleReadyPrefixes = previewPrefixes.compactMap { possiblePrefix -> Signal<MediaResourceData, NoError>? in
+                    guard let possiblePrefix, possiblePrefix.1.lowerBound == 0 else {
+                        return nil
+                    }
+                    
+                    return postbox.mediaBox.cachedResourceRepresentation(possiblePrefix.0.media.resource, representation: CachedVideoPrefixFirstFrameRepresentation(prefixLength: Int32(possiblePrefix.1.upperBound)), complete: false, fetch: false, attemptSynchronously: synchronousLoad)
+                    |> take(1)
+                }
+
+                return combineLatest(possibleReadyPrefixes)
+                |> mapToSignal { possibleReadyPrefixes -> Signal<Tuple3<Data?, Tuple2<Data, String>?, Bool>, NoError> in
+                    for possibleReadyPrefix in possibleReadyPrefixes {
+                        if possibleReadyPrefix.complete {
+                            if let data = try? Data(contentsOf: URL(fileURLWithPath: possibleReadyPrefix.path), options: .mappedIfSafe) {
+                                return .single(Tuple(nil, Tuple(data, possibleReadyPrefix.path), true))
+                            }
+                        }
+                    }
+
+                    guard let (playlist, video) = minimizedHLSQuality(hlsFiles: hlsFiles) else {
+                        return .single(Tuple(nil, nil, true))
+                    }
+                    
+                    return fileQualityPreloadData(postbox: postbox, playlistFile: fileReference.withMedia(playlist), videoFile: fileReference.withMedia(video), userLocation: userLocation, autofetchPlaylist: true, isOnce: false)
+                    |> mapToSignal { preloadData -> Signal<Tuple3<Data?, Tuple2<Data, String>?, Bool>, NoError> in
+                        guard let preloadData else {
+                            return .never()
+                        }
+                        return Signal { subscriber in
+                            let fetchedFilePrefix = fetchedMediaResource(mediaBox: postbox.mediaBox, userLocation: userLocation, userContentType: .video, reference: fileReference.withMedia(video).resourceReference(video.resource), range: (preloadData.1, .default), statsCategory: .image).start()
+                            let fetchedFrame = postbox.mediaBox.cachedResourceRepresentation(preloadData.0.media.resource, representation: CachedVideoPrefixFirstFrameRepresentation(prefixLength: Int32(preloadData.1.upperBound)), complete: true, fetch: true, attemptSynchronously: false).start(next: { resourceData in
+                                if resourceData.complete {
+                                    if resourceData.complete {
+                                        if let data = try? Data(contentsOf: URL(fileURLWithPath: resourceData.path), options: .mappedIfSafe) {
+                                            subscriber.putNext(Tuple(nil, Tuple(data, resourceData.path), true))
+                                            subscriber.putCompletion()
+                                        }
+                                    }
+                                }
+                            })
+                            
+                            return ActionDisposable {
+                                fetchedFilePrefix.dispose()
+                                fetchedFrame.dispose()
+                            }
+                        }
+                    }
+                }
+            }
+            
+            var resultSignal: Signal<Tuple3<Data?, Tuple2<Data, String>?, Bool>, NoError> = .complete()
+            if let decodedThumbnailData = fileReference.media.immediateThumbnailData.flatMap(decodeTinyThumbnail) {
+                resultSignal = .single(Tuple(decodedThumbnailData, nil, false))
+            }
+            resultSignal = resultSignal |> then(loadSignal)
+            
+            return resultSignal
+        }
+    }
+    
     let fullSizeResource = fileReference.media.resource
     var reducedSizeResource: MediaResource?
     if let videoThumbnail = fileReference.media.videoThumbnails.first {
@@ -1620,14 +1839,14 @@ public func gifPaneVideoThumbnail(account: Account, videoReference: FileMediaRef
     }
 }
 
-public func mediaGridMessageVideo(postbox: Postbox, userLocation: MediaResourceUserLocation, userContentType customUserContentType: MediaResourceUserContentType? = nil, videoReference: FileMediaReference, onlyFullSize: Bool = false, useLargeThumbnail: Bool = false, synchronousLoad: Bool = false, autoFetchFullSizeThumbnail: Bool = false, overlayColor: UIColor? = nil, nilForEmptyResult: Bool = false, useMiniThumbnailIfAvailable: Bool = false, blurred: Bool = false) -> Signal<(TransformImageArguments) -> DrawingContext?, NoError> {
-    return internalMediaGridMessageVideo(postbox: postbox, userLocation: userLocation, customUserContentType: customUserContentType, videoReference: videoReference, onlyFullSize: onlyFullSize, useLargeThumbnail: useLargeThumbnail, synchronousLoad: synchronousLoad, autoFetchFullSizeThumbnail: autoFetchFullSizeThumbnail, overlayColor: overlayColor, nilForEmptyResult: nilForEmptyResult, useMiniThumbnailIfAvailable: useMiniThumbnailIfAvailable)
+public func mediaGridMessageVideo(postbox: Postbox, userLocation: MediaResourceUserLocation, userContentType customUserContentType: MediaResourceUserContentType? = nil, videoReference: FileMediaReference, hlsFiles: [(playlist: TelegramMediaFile, video: TelegramMediaFile)] = [], onlyFullSize: Bool = false, useLargeThumbnail: Bool = false, synchronousLoad: Bool = false, autoFetchFullSizeThumbnail: Bool = false, overlayColor: UIColor? = nil, nilForEmptyResult: Bool = false, useMiniThumbnailIfAvailable: Bool = false, blurred: Bool = false) -> Signal<(TransformImageArguments) -> DrawingContext?, NoError> {
+    return internalMediaGridMessageVideo(postbox: postbox, userLocation: userLocation, customUserContentType: customUserContentType, videoReference: videoReference, hlsFiles: hlsFiles, onlyFullSize: onlyFullSize, useLargeThumbnail: useLargeThumbnail, synchronousLoad: synchronousLoad, autoFetchFullSizeThumbnail: autoFetchFullSizeThumbnail, overlayColor: overlayColor, nilForEmptyResult: nilForEmptyResult, useMiniThumbnailIfAvailable: useMiniThumbnailIfAvailable,  blurred: blurred)
     |> map {
         return $0.1
     }
 }
 
-public func internalMediaGridMessageVideo(postbox: Postbox, userLocation: MediaResourceUserLocation, customUserContentType: MediaResourceUserContentType? = nil, videoReference: FileMediaReference, previewSourceFileReference: FileMediaReference? = nil, imageReference: ImageMediaReference? = nil, onlyFullSize: Bool = false, useLargeThumbnail: Bool = false, synchronousLoad: Bool = false, autoFetchFullSizeThumbnail: Bool = false, overlayColor: UIColor? = nil, nilForEmptyResult: Bool = false, useMiniThumbnailIfAvailable: Bool = false, blurred: Bool = false) -> Signal<(() -> CGSize?, (TransformImageArguments) -> DrawingContext?), NoError> {
+public func internalMediaGridMessageVideo(postbox: Postbox, userLocation: MediaResourceUserLocation, customUserContentType: MediaResourceUserContentType? = nil, videoReference: FileMediaReference, hlsFiles: [(playlist: TelegramMediaFile, video: TelegramMediaFile)] = [],previewSourceFileReference: FileMediaReference? = nil, imageReference: ImageMediaReference? = nil, alternativeFileAndRange: Signal<(TelegramMediaFile, Range<Int64>), NoError>? = nil, onlyFullSize: Bool = false, useLargeThumbnail: Bool = false, synchronousLoad: Bool = false, autoFetchFullSizeThumbnail: Bool = false, overlayColor: UIColor? = nil, nilForEmptyResult: Bool = false, useMiniThumbnailIfAvailable: Bool = false, blurred: Bool = false) -> Signal<(() -> CGSize?, (TransformImageArguments) -> DrawingContext?), NoError> {
     let signal: Signal<Tuple3<Data?, Tuple2<Data, String>?, Bool>, NoError>
     if let imageReference = imageReference {
         signal = chatMessagePhotoDatas(postbox: postbox, userLocation: userLocation, customUserContentType: customUserContentType, photoReference: imageReference, tryAdditionalRepresentations: true, synchronousLoad: synchronousLoad, forceThumbnail: blurred)
@@ -1638,7 +1857,7 @@ public func internalMediaGridMessageVideo(postbox: Postbox, userLocation: MediaR
             return Tuple(thumbnailData, fullSizeData.flatMap({ Tuple($0, "") }), fullSizeComplete)
         }
     } else {
-        signal = chatMessageVideoDatas(postbox: postbox, userLocation: userLocation, customUserContentType: customUserContentType, fileReference: videoReference, previewSourceFileReference: previewSourceFileReference, onlyFullSize: onlyFullSize, useLargeThumbnail: useLargeThumbnail, synchronousLoad: synchronousLoad, autoFetchFullSizeThumbnail: autoFetchFullSizeThumbnail, forceThumbnail: blurred)
+        signal = chatMessageVideoDatas(postbox: postbox, userLocation: userLocation, customUserContentType: customUserContentType, fileReference: videoReference, hlsFiles: hlsFiles, previewSourceFileReference: previewSourceFileReference, alternativeFileAndRange: alternativeFileAndRange, onlyFullSize: onlyFullSize, useLargeThumbnail: useLargeThumbnail, synchronousLoad: synchronousLoad, autoFetchFullSizeThumbnail: autoFetchFullSizeThumbnail, forceThumbnail: blurred)
     }
     
     return signal
@@ -1987,14 +2206,14 @@ public func chatWebpageSnippetPhotoData(account: Account, userLocation: MediaRes
     }
 }
 
-public func chatWebpageSnippetFile(account: Account, userLocation: MediaResourceUserLocation, mediaReference: AnyMediaReference, representation: TelegramMediaImageRepresentation, automaticFetch: Bool = true, placeholderColor: UIColor? = nil) -> Signal<(TransformImageArguments) -> DrawingContext?, NoError> {
+public func chatWebpageSnippetFile(account: Account, userLocation: MediaResourceUserLocation, mediaReference: AnyMediaReference, representation: TelegramMediaImageRepresentation, automaticFetch: Bool = true, placeholderColor: UIColor? = nil, blurred: Bool = false) -> Signal<(TransformImageArguments) -> DrawingContext?, NoError> {
     let signal = chatWebpageSnippetFileData(account: account, userLocation: userLocation, mediaReference: mediaReference, resource: representation.resource, automaticFetch: automaticFetch)
     
     return signal |> map { fullSizeData in
         return { arguments in
             var fullSizeImage: CGImage?
             var imageOrientation: UIImage.Orientation = .up
-            if let fullSizeData = fullSizeData {
+            if let fullSizeData = fullSizeData, !blurred {
                 let options = NSMutableDictionary()
                 if let imageSource = CGImageSourceCreateWithData(fullSizeData as CFData, nil), let image = CGImageSourceCreateImageAtIndex(imageSource, 0, options as CFDictionary) {
                     imageOrientation = imageOrientationFromSource(imageSource)
@@ -2003,35 +2222,70 @@ public func chatWebpageSnippetFile(account: Account, userLocation: MediaResource
             }
             
             var blurredImage: UIImage?
-            if fullSizeImage == nil {
-                var immediateThumbnailData: Data?
-                if let file = mediaReference.media as? TelegramMediaFile {
-                    immediateThumbnailData = file.immediateThumbnailData
-                } else if let image = mediaReference.media as? TelegramMediaImage {
-                    immediateThumbnailData = image.immediateThumbnailData
+            if fullSizeImage == nil || blurred {
+                var sourceImage: CGImage?
+                
+                if blurred, let fullSizeData = fullSizeData {
+                    let options = NSMutableDictionary()
+                    if let imageSource = CGImageSourceCreateWithData(fullSizeData as CFData, nil), let image = CGImageSourceCreateImageAtIndex(imageSource, 0, options as CFDictionary) {
+                        imageOrientation = imageOrientationFromSource(imageSource)
+                        sourceImage = image
+                    }
                 }
                 
-                if let decodedThumbnailData = immediateThumbnailData.flatMap(decodeTinyThumbnail), let imageSource = CGImageSourceCreateWithData(decodedThumbnailData as CFData, nil), let image = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) {
-                    let thumbnailSize = CGSize(width: image.width, height: image.height)
-                    let thumbnailContextSize = thumbnailSize.aspectFilled(CGSize(width: 20.0, height: 20.0))
-                    if let thumbnailContext = DrawingContext(size: thumbnailContextSize, scale: 1.0) {
-                        thumbnailContext.withFlippedContext { c in
-                            c.interpolationQuality = .none
-                            c.draw(image, in: CGRect(origin: CGPoint(), size: thumbnailContextSize))
-                        }
-                        imageFastBlur(Int32(thumbnailContextSize.width), Int32(thumbnailContextSize.height), Int32(thumbnailContext.bytesPerRow), thumbnailContext.bytes)
-                        
-                        let thumbnailContext2Size = thumbnailSize.aspectFitted(CGSize(width: 100.0, height: 100.0))
-                        if let thumbnailContext2 = DrawingContext(size: thumbnailContext2Size, scale: 1.0) {
-                            thumbnailContext2.withFlippedContext { c in
+                if sourceImage == nil {
+                    var immediateThumbnailData: Data?
+                    if let file = mediaReference.media as? TelegramMediaFile {
+                        immediateThumbnailData = file.immediateThumbnailData
+                    } else if let image = mediaReference.media as? TelegramMediaImage {
+                        immediateThumbnailData = image.immediateThumbnailData
+                    }
+                    
+                    if let decodedThumbnailData = immediateThumbnailData.flatMap(decodeTinyThumbnail), let imageSource = CGImageSourceCreateWithData(decodedThumbnailData as CFData, nil), let image = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) {
+                        sourceImage = image
+                    }
+                }
+                
+                if let sourceImage = sourceImage {
+                    let thumbnailSize = CGSize(width: sourceImage.width, height: sourceImage.height)
+                    
+                    if blurred {
+                        let thumbnailContextSize = thumbnailSize.aspectFitted(CGSize(width: 50.0, height: 50.0))
+                        if let thumbnailContext = DrawingContext(size: thumbnailContextSize, scale: 1.0) {
+                            thumbnailContext.withFlippedContext { c in
                                 c.interpolationQuality = .none
-                                if let image = thumbnailContext.generateImage()?.cgImage {
-                                    c.draw(image, in: CGRect(origin: CGPoint(), size: thumbnailContext2Size))
-                                }
+                                c.draw(sourceImage, in: CGRect(origin: CGPoint(), size: thumbnailContextSize))
                             }
-                            imageFastBlur(Int32(thumbnailContext2Size.width), Int32(thumbnailContext2Size.height), Int32(thumbnailContext2.bytesPerRow), thumbnailContext2.bytes)
                             
-                            blurredImage = thumbnailContext2.generateImage()
+                            imageFastBlur(Int32(thumbnailContextSize.width), Int32(thumbnailContextSize.height), Int32(thumbnailContext.bytesPerRow), thumbnailContext.bytes)
+                            telegramFastBlurMore(Int32(thumbnailContextSize.width), Int32(thumbnailContextSize.height), Int32(thumbnailContext.bytesPerRow), thumbnailContext.bytes)
+                            telegramFastBlurMore(Int32(thumbnailContextSize.width), Int32(thumbnailContextSize.height), Int32(thumbnailContext.bytesPerRow), thumbnailContext.bytes)
+                            imageFastBlur(Int32(thumbnailContextSize.width), Int32(thumbnailContextSize.height), Int32(thumbnailContext.bytesPerRow), thumbnailContext.bytes)
+                            adjustSaturationInContext(context: thumbnailContext, saturation: 1.7)
+                            
+                            blurredImage = thumbnailContext.generateImage()
+                        }
+                    } else {
+                        let thumbnailContextSize = thumbnailSize.aspectFilled(CGSize(width: 20.0, height: 20.0))
+                        if let thumbnailContext = DrawingContext(size: thumbnailContextSize, scale: 1.0) {
+                            thumbnailContext.withFlippedContext { c in
+                                c.interpolationQuality = .none
+                                c.draw(sourceImage, in: CGRect(origin: CGPoint(), size: thumbnailContextSize))
+                            }
+                            imageFastBlur(Int32(thumbnailContextSize.width), Int32(thumbnailContextSize.height), Int32(thumbnailContext.bytesPerRow), thumbnailContext.bytes)
+                            
+                            let thumbnailContext2Size = thumbnailSize.aspectFitted(CGSize(width: 100.0, height: 100.0))
+                            if let thumbnailContext2 = DrawingContext(size: thumbnailContext2Size, scale: 1.0) {
+                                thumbnailContext2.withFlippedContext { c in
+                                    c.interpolationQuality = .none
+                                    if let image = thumbnailContext.generateImage()?.cgImage {
+                                        c.draw(image, in: CGRect(origin: CGPoint(), size: thumbnailContext2Size))
+                                    }
+                                }
+                                imageFastBlur(Int32(thumbnailContext2Size.width), Int32(thumbnailContext2Size.height), Int32(thumbnailContext2.bytesPerRow), thumbnailContext2.bytes)
+                                
+                                blurredImage = thumbnailContext2.generateImage()
+                            }
                         }
                     }
                 }
@@ -2058,7 +2312,7 @@ public func chatWebpageSnippetFile(account: Account, userLocation: MediaResource
                         c.fill(arguments.drawingRect)
                     }
                     
-                    c.interpolationQuality = .medium
+                    c.interpolationQuality = blurred ? .low : .medium
                     drawImage(context: c, image: fullSizeImage, orientation: imageOrientation, in: fittedRect)
                 }
                 
@@ -2088,18 +2342,43 @@ public func chatWebpageSnippetFile(account: Account, userLocation: MediaResource
     }
 }
 
-public func chatWebpageSnippetPhoto(account: Account, userLocation: MediaResourceUserLocation, photoReference: ImageMediaReference, placeholderColor: UIColor? = nil) -> Signal<(TransformImageArguments) -> DrawingContext?, NoError> {
+public func chatWebpageSnippetPhoto(account: Account, userLocation: MediaResourceUserLocation, photoReference: ImageMediaReference, placeholderColor: UIColor? = nil, blurred: Bool = false) -> Signal<(TransformImageArguments) -> DrawingContext?, NoError> {
     let signal = chatWebpageSnippetPhotoData(account: account, userLocation: userLocation, photoReference: photoReference)
     
     return signal |> map { fullSizeData in
         return { arguments in
             var fullSizeImage: CGImage?
             var imageOrientation: UIImage.Orientation = .up
-            if let fullSizeData = fullSizeData {
+            if let fullSizeData = fullSizeData, !blurred {
                 let options = NSMutableDictionary()
                 if let imageSource = CGImageSourceCreateWithData(fullSizeData as CFData, nil), let image = CGImageSourceCreateImageAtIndex(imageSource, 0, options as CFDictionary) {
                     imageOrientation = imageOrientationFromSource(imageSource)
                     fullSizeImage = image
+                }
+            }
+            
+            var blurredImage: CGImage?
+            if let fullSizeData = fullSizeData, blurred {
+                let options = NSMutableDictionary()
+                if let imageSource = CGImageSourceCreateWithData(fullSizeData as CFData, nil), let image = CGImageSourceCreateImageAtIndex(imageSource, 0, options as CFDictionary) {
+                    imageOrientation = imageOrientationFromSource(imageSource)
+                    
+                    let imageSize = CGSize(width: image.width, height: image.height)
+                    let blurContextSize = imageSize.aspectFitted(CGSize(width: 50.0, height: 50.0))
+                    if let blurContext = DrawingContext(size: blurContextSize, scale: 1.0) {
+                        blurContext.withFlippedContext { c in
+                            c.interpolationQuality = .none
+                            c.draw(image, in: CGRect(origin: CGPoint(), size: blurContextSize))
+                        }
+                        
+                        imageFastBlur(Int32(blurContextSize.width), Int32(blurContextSize.height), Int32(blurContext.bytesPerRow), blurContext.bytes)
+                        telegramFastBlurMore(Int32(blurContextSize.width), Int32(blurContextSize.height), Int32(blurContext.bytesPerRow), blurContext.bytes)
+                        telegramFastBlurMore(Int32(blurContextSize.width), Int32(blurContextSize.height), Int32(blurContext.bytesPerRow), blurContext.bytes)
+                        imageFastBlur(Int32(blurContextSize.width), Int32(blurContextSize.height), Int32(blurContext.bytesPerRow), blurContext.bytes)
+                        adjustSaturationInContext(context: blurContext, saturation: 1.7)
+                        
+                        blurredImage = blurContext.generateImage()?.cgImage
+                    }
                 }
             }
             
@@ -2121,6 +2400,29 @@ public func chatWebpageSnippetPhoto(account: Account, userLocation: MediaResourc
                     
                     c.interpolationQuality = .medium
                     drawImage(context: c, image: fullSizeImage, orientation: imageOrientation, in: fittedRect)
+                }
+                
+                addCorners(context, arguments: arguments)
+                
+                return context
+            } else if let blurredImage = blurredImage {
+                guard let context = DrawingContext(size: arguments.drawingSize, scale: arguments.scale ?? 0.0, clear: true) else {
+                    return nil
+                }
+                
+                let fittedSize = CGSize(width: blurredImage.width, height: blurredImage.height).aspectFilled(arguments.boundingSize)
+                let drawingRect = arguments.drawingRect
+                
+                let fittedRect = CGRect(origin: CGPoint(x: drawingRect.origin.x + (drawingRect.size.width - fittedSize.width) / 2.0, y: drawingRect.origin.y + (drawingRect.size.height - fittedSize.height) / 2.0), size: fittedSize)
+                
+                context.withFlippedContext { c in
+                    c.setBlendMode(.copy)
+                    if arguments.boundingSize.width > arguments.imageSize.width || arguments.boundingSize.height > arguments.imageSize.height {
+                        c.fill(arguments.drawingRect)
+                    }
+                    
+                    c.interpolationQuality = .low
+                    drawImage(context: c, image: blurredImage, orientation: imageOrientation, in: fittedRect)
                 }
                 
                 addCorners(context, arguments: arguments)
@@ -2994,7 +3296,7 @@ private func drawAlbumArtPlaceholder(into c: CGContext, arguments: TransformImag
     }
 }
 
-public func playerAlbumArt(postbox: Postbox, engine: TelegramEngine, fileReference: FileMediaReference?, albumArt: SharedMediaPlaybackAlbumArt?, thumbnail: Bool, overlayColor: UIColor? = nil, emptyColor: UIColor? = nil, drawPlaceholderWhenEmpty: Bool = true, attemptSynchronously: Bool = false) -> Signal<(TransformImageArguments) -> DrawingContext?, NoError> {
+public func playerAlbumArt(postbox: Postbox, engine: TelegramEngine, fileReference: FileMediaReference?, albumArt: SharedMediaPlaybackAlbumArt?, thumbnail: Bool, overlayColor: UIColor? = nil, emptyColor: UIColor? = nil, drawPlaceholderWhenEmpty: Bool = true, attemptSynchronously: Bool = false, blurred: Bool = false) -> Signal<(TransformImageArguments) -> DrawingContext?, NoError> {
     var fileArtworkData: Signal<Data?, NoError> = .single(nil)
     if let fileReference = fileReference {
         let size = thumbnail ? CGSize(width: 48.0, height: 48.0) : CGSize(width: 320.0, height: 320.0)
@@ -3065,11 +3367,63 @@ public func playerAlbumArt(postbox: Postbox, engine: TelegramEngine, fileReferen
             
             if let sourceImage = sourceImage, let cgImage = sourceImage.cgImage {
                 let imageSize = sourceImage.size.aspectFilled(arguments.drawingRect.size)
-                context.withFlippedContext { c in
-                    c.draw(cgImage, in: CGRect(origin: CGPoint(x: floor((arguments.drawingRect.size.width - imageSize.width) / 2.0), y: floor((arguments.drawingRect.size.height - imageSize.height) / 2.0)), size: imageSize))
-                    if let overlayColor = overlayColor {
-                        c.setFillColor(overlayColor.cgColor)
-                        c.fill(arguments.drawingRect)
+                
+                if blurred {
+                    let blurSize = CGSize(width: 50.0, height: 50.0)
+                    if let blurContext = DrawingContext(size: blurSize, scale: 1.0, clear: true) {
+                        blurContext.withFlippedContext { c in
+                            c.interpolationQuality = .none
+                            c.draw(cgImage, in: CGRect(origin: CGPoint(), size: blurSize))
+                        }
+                        
+                        imageFastBlur(Int32(blurSize.width), Int32(blurSize.height), Int32(blurContext.bytesPerRow), blurContext.bytes)
+                        telegramFastBlurMore(Int32(blurSize.width), Int32(blurSize.height), Int32(blurContext.bytesPerRow), blurContext.bytes)
+                        telegramFastBlurMore(Int32(blurSize.width), Int32(blurSize.height), Int32(blurContext.bytesPerRow), blurContext.bytes)
+                        imageFastBlur(Int32(blurSize.width), Int32(blurSize.height), Int32(blurContext.bytesPerRow), blurContext.bytes)
+                        adjustSaturationInContext(context: blurContext, saturation: 1.7)
+                        
+                        if let blurredImage = blurContext.generateImage()?.cgImage {
+                            context.withFlippedContext { c in
+                                c.interpolationQuality = .low
+                                c.draw(blurredImage, in: CGRect(origin: CGPoint(x: floor((arguments.drawingRect.size.width - imageSize.width) / 2.0), y: floor((arguments.drawingRect.size.height - imageSize.height) / 2.0)), size: imageSize))
+                                if let overlayColor = overlayColor {
+                                    c.setFillColor(overlayColor.cgColor)
+                                    c.fill(arguments.drawingRect)
+                                }
+                            }
+                        } else {
+                            if let emptyColor = emptyColor {
+                                context.withFlippedContext { c in
+                                    let rect = arguments.drawingRect
+                                    c.setFillColor(emptyColor.cgColor)
+                                    c.fill(rect)
+                                }
+                            } else if drawPlaceholderWhenEmpty {
+                                context.withFlippedContext { c in
+                                    drawAlbumArtPlaceholder(into: c, arguments: arguments, thumbnail: thumbnail)
+                                }
+                            }
+                        }
+                    } else {
+                        if let emptyColor = emptyColor {
+                            context.withFlippedContext { c in
+                                let rect = arguments.drawingRect
+                                c.setFillColor(emptyColor.cgColor)
+                                c.fill(rect)
+                            }
+                        } else if drawPlaceholderWhenEmpty {
+                            context.withFlippedContext { c in
+                                drawAlbumArtPlaceholder(into: c, arguments: arguments, thumbnail: thumbnail)
+                            }
+                        }
+                    }
+                } else {
+                    context.withFlippedContext { c in
+                        c.draw(cgImage, in: CGRect(origin: CGPoint(x: floor((arguments.drawingRect.size.width - imageSize.width) / 2.0), y: floor((arguments.drawingRect.size.height - imageSize.height) / 2.0)), size: imageSize))
+                        if let overlayColor = overlayColor {
+                            c.setFillColor(overlayColor.cgColor)
+                            c.fill(arguments.drawingRect)
+                        }
                     }
                 }
             } else {

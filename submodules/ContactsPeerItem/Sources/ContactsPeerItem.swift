@@ -210,9 +210,11 @@ public class ContactsPeerItem: ItemListItem, ListViewItemWithHeader {
     let storyStats: (total: Int, unseen: Int, hasUnseenCloseFriends: Bool)?
     let openStories: ((ContactsPeerItemPeer, ASDisplayNode) -> Void)?
     let adButtonAction: ((ASDisplayNode) -> Void)?
+    let visibilityUpdated: ((Bool) -> Void)?
     
     public let selectable: Bool
-    
+    public let blurred: Bool
+
     public let headerAccessoryItem: ListViewAccessoryItem?
     
     public let header: ListViewItemHeader?
@@ -244,6 +246,7 @@ public class ContactsPeerItem: ItemListItem, ListViewItemWithHeader {
         searchQuery: String? = nil,
         isAd: Bool = false,
         alwaysShowLastSeparator: Bool = false,
+        blurred: Bool,
         action: ((ContactsPeerItemPeer) -> Void)?,
         disabledAction: ((ContactsPeerItemPeer) -> Void)? = nil,
         setPeerIdWithRevealedOptions: ((EnginePeer.Id?, EnginePeer.Id?) -> Void)? = nil,
@@ -254,7 +257,8 @@ public class ContactsPeerItem: ItemListItem, ListViewItemWithHeader {
         animationRenderer: MultiAnimationRenderer? = nil,
         storyStats: (total: Int, unseen: Int, hasUnseenCloseFriends: Bool)? = nil,
         openStories: ((ContactsPeerItemPeer, ASDisplayNode) -> Void)? = nil,
-        adButtonAction: ((ASDisplayNode) -> Void)? = nil
+        adButtonAction: ((ASDisplayNode) -> Void)? = nil,
+        visibilityUpdated: ((Bool) -> Void)? = nil
     ) {
         self.presentationData = presentationData
         self.style = style
@@ -294,6 +298,8 @@ public class ContactsPeerItem: ItemListItem, ListViewItemWithHeader {
         self.storyStats = storyStats
         self.openStories = openStories
         self.adButtonAction = adButtonAction
+        self.visibilityUpdated = visibilityUpdated
+        self.blurred = blurred
         
         if let index = index {
             var letter: String = "#"
@@ -462,7 +468,8 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
     private var moreButtonNode: MoreButtonNode?
     private var arrowButtonNode: HighlightableButtonNode?
     private var rightLabelTextNode: TextNode?
-    
+    private var lockIconNode: ASImageNode?
+
     private var adButton: HighlightableButtonNode?
     
     private var actionButtonNode: HighlightTrackingButtonNode?
@@ -538,6 +545,8 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
                     )
                 }
                 self.statusNode.visibilityRect = self.visibilityStatus == false ? CGRect.zero : CGRect.infinite
+                
+                self.item?.visibilityUpdated?(self.visibilityStatus)
             }
         }
     }
@@ -687,6 +696,9 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
     
     public func updateIsHighlighted(transition: ContainedViewLayoutTransition) {
         var reallyHighlighted = self.isHighlighted
+        if let item = self.item, !item.enabled {
+            reallyHighlighted = false
+        }
         let highlightProgress: CGFloat = self.item?.itemHighlighting?.progress ?? 1.0
         if let item = self.item {
             switch item.peer {
@@ -821,7 +833,7 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
                     if peer.isVerified {
                         credibilityIcon = .verified(fillColor: item.presentationData.theme.list.itemCheckColors.fillColor, foregroundColor: item.presentationData.theme.list.itemCheckColors.foregroundColor, sizeType: .compact)
                     }
-                    if let verificationIconFileId = peer.verificationIconFileId {
+                    if let verificationIconFileId = peer.verificationIconFileId, !item.blurred {
                         verifiedIcon = .animation(content: .customEmoji(fileId: verificationIconFileId), size: CGSize(width: 32.0, height: 32.0), placeholderColor: item.presentationData.theme.list.mediaPlaceholderColor, themeColor: item.presentationData.theme.list.itemAccentColor, loopMode: .count(0))
                     }
                 }
@@ -834,6 +846,17 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
             var arrowButtonImage: UIImage?
             if let _ = item.arrowAction {
                 arrowButtonImage = generateTintedImage(image: UIImage(bundleImageName: "Chat List/Search/Arrow"), color: item.presentationData.theme.list.disclosureArrowColor)
+            }
+            
+            var lockedIconImage: UIImage?
+            if item.blurred {
+                lockedIconImage = generateTintedImage(image: UIImage(bundleImageName: "TPChat List/Locked"), color: item.presentationData.theme.list.disclosureArrowColor)
+            }
+
+            
+            if item.blurred {
+                credibilityIcon = nil
+                verifiedIcon = nil
             }
             
             var actionButtons: [ActionButton]?
@@ -1033,7 +1056,7 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
             
             var badgeTextLayoutAndApply: (TextNodeLayout, () -> TextNode)?
             var currentBadgeBackgroundImage: UIImage?
-            if let badge = item.badge {
+            if let badge = item.badge, !item.blurred {
                 let badgeTextColor: UIColor
                 switch badge.type {
                     case .inactive:
@@ -1090,9 +1113,29 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
                 additionalTitleInset += arrowButtonImage.size.width + 4.0
             }
             
+            var actionButtonTitleLayoutAndApply: (TextNodeLayout, () -> TextNode)?
+            if let buttonAction = item.buttonAction {
+                actionButtonTitleLayoutAndApply = makeActionButtonTitleLayuout(TextNodeLayoutArguments(attributedString: NSAttributedString(string: buttonAction.title, font: Font.semibold(15.0), textColor: item.presentationData.theme.list.itemCheckColors.foregroundColor, paragraphAlignment: .center), backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: params.width, height: CGFloat.infinity), alignment: .natural, cutout: nil, insets: UIEdgeInsets()))
+                
+                if let (actionButtonTitleLayout, _) = actionButtonTitleLayoutAndApply {
+                    additionalTitleInset += actionButtonTitleLayout.size.width + 32.0
+                }
+            }
+            
+            if let rightLabelTextLayoutAndApply {
+                additionalTitleInset += rightLabelTextLayoutAndApply.0.size.width + 36.0
+            }
+            
+            if let lockedIconImage = lockedIconImage {
+                additionalTitleInset += lockedIconImage.size.width + 16.0
+            }
+            
             let (titleLayout, titleApply) = makeTitleLayout(TextNodeLayoutArguments(attributedString: titleAttributedString, backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: max(0.0, params.width - leftInset - rightInset - additionalTitleInset), height: CGFloat.infinity), alignment: .natural, cutout: nil, insets: UIEdgeInsets()))
             
             var maxStatusWidth: CGFloat = params.width - leftInset - rightInset - badgeSize
+            if item.blurred {
+                statusIcon = nil
+            }
             if let _ = statusIcon {
                 maxStatusWidth -= 10.0
             }
@@ -1117,11 +1160,6 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
                 statusHeightComponent = 0.0
             } else {
                 statusHeightComponent = -1.0 + statusLayout.size.height
-            }
-            
-            var actionButtonTitleLayoutAndApply: (TextNodeLayout, () -> TextNode)?
-            if let buttonAction = item.buttonAction {
-                actionButtonTitleLayoutAndApply = makeActionButtonTitleLayuout(TextNodeLayoutArguments(attributedString: NSAttributedString(string: buttonAction.title, font: Font.semibold(15.0), textColor: item.presentationData.theme.list.itemCheckColors.foregroundColor, paragraphAlignment: .center), backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: params.width, height: CGFloat.infinity), alignment: .natural, cutout: nil, insets: UIEdgeInsets()))
             }
             
             let nodeLayout = ListViewItemNodeLayout(contentSize: CGSize(width: params.width, height: verticalInset * 2.0 + titleLayout.size.height + statusHeightComponent), insets: UIEdgeInsets(top: firstWithHeader ? 29.0 : 0.0, left: 0.0, bottom: 0.0, right: 0.0))
@@ -1218,7 +1256,7 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
                                             clipStyle = item.presentationData.theme.squareStyle ? .rect : .round
                                         }
                                         
-                                        strongSelf.avatarNode.setPeer(context: item.context, theme: item.presentationData.theme, peer: peer, overrideImage: overrideImage, emptyColor: item.presentationData.theme.list.mediaPlaceholderColor, clipStyle: clipStyle, synchronousLoad: synchronousLoads, displayDimensions: displayDimensions)
+                                        strongSelf.avatarNode.setPeer(context: item.context, theme: item.presentationData.theme, peer: peer, overrideImage: overrideImage, emptyColor: item.presentationData.theme.list.mediaPlaceholderColor, clipStyle: clipStyle, synchronousLoad: synchronousLoads, displayDimensions: displayDimensions, blurred: item.blurred, displayLetters: !item.blurred)
                                     }
                                 case let .deviceContact(_, contact):
                                     let letters: [String]
@@ -1236,21 +1274,23 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
                                     break
                             }
                             
-                            strongSelf.avatarNode.setStoryStats(
-                                storyStats: item.storyStats.flatMap { stats in
-                                    return AvatarNode.StoryStats(
-                                        totalCount: stats.total,
-                                        unseenCount: stats.unseen,
-                                        hasUnseenCloseFriendsItems: stats.hasUnseenCloseFriends
-                                    )
-                                },
-                                presentationParams: AvatarNode.StoryPresentationParams(
-                                    colors: AvatarNode.Colors(theme: item.presentationData.theme),
-                                    lineWidth: 1.33,
-                                    inactiveLineWidth: 1.33
-                                ),
-                                transition: animated ? ComponentTransition(animation: .curve(duration: 0.25, curve: .easeInOut)) : .immediate
-                            )
+                            if !item.blurred {
+                                strongSelf.avatarNode.setStoryStats(
+                                    storyStats: item.storyStats.flatMap { stats in
+                                        return AvatarNode.StoryStats(
+                                            totalCount: stats.total,
+                                            unseenCount: stats.unseen,
+                                            hasUnseenCloseFriendsItems: stats.hasUnseenCloseFriends
+                                        )
+                                    },
+                                    presentationParams: AvatarNode.StoryPresentationParams(
+                                        colors: AvatarNode.Colors(theme: item.presentationData.theme),
+                                        lineWidth: 1.33,
+                                        inactiveLineWidth: 1.33
+                                    ),
+                                    transition: animated ? ComponentTransition(animation: .curve(duration: 0.25, curve: .easeInOut)) : .immediate
+                                )
+                            }
                             
                             if strongSelf.avatarTapRecognizer == nil {
                                 let avatarTapRecognizer = UITapGestureRecognizer(target: strongSelf, action: #selector(strongSelf.avatarStoryTapGesture(_:)))
@@ -1411,7 +1451,7 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
                             
                             var titleLeftOffset: CGFloat = 0.0
                             var nextIconX: CGFloat = titleFrame.maxX
-                            if let verifiedIcon {
+                            if let verifiedIcon, !item.blurred {
                                 let animationCache = item.context.animationCache
                                 let animationRenderer = item.context.animationRenderer
                                 
@@ -1493,7 +1533,7 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
                                 }
                             }
                             
-                            if let credibilityIcon {
+                            if let credibilityIcon, !item.blurred {
                                 let animationCache = item.context.animationCache
                                 let animationRenderer = item.context.animationRenderer
                                 
@@ -1641,6 +1681,9 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
                                         actionButtonNode.setImage(actionButton.image, for: .normal)
                                         transition.updateFrame(node: actionButtonNode, frame: CGRect(origin: CGPoint(x: revealOffset + params.width - params.rightInset - 12.0 - actionButtonImage.size.width - offset, y: floor((nodeLayout.contentSize.height - actionButtonImage.size.height) / 2.0)), size: actionButtonImage.size))
                                         
+                                        actionButtonNode.isEnabled = item.enabled
+                                        actionButtonNode.alpha = item.enabled ? 1.0 : 0.4
+                                        
                                         offset += actionButtonImage.size.width + 12.0
                                     }
                                 }
@@ -1664,6 +1707,33 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
                             } else if let arrowButtonNode = strongSelf.arrowButtonNode {
                                 strongSelf.arrowButtonNode = nil
                                 arrowButtonNode.removeFromSupernode()
+                            }
+                            
+                            if let lockedIconImage = lockedIconImage {
+                                let lockIconNode: ASImageNode
+                                if let current = strongSelf.lockIconNode {
+                                    lockIconNode = current
+                                } else {
+                                    lockIconNode = ASImageNode()
+                                    lockIconNode.displaysAsynchronously = false
+                                    lockIconNode.image = lockedIconImage
+                                    strongSelf.offsetContainerNode.addSubnode(lockIconNode)
+                                    strongSelf.lockIconNode = lockIconNode
+                                }
+                                
+                                lockIconNode.image = lockedIconImage
+                                let lockFrame = CGRect(
+                                    origin: CGPoint(
+                                        x: params.width - params.rightInset - 12.0 - lockedIconImage.size.width,
+                                        y: floor((nodeLayout.contentSize.height - lockedIconImage.size.height) / 2.0)
+                                    ),
+                                    size: lockedIconImage.size
+                                )
+                                transition.updateFrame(node: lockIconNode, frame: lockFrame)
+                                additionalRightInset += lockedIconImage.size.width + 16.0
+                            } else if let lockIconNode = strongSelf.lockIconNode {
+                                strongSelf.lockIconNode = nil
+                                lockIconNode.removeFromSupernode()
                             }
                             
                             let badgeBackgroundWidth: CGFloat
@@ -1800,14 +1870,17 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
                                     adButton = current
                                 } else {
                                     adButton = HighlightableButtonNode()
-                                    adButton.setImage(UIImage(bundleImageName: "Components/AdMock"), for: .normal)
                                     strongSelf.addSubnode(adButton)
                                     strongSelf.adButton = adButton
                                     
                                     adButton.addTarget(strongSelf, action: #selector(strongSelf.adButtonPressed), forControlEvents: .touchUpInside)
                                 }
-                                
-                                adButton.frame = CGRect(origin: CGPoint(x: params.width - 20.0 - 31.0 - 13.0, y: 11.0), size: CGSize(width: 31.0, height: 15.0))
+                                if updatedTheme != nil || adButton.image(for: .normal) == nil {
+                                    adButton.setImage(PresentationResourcesChatList.searchAdIcon(item.presentationData.theme, strings: item.presentationData.strings), for: .normal)
+                                }
+                                if let icon = adButton.image(for: .normal) {
+                                    adButton.frame = CGRect(origin: CGPoint(x: params.width - 20.0 - icon.size.width - 13.0, y: 11.0), size: icon.size).insetBy(dx: -11.0, dy: -11.0)
+                                }
                             } else if let adButton = strongSelf.adButton {
                                 strongSelf.adButton = nil
                                 adButton.removeFromSupernode()

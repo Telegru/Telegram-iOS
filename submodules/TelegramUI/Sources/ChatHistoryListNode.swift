@@ -199,7 +199,7 @@ extension ListMessageItemInteraction {
     convenience init(controllerInteraction: ChatControllerInteraction) {
         self.init(openMessage: { message, mode -> Bool in
             return controllerInteraction.openMessage(message, OpenMessageParams(mode: mode))
-        }, openMessageContextMenu: { message, bool, node, rect, gesture in
+        }, openMessageContextMenu: { message, bool, node, rect, gesture, _ in
             controllerInteraction.openMessageContextMenu(message, bool, node, rect, gesture, nil)
         }, toggleMessagesSelection: { messageId, selected in
             controllerInteraction.toggleMessagesSelection(messageId, selected)
@@ -207,6 +207,7 @@ extension ListMessageItemInteraction {
             controllerInteraction.openUrl(ChatControllerInteraction.OpenUrl(url: url, concealed: param1, external: param2, message: message, progress: Promise()))
         }, openInstantPage: { message, data in
             controllerInteraction.openInstantPage(message, data)
+        }, openRequiredPermissionDialog: { _, _, _ in
         }, longTap: { action, message in
             controllerInteraction.longTap(action, ChatControllerInteraction.LongTapParams(message: message))
         }, getHiddenMedia: {
@@ -580,6 +581,7 @@ public final class ChatHistoryListNodeImpl: ListView, ChatHistoryNode, ChatHisto
     private let translationProcessingManager = ChatMessageThrottledProcessingManager(submitInterval: 1.0)
     private let refreshStoriesProcessingManager = ChatMessageThrottledProcessingManager()
     private let factCheckProcessingManager = ChatMessageThrottledProcessingManager(submitInterval: 1.0)
+    private let inlineGroupCallsProcessingManager = ChatMessageThrottledProcessingManager(submitInterval: 1.0)
     
     let prefetchManager: InChatPrefetchManager
     private var currentEarlierPrefetchMessages: [(Message, Media)] = []
@@ -974,6 +976,10 @@ public final class ChatHistoryListNodeImpl: ListView, ChatHistoryNode, ChatHisto
                 return
             }
             strongSelf.context.account.viewTracker.updatedExtendedMediaForMessageIds(messageIds: Set(messageIds.map(\.messageId)))
+        }
+        
+        self.inlineGroupCallsProcessingManager.process = { [weak context] messageIds in
+            context?.account.viewTracker.refreshInlineGroupCallsForMessageIds(messageIds: Set(messageIds.map(\.messageId)))
         }
         
         self.preloadPages = false
@@ -1682,7 +1688,7 @@ public final class ChatHistoryListNodeImpl: ListView, ChatHistoryNode, ChatHisto
         
         let translationState: Signal<ChatTranslationState?, NoError>
         if let peerId = chatLocation.peerId, peerId.namespace != Namespaces.Peer.SecretChat && peerId != context.account.peerId && subject != .scheduledMessages {
-            translationState = chatTranslationState(context: context, peerId: peerId)
+            translationState = chatTranslationState(context: context, peerId: peerId, threadId: self.chatLocation.threadId)
         } else {
             translationState = .single(nil)
         }
@@ -1981,12 +1987,14 @@ public final class ChatHistoryListNodeImpl: ListView, ChatHistoryNode, ChatHisto
                 }
                 
                 var audioTranscriptionProvidedByBoost = false
+                var autoTranslate = false
                 var isCopyProtectionEnabled: Bool = data.initialData?.peer?.isCopyProtectionEnabled ?? false
                 for entry in view.additionalData {
                     if case let .peer(_, maybePeer) = entry, let peer = maybePeer {
                         isCopyProtectionEnabled = peer.isCopyProtectionEnabled
-                        if let channel = peer as? TelegramChannel, let boostLevel = channel.approximateBoostLevel {
-                            if boostLevel >= premiumConfiguration.minGroupAudioTranscriptionLevel {
+                        if let channel = peer as? TelegramChannel {
+                            autoTranslate = channel.flags.contains(.autoTranslateEnabled)
+                            if let boostLevel = channel.approximateBoostLevel, boostLevel >= premiumConfiguration.minGroupAudioTranscriptionLevel {
                                 audioTranscriptionProvidedByBoost = true
                             }
                         }
@@ -1999,7 +2007,7 @@ public final class ChatHistoryListNodeImpl: ListView, ChatHistoryNode, ChatHisto
                 )
                 
                 var translateToLanguage: (fromLang: String, toLang: String)?
-                if let translationState, isPremium && translationState.isEnabled {
+                if let translationState, (isPremium || autoTranslate)  && translationState.isEnabled {
                     var languageCode = translationState.toLang ?? chatPresentationData.strings.baseLanguageCode
                     let rawSuffix = "-raw"
                     if languageCode.hasSuffix(rawSuffix) {

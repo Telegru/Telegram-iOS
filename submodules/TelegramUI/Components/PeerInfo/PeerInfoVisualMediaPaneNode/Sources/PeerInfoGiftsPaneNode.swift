@@ -33,6 +33,7 @@ public final class PeerInfoGiftsPaneNode: ASDisplayNode, PeerInfoPaneNode, UIScr
     private let peerId: PeerId
     private let profileGifts: ProfileGiftsContext
     private let canManage: Bool
+    private let canGift: Bool
     
     private var dataDisposable: Disposable?
     
@@ -54,7 +55,7 @@ public final class PeerInfoGiftsPaneNode: ASDisplayNode, PeerInfoPaneNode, UIScr
     private let emptyResultsTitle = ComponentView<Empty>()
     private let emptyResultsAction = ComponentView<Empty>()
     
-    private var currentParams: (size: CGSize, sideInset: CGFloat, bottomInset: CGFloat, visibleHeight: CGFloat, isScrollingLockedAtTop: Bool, expandProgress: CGFloat, presentationData: PresentationData)?
+    private var currentParams: (size: CGSize, sideInset: CGFloat, bottomInset: CGFloat, deviceMetrics: DeviceMetrics, visibleHeight: CGFloat, isScrollingLockedAtTop: Bool, expandProgress: CGFloat, presentationData: PresentationData)?
     
     private var theme: PresentationTheme?
     private let presentationDataPromise = Promise<PresentationData>()
@@ -101,12 +102,13 @@ public final class PeerInfoGiftsPaneNode: ASDisplayNode, PeerInfoPaneNode, UIScr
     
     private let maxPinnedCount: Int
     
-    public init(context: AccountContext, peerId: PeerId, chatControllerInteraction: ChatControllerInteraction, profileGifts: ProfileGiftsContext, canManage: Bool) {
+    public init(context: AccountContext, peerId: PeerId, chatControllerInteraction: ChatControllerInteraction, profileGifts: ProfileGiftsContext, canManage: Bool, canGift: Bool) {
         self.context = context
         self.peerId = peerId
         self.chatControllerInteraction = chatControllerInteraction
         self.profileGifts = profileGifts
         self.canManage = canManage
+        self.canGift = canGift
         
         self.backgroundNode = ASDisplayNode()
         self.scrollNode = ASScrollNode()
@@ -373,13 +375,65 @@ public final class PeerInfoGiftsPaneNode: ASDisplayNode, PeerInfoPaneNode, UIScr
         cancelContextGestures(view: scrollView)
     }
     
+    private func displayUnpinScreen(gift: ProfileGiftsContext.State.StarGift, completion: (() -> Void)? = nil) {
+        guard let pinnedGifts = self.profileGifts.currentState?.gifts.filter({ $0.pinnedToTop }), let presentationData = self.currentParams?.presentationData else {
+            return
+        }
+        let controller = GiftUnpinScreen(
+            context: self.context,
+            gift: gift,
+            pinnedGifts: pinnedGifts,
+            completion: { [weak self] unpinnedReference in
+                guard let self else {
+                    return
+                }
+                completion?()
+                
+                var replacingTitle = ""
+                for gift in pinnedGifts {
+                    if gift.reference == unpinnedReference, case let .unique(uniqueGift) = gift.gift {
+                        replacingTitle = "\(uniqueGift.title) #\(presentationStringsFormattedNumber(uniqueGift.number, presentationData.dateTimeFormat.groupingSeparator))"
+                    }
+                }
+                
+                var updatedPinnedGifts = self.pinnedReferences
+                if let index = updatedPinnedGifts.firstIndex(of: unpinnedReference), let reference = gift.reference {
+                    updatedPinnedGifts[index] = reference
+                }
+                self.profileGifts.updatePinnedToTopStarGifts(references: updatedPinnedGifts)
+                
+                var title = ""
+                if case let .unique(uniqueGift) = gift.gift {
+                    title = "\(uniqueGift.title) #\(presentationStringsFormattedNumber(uniqueGift.number, presentationData.dateTimeFormat.groupingSeparator))"
+                }
+                                                       
+                let _ = self.scrollToTop()
+                Queue.mainQueue().after(0.35) {
+                    let toastTitle = presentationData.strings.PeerInfo_Gifts_ToastPinned_TitleNew(title).string
+                    let toastText = presentationData.strings.PeerInfo_Gifts_ToastPinned_ReplacingText(replacingTitle).string
+                    self.parentController?.present(UndoOverlayController(presentationData: presentationData, content: .universal(animation: "anim_toastpin", scale: 0.06, colors: [:], title: toastTitle, text: toastText, customUndoText: nil, timeout: 5), elevatedLayout: true, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))
+                }
+            }
+        )
+        self.parentController?.push(controller)
+    }
+    
     private var notify = false
     func updateScrolling(interactive: Bool = false, transition: ComponentTransition) {
         if let starsProducts = self.starsProducts, let params = self.currentParams {
             let optionSpacing: CGFloat = 10.0
             let itemsSideInset = params.sideInset + 16.0
             
-            let defaultItemsInRow = params.size.width > params.size.height ? 5 : 3
+            let defaultItemsInRow: Int
+            if params.size.width > params.size.height || params.size.width > 480.0 {
+                if case .tablet = params.deviceMetrics.type {
+                    defaultItemsInRow = 4
+                } else {
+                    defaultItemsInRow = 5
+                }
+            } else {
+                defaultItemsInRow = 3
+            }
             let itemsInRow = max(1, min(starsProducts.count, defaultItemsInRow))
             let defaultOptionWidth = (params.size.width - itemsSideInset * 2.0 - optionSpacing * CGFloat(defaultItemsInRow - 1)) / CGFloat(defaultItemsInRow)
             let optionWidth = (params.size.width - itemsSideInset * 2.0 - optionSpacing * CGFloat(itemsInRow - 1)) / CGFloat(itemsInRow)
@@ -423,36 +477,51 @@ public final class PeerInfoGiftsPaneNode: ASDisplayNode, PeerInfoPaneNode, UIScr
                         itemTransition = .immediate
                     }
                     
-                    let ribbonText: String?
+                    var ribbonText: String?
                     var ribbonColor: GiftItemComponent.Ribbon.Color = .blue
+                    var ribbonFont: GiftItemComponent.Ribbon.Font = .generic
+                    var ribbonOutline: UIColor?
+                    
+                    let peer: GiftItemComponent.Peer?
+                    let subject: GiftItemComponent.Subject
+                    var resellPrice: Int64?
+                    
                     switch product.gift {
                     case let .generic(gift):
+                        subject = .starGift(gift: gift, price: "# \(gift.price)")
+                        peer = product.fromPeer.flatMap { .peer($0) } ?? .anonymous
+                        
                         if let availability = gift.availability {
                             ribbonText = params.presentationData.strings.PeerInfo_Gifts_OneOf(compactNumericCountString(Int(availability.total), decimalSeparator: params.presentationData.dateTimeFormat.decimalSeparator)).string
                         } else {
                             ribbonText = nil
                         }
                     case let .unique(gift):
-                        ribbonText = params.presentationData.strings.PeerInfo_Gifts_OneOf(compactNumericCountString(Int(gift.availability.issued), decimalSeparator: params.presentationData.dateTimeFormat.decimalSeparator)).string
-                        for attribute in gift.attributes {
-                            if case let .backdrop(_, innerColor, outerColor, _, _, _) = attribute {
-                                ribbonColor = .custom(outerColor, innerColor)
-                                break
+                        subject = .uniqueGift(gift: gift, price: nil)
+                        peer = nil
+                        resellPrice = gift.resellStars
+                        
+                        if let _ = resellPrice {
+                            ribbonText = params.presentationData.strings.PeerInfo_Gifts_Sale
+                            ribbonFont = .larger
+                            ribbonColor = .green
+                            ribbonOutline =  params.presentationData.theme.list.blocksBackgroundColor
+                        } else {
+                            if product.pinnedToTop {
+                                ribbonFont = .monospaced
+                                ribbonText = "#\(gift.number)"
+                            } else {
+                                ribbonText = params.presentationData.strings.PeerInfo_Gifts_OneOf(compactNumericCountString(Int(gift.availability.issued), decimalSeparator: params.presentationData.dateTimeFormat.decimalSeparator)).string
+                            }
+                            for attribute in gift.attributes {
+                                if case let .backdrop(_, _, innerColor, outerColor, _, _, _) = attribute {
+                                    ribbonColor = .custom(outerColor, innerColor)
+                                    break
+                                }
                             }
                         }
                     }
-                    
-                    let peer: GiftItemComponent.Peer?
-                    let subject: GiftItemComponent.Subject
-                    switch product.gift {
-                    case let .generic(gift):
-                        subject = .starGift(gift: gift, price: "⭐️ \(gift.price)")
-                        peer = product.fromPeer.flatMap { .peer($0) } ?? .anonymous
-                    case let .unique(gift):
-                        subject = .uniqueGift(gift: gift)
-                        peer = nil
-                    }
-                    
+                                      
                     let _ = visibleItem.update(
                         transition: itemTransition,
                         component: AnyComponent(
@@ -462,7 +531,8 @@ public final class PeerInfoGiftsPaneNode: ASDisplayNode, PeerInfoPaneNode, UIScr
                                 strings: params.presentationData.strings,
                                 peer: peer,
                                 subject: subject,
-                                ribbon: ribbonText.flatMap { GiftItemComponent.Ribbon(text: $0, color: ribbonColor) },
+                                ribbon: ribbonText.flatMap { GiftItemComponent.Ribbon(text: $0, font: ribbonFont, color: ribbonColor, outline: ribbonOutline) },
+                                resellPrice: resellPrice,
                                 isHidden: !product.savedToProfile,
                                 isPinned: product.pinnedToTop,
                                 isEditing: self.isReordering,
@@ -501,9 +571,15 @@ public final class PeerInfoGiftsPaneNode: ASDisplayNode, PeerInfoPaneNode, UIScr
                                             }
                                         }
                                     } else {
+                                        let allSubjects: [GiftViewScreen.Subject] = (self.starsProducts ?? []).map { .profileGift(self.peerId, $0) }
+                                        let index = self.starsProducts?.firstIndex(where: { $0 == product }) ?? 0
+                                        
+                                        var dismissImpl: (() -> Void)?
                                         let controller = GiftViewScreen(
                                             context: self.context,
                                             subject: .profileGift(self.peerId, product),
+                                            allSubjects: allSubjects,
+                                            index: index,
                                             updateSavedToProfile: { [weak self] reference, added in
                                                 guard let self else {
                                                     return
@@ -518,15 +594,56 @@ public final class PeerInfoGiftsPaneNode: ASDisplayNode, PeerInfoPaneNode, UIScr
                                             },
                                             transferGift: { [weak self] prepaid, peerId in
                                                 guard let self, let reference = product.reference else {
-                                                    return
+                                                    return .complete()
                                                 }
-                                                self.profileGifts.transferStarGift(prepaid: prepaid, reference: reference, peerId: peerId)
+                                                return self.profileGifts.transferStarGift(prepaid: prepaid, reference: reference, peerId: peerId)
                                             },
                                             upgradeGift: { [weak self] formId, keepOriginalInfo in
                                                 guard let self, let reference = product.reference else {
                                                     return .never()
                                                 }
                                                 return self.profileGifts.upgradeStarGift(formId: formId, reference: reference, keepOriginalInfo: keepOriginalInfo)
+                                            },
+                                            buyGift: { [weak self] slug, peerId in
+                                                guard let self else {
+                                                    return .never()
+                                                }
+                                                return self.profileGifts.buyStarGift(slug: slug, peerId: peerId)
+                                            },
+                                            updateResellStars: { [weak self] price in
+                                                guard let self, let reference = product.reference else {
+                                                    return .never()
+                                                }
+                                                return self.profileGifts.updateStarGiftResellPrice(reference: reference, price: price)
+                                            },
+                                            togglePinnedToTop: { [weak self] pinnedToTop in
+                                                guard let self else {
+                                                    return false
+                                                }
+                                                if let reference = product.reference {
+                                                    if pinnedToTop && self.pinnedReferences.count >= self.maxPinnedCount {
+                                                        self.displayUnpinScreen(gift: product, completion: {
+                                                            dismissImpl?()
+                                                        })
+                                                        return false
+                                                    }
+                                                    self.profileGifts.updateStarGiftPinnedToTop(reference: reference, pinnedToTop: pinnedToTop)
+                                                    
+                                                    var title = ""
+                                                    if case let .unique(uniqueGift) = product.gift {
+                                                        title = "\(uniqueGift.title) #\(presentationStringsFormattedNumber(uniqueGift.number, params.presentationData.dateTimeFormat.groupingSeparator))"
+                                                    }
+                                                    
+                                                    if pinnedToTop {
+                                                        let _ = self.scrollToTop()
+                                                        Queue.mainQueue().after(0.35) {
+                                                            let toastTitle = params.presentationData.strings.PeerInfo_Gifts_ToastPinned_TitleNew(title).string
+                                                            let toastText = params.presentationData.strings.PeerInfo_Gifts_ToastPinned_Text
+                                                            self.parentController?.present(UndoOverlayController(presentationData: params.presentationData, content: .universal(animation: "anim_toastpin", scale: 0.06, colors: [:], title: toastTitle, text: toastText, customUndoText: nil, timeout: 5), elevatedLayout: true, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))
+                                                        }
+                                                    }
+                                                }
+                                                return true
                                             },
                                             shareStory: { [weak self] uniqueGift in
                                                 guard let self, let parentController = self.parentController else {
@@ -538,6 +655,9 @@ public final class PeerInfoGiftsPaneNode: ASDisplayNode, PeerInfoPaneNode, UIScr
                                                 }
                                             }
                                         )
+                                        dismissImpl = { [weak controller] in
+                                            controller?.dismissAnimated()
+                                        }
                                         self.parentController?.push(controller)
                                     }
                                 },
@@ -613,7 +733,7 @@ public final class PeerInfoGiftsPaneNode: ASDisplayNode, PeerInfoPaneNode, UIScr
             }
             
             var bottomScrollInset: CGFloat = 0.0
-            var contentHeight = ceil(CGFloat(starsProducts.count) / 3.0) * (starsOptionSize.height + optionSpacing) - optionSpacing + topInset + 16.0
+            var contentHeight = ceil(CGFloat(starsProducts.count) / CGFloat(defaultItemsInRow)) * (starsOptionSize.height + optionSpacing) - optionSpacing + topInset + 16.0
             
             let size = params.size
             let sideInset = params.sideInset
@@ -627,7 +747,10 @@ public final class PeerInfoGiftsPaneNode: ASDisplayNode, PeerInfoPaneNode, UIScr
             let panelSeparator: ASDisplayNode
             let panelButton: SolidRoundedButtonNode
             
-            let panelAlpha = params.expandProgress
+            var panelAlpha = params.expandProgress
+            if !self.canGift {
+                panelAlpha = 0.0
+            }
             
             if let current = self.panelBackground {
                 panelBackground = current
@@ -677,13 +800,14 @@ public final class PeerInfoGiftsPaneNode: ASDisplayNode, PeerInfoPaneNode, UIScr
             
             let buttonSideInset = sideInset + 16.0
             let buttonSize = CGSize(width: size.width - buttonSideInset * 2.0, height: 50.0)
-            var bottomPanelHeight = max(8.0, bottomInset) + buttonSize.height + 8.0
+            let effectiveBottomInset = max(8.0, bottomInset)
+            var bottomPanelHeight = effectiveBottomInset + buttonSize.height + 8.0
             if params.visibleHeight < 110.0 {
                 scrollOffset -= bottomPanelHeight
             }
             
             let panelTransition = ComponentTransition.immediate
-            panelTransition.setFrame(view: panelButton.view, frame: CGRect(origin: CGPoint(x: buttonSideInset, y: size.height - bottomInset - buttonSize.height - scrollOffset), size: buttonSize))
+            panelTransition.setFrame(view: panelButton.view, frame: CGRect(origin: CGPoint(x: buttonSideInset, y: size.height - effectiveBottomInset - buttonSize.height - scrollOffset), size: buttonSize))
             panelTransition.setAlpha(view: panelButton.view, alpha: panelAlpha)
             let _ = panelButton.updateLayout(width: buttonSize.width, transition: .immediate)
             
@@ -754,7 +878,7 @@ public final class PeerInfoGiftsPaneNode: ASDisplayNode, PeerInfoPaneNode, UIScr
                     if panelCheckView.superview == nil {
                         self.view.addSubview(panelCheckView)
                     }
-                    panelCheckView.frame = CGRect(origin: CGPoint(x: floor((size.width - panelCheckSize.width) / 2.0), y: size.height - bottomInset - panelCheckSize.height - 11.0 - scrollOffset), size: panelCheckSize)
+                    panelCheckView.frame = CGRect(origin: CGPoint(x: floor((size.width - panelCheckSize.width) / 2.0), y: size.height - effectiveBottomInset - panelCheckSize.height - 11.0 - scrollOffset), size: panelCheckSize)
                     panelTransition.setAlpha(view: panelCheckView, alpha: panelAlpha)
                 }
                 panelButton.isHidden = true
@@ -974,31 +1098,36 @@ public final class PeerInfoGiftsPaneNode: ASDisplayNode, PeerInfoPaneNode, UIScr
                             return
                         }
                         let pinnedToTop = !gift.pinnedToTop
-                        
-                        if pinnedToTop && self.pinnedReferences.count >= self.maxPinnedCount {
-                            self.parentController?.present(UndoOverlayController(presentationData: presentationData, content: .info(title: nil, text: presentationData.strings.PeerInfo_Gifts_ToastPinLimit_Text(Int32(self.maxPinnedCount)), timeout: nil, customUndoText: nil), elevatedLayout: true, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))
+                        guard let reference = gift.reference else {
                             return
                         }
                         
-                        if let reference = gift.reference {
-                            self.profileGifts.updateStarGiftPinnedToTop(reference: reference, pinnedToTop: pinnedToTop)
+                        if pinnedToTop && self.pinnedReferences.count >= self.maxPinnedCount {
+                            self.displayUnpinScreen(gift: gift)
+                            return
                         }
+                        
+                        self.profileGifts.updateStarGiftPinnedToTop(reference: reference, pinnedToTop: pinnedToTop)
                         
                         let toastTitle: String?
                         let toastText: String
                         if !pinnedToTop {
                             toastTitle = nil
-                            toastText = presentationData.strings.PeerInfo_Gifts_ToastUnpinned_Text
+                            toastText = strings.PeerInfo_Gifts_ToastUnpinned_Text
                         } else {
-                            toastTitle = presentationData.strings.PeerInfo_Gifts_ToastPinned_Title
-                            toastText = presentationData.strings.PeerInfo_Gifts_ToastPinned_Text
+                            var title = ""
+                            if case let .unique(uniqueGift) = gift.gift {
+                                title = "\(uniqueGift.title) #\(presentationStringsFormattedNumber(uniqueGift.number, presentationData.dateTimeFormat.groupingSeparator))"
+                            }
+                            toastTitle = strings.PeerInfo_Gifts_ToastPinned_TitleNew(title).string
+                            toastText = strings.PeerInfo_Gifts_ToastPinned_Text
                         }
                         self.parentController?.present(UndoOverlayController(presentationData: presentationData, content: .universal(animation: !pinnedToTop ? "anim_toastunpin" : "anim_toastpin", scale: 0.06, colors: [:], title: toastTitle, text: toastText, customUndoText: nil, timeout: 5), elevatedLayout: true, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))
                     })
                 })))
             }
             
-            if canReorder {
+            if case .unique = gift.gift, canManage && canReorder {
                 items.append(.action(ContextMenuActionItem(text: strings.PeerInfo_Gifts_Context_Reorder, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/ReorderItems"), color: theme.contextMenu.primaryColor) }, action: { [weak self] c, f in
                     c?.dismiss(completion: { [weak self] in
                         guard let self else {
@@ -1015,7 +1144,26 @@ public final class PeerInfoGiftsPaneNode: ASDisplayNode, PeerInfoPaneNode, UIScr
                         guard let self else {
                             return
                         }
-                        let _ = self.context.engine.accountData.setStarGiftStatus(starGift: uniqueGift, expirationDate: nil).startStandalone()
+                        if self.context.isPremium {
+                            let _ = self.context.engine.accountData.setStarGiftStatus(starGift: uniqueGift, expirationDate: nil).startStandalone()
+                        } else {
+                            let text = strings.Gift_View_TooltipPremiumWearing
+                            let tooltipController = UndoOverlayController(
+                                presentationData: presentationData,
+                                content: .premiumPaywall(title: nil, text: text, customUndoText: nil, timeout: nil, linkAction: nil),
+                                position: .bottom,
+                                animateInAsReplacement: false,
+                                appearance: UndoOverlayController.Appearance(sideInset: 16.0, bottomInset: 62.0),
+                                action: { [weak self] action in
+                                    if let self, case .info = action {
+                                        let premiumController = self.context.sharedContext.makePremiumIntroController(context: self.context, source: .messageEffects, forceDark: false, dismissed: nil)
+                                        self.parentController?.push(premiumController)
+                                    }
+                                    return false
+                                }
+                            )
+                            self.parentController?.present(tooltipController, in: .current)
+                        }
                     })
                 })))
             }
@@ -1180,14 +1328,14 @@ public final class PeerInfoGiftsPaneNode: ASDisplayNode, PeerInfoPaneNode, UIScr
                             let transferStars = gift.transferStars ?? 0
                             let controller = context.sharedContext.makePremiumGiftController(context: context, source: .starGiftTransfer(birthdays, reference, uniqueGift, transferStars, gift.canExportDate, showSelf), completion: { [weak self] peerIds in
                                 guard let self, let peerId = peerIds.first else {
-                                    return
+                                    return .complete()
                                 }
-                                self.profileGifts.transferStarGift(prepaid: transferStars == 0, reference: reference, peerId: peerId)
-                                Queue.mainQueue().after(1.0, {
+                                Queue.mainQueue().after(1.5, {
                                     if transferStars > 0 {
                                         context.starsContext?.load(force: true)
                                     }
                                 })
+                                return self.profileGifts.transferStarGift(prepaid: transferStars == 0, reference: reference, peerId: peerId)
                             })
                             self.parentController?.push(controller)
                         })
@@ -1210,7 +1358,7 @@ public final class PeerInfoGiftsPaneNode: ASDisplayNode, PeerInfoPaneNode, UIScr
     }
     
     public func update(size: CGSize, topInset: CGFloat, sideInset: CGFloat, bottomInset: CGFloat, deviceMetrics: DeviceMetrics, visibleHeight: CGFloat, isScrollingLockedAtTop: Bool, expandProgress: CGFloat, navigationHeight: CGFloat, presentationData: PresentationData, synchronous: Bool, transition: ContainedViewLayoutTransition) {
-        self.currentParams = (size, sideInset, bottomInset, visibleHeight, isScrollingLockedAtTop, expandProgress, presentationData)
+        self.currentParams = (size, sideInset, bottomInset, deviceMetrics, visibleHeight, isScrollingLockedAtTop, expandProgress, presentationData)
         self.presentationDataPromise.set(.single(presentationData))
         
         self.backgroundNode.backgroundColor = presentationData.theme.list.blocksBackgroundColor
@@ -1335,6 +1483,8 @@ private extension StarGiftReference {
             return "m_\(messageId.id)"
         case let .peer(peerId, id):
             return "p_\(peerId.toInt64())_\(id)"
+        case let .slug(slug):
+            return "s_\(slug)"
         }
     }
 }

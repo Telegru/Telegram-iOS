@@ -108,10 +108,10 @@ final class ContactsControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
             }
         }
         
-        var contextAction: ((EnginePeer, ASDisplayNode, ContextGesture?, CGPoint?, Bool) -> Void)?
+        var contextAction: ((EnginePeer, ASDisplayNode, ContextGesture?, CGPoint?, Bool, Bool) -> Void)?
         
-        self.contactListNode = ContactListNode(context: context, presentation: presentation, onlyWriteable: false, isGroupInvitation: false, displaySortOptions: true, contextAction: { peer, node, gesture, location, isStories in
-            contextAction?(peer, node, gesture, location, isStories)
+        self.contactListNode = ContactListNode(context: context, presentation: presentation, onlyWriteable: false, isGroupInvitation: false, displaySortOptions: true, contextAction: { peer, node, gesture, location, isStories, blurred in
+            contextAction?(peer, node, gesture, location, isStories, blurred)
         })
         
         super.init()
@@ -148,8 +148,8 @@ final class ContactsControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
             }
         }
         
-        contextAction = { [weak self] peer, node, gesture, location, isStories in
-            self?.contextAction(peer: peer, node: node, gesture: gesture, location: location, isStories: isStories)
+        contextAction = { [weak self] peer, node, gesture, location, isStories, blurred in
+            self?.contextAction(peer: peer, node: node, gesture: gesture, location: location, isStories: isStories, blurred: blurred)
         }
         
         self.contactListNode.contentOffsetChanged = { [weak self] offset in
@@ -445,12 +445,12 @@ final class ContactsControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         }
     }
     
-    private func contextAction(peer: EnginePeer, node: ASDisplayNode?, gesture: ContextGesture?, location: CGPoint?, isStories: Bool) {
+    private func contextAction(peer: EnginePeer, node: ASDisplayNode?, gesture: ContextGesture?, location: CGPoint?, isStories: Bool, blurred: Bool) {
         guard let contactsController = self.controller else {
             return
         }
         
-        let items = contactContextMenuItems(context: self.context, peerId: peer.id, contactsController: contactsController, isStories: isStories) |> map { ContextController.Items(content: .list($0)) }
+        let items = contactContextMenuItems(context: self.context, peerId: peer.id, contactsController: contactsController, isStories: isStories, blurred: blurred) |> map { ContextController.Items(content: .list($0)) }
         
         if isStories, let node = node?.subnodes?.first(where: { $0 is ContextExtractedContentContainingNode }) as? ContextExtractedContentContainingNode {
             let controller = ContextController(presentationData: self.presentationData, source: .extracted(ContactContextExtractedContentSource(sourceNode: node, shouldBeDismissed: .single(false))), items: items, recognizer: nil, gesture: gesture)
@@ -475,7 +475,7 @@ final class ContactsControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
             if let requestAddContact = self?.requestAddContact {
                 requestAddContact(phoneNumber)
             }
-        }, openPeer: { [weak self] peer in
+        }, openPeer: { [weak self] peer, _ in
             if let requestOpenPeerFromSearch = self?.requestOpenPeerFromSearch {
                 requestOpenPeerFromSearch(peer)
             }
@@ -483,8 +483,8 @@ final class ContactsControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
             if let requestOpenDisabledPeerFromSearch = self?.requestOpenDisabledPeerFromSearch {
                 requestOpenDisabledPeerFromSearch(peer, reason)
             }
-        }, contextAction: { [weak self] peer, node, gesture, location in
-            self?.contextAction(peer: peer, node: node, gesture: gesture, location: location, isStories: false)
+        }, contextAction: { [weak self] peer, node, gesture, location, blurred in
+            self?.contextAction(peer: peer, node: node, gesture: gesture, location: location, isStories: false, blurred: blurred)
         }), cancel: { [weak self] in
             if let requestDeactivateSearch = self?.requestDeactivateSearch {
                 requestDeactivateSearch()

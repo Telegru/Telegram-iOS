@@ -445,9 +445,12 @@ private func _internal_requestStarsSubscriptions(account: Account, peerId: Engin
             flags |= (1 << 0)
         }
         return account.network.request(Api.functions.payments.getStarsSubscriptions(flags: flags, peer: inputPeer, offset: offset))
-        |> retryRequest
+        |> retryRequestIfNotFrozen
         |> castError(RequestStarsSubscriptionsError.self)
         |> mapToSignal { result -> Signal<InternalStarsStatus, RequestStarsSubscriptionsError> in
+            guard let result else {
+                return .single(InternalStarsStatus(balance: .zero, subscriptionsMissingBalance: nil, subscriptions: [], nextSubscriptionsOffset: nil, transactions: [], nextTransactionsOffset: nil))
+            }
             return account.postbox.transaction { transaction -> InternalStarsStatus in
                 switch result {
                 case let .starsStatus(_, balance, subscriptions, subscriptionsNextOffset, subscriptionsMissingBalance, _, _, chats, users):
@@ -568,6 +571,21 @@ private final class StarsContextImpl {
         self._state = state
         self._statePromise.set(.single(state))
     }
+    
+    var onUpdate: Signal<Void, NoError> {
+        return self._statePromise.get()
+        |> take(until: { value in
+            if let value {
+                if !value.flags.contains(.isPendingBalance) {
+                    return SignalTakeAction(passthrough: true, complete: true)
+                }
+            }
+            return SignalTakeAction(passthrough: false, complete: false)
+        })
+        |> map { _ in
+            return Void()
+        }
+    }
 }
 
 private extension StarsContext.State.Transaction {
@@ -632,6 +650,12 @@ private extension StarsContext.State.Transaction {
             if (apiFlags & (1 << 19)) != 0 {
                 flags.insert(.isPaidMessage)
             }
+            if (apiFlags & (1 << 21)) != 0 {
+                flags.insert(.isBusinessTransfer)
+            }
+            if (apiFlags & (1 << 22)) != 0 {
+                flags.insert(.isStarGiftResale)
+            }
             
             let media = extendedMedia.flatMap({ $0.compactMap { textMediaAndExpirationTimerFromApiMedia($0, PeerId(0)).media } }) ?? []
             let _ = subscriptionPeriod
@@ -684,6 +708,8 @@ public final class StarsContext {
                 public static let isReaction = Flags(rawValue: 1 << 5)
                 public static let isStarGiftUpgrade = Flags(rawValue: 1 << 6)
                 public static let isPaidMessage = Flags(rawValue: 1 << 7)
+                public static let isBusinessTransfer = Flags(rawValue: 1 << 8)
+                public static let isStarGiftResale = Flags(rawValue: 1 << 9)
             }
             
             public enum Peer: Equatable {
@@ -1011,6 +1037,17 @@ public final class StarsContext {
         }
     }
     
+    public var onUpdate: Signal<Void, NoError> {
+        return Signal { subscriber in
+            let disposable = MetaDisposable()
+            self.impl.with { impl in
+                disposable.set(impl.onUpdate.start(next: { value in
+                    subscriber.putNext(value)
+                }))
+            }
+            return disposable
+        }
+    }
     
     init(account: Account) {
         self.impl = QueueLocalObject(queue: Queue.mainQueue(), generate: {
@@ -1491,10 +1528,10 @@ func _internal_sendStarsPaymentForm(account: Account, formId: Int64, source: Bot
                                                     receiptMessageId = id
                                                 }
                                             }
-                                        case .giftCode, .stars, .starsGift, .starsChatSubscription, .starGift, .starGiftUpgrade, .starGiftTransfer, .premiumGift:
+                                        case .giftCode, .stars, .starsGift, .starsChatSubscription, .starGift, .starGiftUpgrade, .starGiftTransfer, .premiumGift, .starGiftResale:
                                             receiptMessageId = nil
                                         }
-                                    } else if case let .starGiftUnique(gift, _, _, savedToProfile, canExportDate, transferStars, _, peerId, _, savedId) = action.action, case let .Id(messageId) = message.id {
+                                    } else if case let .starGiftUnique(gift, _, _, savedToProfile, canExportDate, transferStars, _, peerId, _, savedId, _, canTransferDate, canResaleDate) = action.action, case let .Id(messageId) = message.id {
                                         let reference: StarGiftReference
                                         if let peerId, let savedId {
                                             reference = .peer(peerId: peerId, id: savedId)
@@ -1515,7 +1552,9 @@ func _internal_sendStarsPaymentForm(account: Account, formId: Int64, source: Bot
                                             canUpgrade: false,
                                             canExportDate: canExportDate,
                                             upgradeStars: nil,
-                                            transferStars: transferStars
+                                            transferStars: transferStars,
+                                            canTransferDate: canTransferDate,
+                                            canResaleDate: canResaleDate
                                         )
                                     }
                                 }

@@ -319,6 +319,27 @@ final class AuthorizedApplicationContext {
                     }
                 }
             }
+            |> mapToSignal { filteredMessageList -> Signal<[([Message], PeerGroupId, Bool, MessageHistoryThreadData?)], NoError> in
+                guard let childModeManager = context.childModeManager else {
+                    return .single(filteredMessageList)
+                }
+                
+                let signals = filteredMessageList.map { item -> Signal<([Message], PeerGroupId, Bool, MessageHistoryThreadData?)?, NoError> in
+                    guard let message = item.0.first else {
+                        return .single(nil)
+                    }
+                    
+                    return childModeManager.isPeerAllowed(message.id.peerId)
+                    |> map { isAllowed in
+                        return isAllowed ? item : nil
+                    }
+                }
+                
+                return combineLatest(signals)
+                |> map { results in
+                    return results.compactMap { $0 }
+                }
+            }
         }
         |> deliverOn(Queue.mainQueue())).start(next: { [weak self] messageList in
             if messageList.isEmpty {
@@ -402,6 +423,8 @@ final class AuthorizedApplicationContext {
                             for media in firstMessage.media {
                                 if let action = media as? TelegramMediaAction {
                                     if case .messageAutoremoveTimeoutUpdated = action.action {
+                                        return
+                                    } else if case .conferenceCall = action.action {
                                         return
                                     }
                                 }
@@ -801,6 +824,9 @@ final class AuthorizedApplicationContext {
 //            }
 //        })
         
+        let isChildModeActive = (context.childModeManager?.isChildModeActive ?? .single(false))
+            |> distinctUntilChanged
+        
         let appTabsSignal = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
         |> map { sharedData -> [DAppTab] in
             var value = DTabBarSettings.default
@@ -810,8 +836,11 @@ final class AuthorizedApplicationContext {
             return value.activeTabs
         }
         |> distinctUntilChanged
-        self.appTabsDisposable = (appTabsSignal |> deliverOnMainQueue).start(next: { [weak self] value in
+        
+        
+        self.appTabsDisposable = (combineLatest(isChildModeActive, appTabsSignal) |> deliverOnMainQueue).start(next: { [weak self] isChildModeActive, value in
             guard let self else { return }
+            let value = isChildModeActive ? DTabBarSettings.childMode.activeTabs : value
             if self.appTabs != value {
                 self.appTabs = value
                 self.rootController.updateRootControllers(tabs: value)
@@ -916,7 +945,7 @@ final class AuthorizedApplicationContext {
         }))
     }
     
-    func openChatWithPeerId(peerId: PeerId, threadId: Int64?, messageId: MessageId? = nil, activateInput: Bool = false, storyId: StoryId?, openAppIfAny: Bool = false) {
+    func openChatWithPeerId(peerId: PeerId, threadId: Int64?, messageId: MessageId? = nil, activateInput: Bool = false, storyId: StoryId?, openAppIfAny: Bool = false, alwaysKeepMessageId: Bool = false) {
         if let storyId {
             var controllers = self.rootController.viewControllers
             controllers = controllers.filter { c in
@@ -970,7 +999,7 @@ final class AuthorizedApplicationContext {
                     if openAppIfAny, case let .user(user) = peer, let botInfo = user.botInfo, botInfo.flags.contains(.hasWebApp), let parentController = self.rootController.viewControllers.last as? ViewController {
                         self.context.sharedContext.openWebApp(context: self.context, parentController: parentController, updatedPresentationData: nil, botPeer: peer, chatPeer: nil, threadId: nil, buttonText: "", url: "", simple: true, source: .generic, skipTermsOfService: true, payload: nil)
                     } else {
-                        self.context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: self.rootController, context: self.context, chatLocation: chatLocation, subject: isOutgoingMessage ? messageId.flatMap { .message(id: .id($0), highlight: ChatControllerSubject.MessageHighlight(quote: nil), timecode: nil, setupReply: false) } : nil, activateInput: activateInput ? .text : nil))
+                        self.context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: self.rootController, context: self.context, chatLocation: chatLocation, subject: alwaysKeepMessageId || isOutgoingMessage ? messageId.flatMap { .message(id: .id($0), highlight: ChatControllerSubject.MessageHighlight(quote: nil), timecode: nil, setupReply: false) } : nil, activateInput: activateInput ? .text : nil))
                     }
                 })
             }

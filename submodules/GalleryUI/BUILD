@@ -63,6 +63,8 @@ swift_library(
         "//submodules/Components/BalancedTextComponent",
         "//submodules/Components/ComponentDisplayAdapters",
         "//submodules/ComponentFlow",
+        
+        "//submodules/TelegramUI/Components/ContentHiddenOverlayNode",
     ],
     visibility = [
         "//visibility:public",

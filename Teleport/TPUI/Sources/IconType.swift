@@ -46,6 +46,7 @@ public enum IconType: String, CaseIterable {
     case contextMenuEye
     case contextMenuLeave
     case contextMenuExclude
+    case contextMenuReplyPrivately
     case chatAdd
     case chatDelete
     case wallGear
@@ -53,6 +54,8 @@ public enum IconType: String, CaseIterable {
     case contextMenuReport
     case contextMenuReply
     case contextMenuDownload
+    case contextMenuForwardWithoutName
+    case contextMenuSaved
 }
 
 public enum IconRef: Equatable {

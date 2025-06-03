@@ -733,6 +733,18 @@ public struct PresentationResourcesChat {
         })
     }
     
+    public static func badgeBackgroundLocked(_ theme: PresentationTheme, diameter: CGFloat) -> UIImage? {
+        return theme.image(PresentationResourceParameterKey.chatListBadgeBackgroundPinned(diameter), { theme in
+            return generateTintedImage(image: UIImage(bundleImageName: "TPChat List/Locked"), color: theme.chatList.pinnedBadgeColor)
+        })
+    }
+    
+    public static func searchListLockedImage(_ theme: PresentationTheme, diameter: CGFloat) -> UIImage? {
+        return theme.image(PresentationResourceParameterKey.chatListBadgeBackgroundPinned(diameter), { theme in
+            return generateTintedImage(image: UIImage(bundleImageName: "Search List/Locked"), color: theme.chatList.pinnedBadgeColor)
+        })
+    }
+    
     public static func chatInfoCallButtonImage(_ theme: PresentationTheme) -> UIImage? {
         return theme.image(PresentationResourceKey.chatInfoCallButtonImage.rawValue, { theme in
             return generateTintedImage(image: UIImage(bundleImageName: "Chat/Info/CallButton"), color: theme.list.itemAccentColor)

@@ -212,7 +212,11 @@ final class GreetingMessageListItemComponent: Component {
                     },
                     openPhotoSetup: {
                     },
-                    openAdInfo: { _ in
+                    openAdInfo: { _, _ in
+                    },
+                    openAccountFreezeInfo: {
+                    },
+                    openUrl: { _ in
                     }
                 )
                 self.chatListNodeInteraction = chatListNodeInteraction
@@ -263,7 +267,9 @@ final class GreetingMessageListItemComponent: Component {
                 enableContextActions: false,
                 hiddenOffset: false,
                 interaction: chatListNodeInteraction,
-                chatListItemTextLineCount: 2
+                chatListItemTextLineCount: 2,
+                showSeparator: true,
+                blurred: false
             )
             var itemNode: ListViewItemNode?
             let params = ListViewItemLayoutParams(width: availableSize.width, leftInset: 0.0, rightInset: 0.0, availableHeight: 1000.0)

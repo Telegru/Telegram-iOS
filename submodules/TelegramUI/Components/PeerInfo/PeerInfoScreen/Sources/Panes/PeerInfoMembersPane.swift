@@ -38,14 +38,23 @@ private enum PeerMembersListEntryStableId: Hashable {
 
 private enum PeerMembersListEntry: Comparable, Identifiable {
     case addMember(PresentationTheme, String)
-    case member(theme: PresentationTheme, index: Int, member: PeerInfoMember)
+    case member(theme: PresentationTheme, index: Int, member: PeerInfoMember, blurred: Bool)
         
     var stableId: PeerMembersListEntryStableId {
         switch self {
             case .addMember:
                 return .addMember
-            case let .member(_, _, member):
+            case let .member(_, _, member, _):
                 return .peer(member.id)
+        }
+    }
+    
+    var blurred: Bool {
+        switch self {
+            case .addMember:
+                return false
+            case let .member(_, _, _, blurred):
+                return blurred
         }
     }
     
@@ -57,8 +66,8 @@ private enum PeerMembersListEntry: Comparable, Identifiable {
                 } else {
                     return false
                 }
-            case let .member(lhsTheme, lhsIndex, lhsMember):
-                if case let .member(rhsTheme, rhsIndex, rhsMember) = rhs, lhsTheme === rhsTheme, lhsIndex == rhsIndex, lhsMember == rhsMember {
+            case let .member(lhsTheme, lhsIndex, lhsMember, lhsBlurred):
+            if case let .member(rhsTheme, rhsIndex, rhsMember, rhsBlurred) = rhs, lhsTheme === rhsTheme, lhsIndex == rhsIndex, lhsMember == rhsMember, lhsBlurred == rhsBlurred {
                     return true
                 } else {
                     return false
@@ -75,23 +84,23 @@ private enum PeerMembersListEntry: Comparable, Identifiable {
                     case .member:
                         return true
                 }
-            case let .member(_, lhsIndex, _):
+            case let .member(_, lhsIndex, _, _):
                 switch rhs {
                     case .addMember:
                         return false
-                    case let .member(_, rhsIndex, _):
+                    case let .member(_, rhsIndex, _, _):
                         return lhsIndex < rhsIndex
                 }
         }
     }
     
-    func item(context: AccountContext, presentationData: PresentationData, enclosingPeer: Peer, addMemberAction: @escaping () -> Void, action: @escaping (PeerInfoMember, PeerMembersListAction) -> Void, contextAction: ((PeerInfoMember, ASDisplayNode, ContextGesture?) -> Void)?) -> ListViewItem {
+    func item(context: AccountContext, presentationData: PresentationData, enclosingPeer: Peer, addMemberAction: @escaping () -> Void, action: @escaping (PeerInfoMember, PeerMembersListAction) -> Void, contextAction: ((PeerInfoMember, ASDisplayNode, ContextGesture?) -> Void)?, blurred: Bool) -> ListViewItem {
         switch self {
             case let .addMember(_, text):
                 return ItemListPeerActionItem(presentationData: ItemListPresentationData(presentationData), icon: PresentationResourcesItemList.addPersonIcon(presentationData.theme), title: text, alwaysPlain: true, sectionId: 0, height: .compactPeerList, color: .accent, editing: false, action: {
                     addMemberAction()
                 })
-            case let .member(_, _, member):
+            case let .member(_, _, member, _):
                 let label: String?
                 if let rank = member.rank {
                     label = rank
@@ -153,6 +162,7 @@ private enum PeerMembersListEntry: Comparable, Identifiable {
                     actionIcon: .none,
                     index: nil,
                     header: nil,
+                    blurred: blurred,
                     action: member.peer.id == context.account.peerId ? nil : { _ in
                         action(member, .open)
                     },
@@ -220,8 +230,8 @@ private func preparedTransition(from fromEntries: [PeerMembersListEntry], to toE
     let (deleteIndices, indicesAndItems, updateIndices) = mergeListsStableWithUpdates(leftList: fromEntries, rightList: toEntries)
     
     let deletions = deleteIndices.map { ListViewDeleteItem(index: $0, directionHint: nil) }
-    let insertions = indicesAndItems.map { ListViewInsertItem(index: $0.0, previousIndex: $0.2, item: $0.1.item(context: context, presentationData: presentationData, enclosingPeer: enclosingPeer, addMemberAction: addMemberAction, action: action, contextAction: contextAction), directionHint: nil) }
-    let updates = updateIndices.map { ListViewUpdateItem(index: $0.0, previousIndex: $0.2, item: $0.1.item(context: context, presentationData: presentationData, enclosingPeer: enclosingPeer, addMemberAction: addMemberAction, action: action, contextAction: contextAction), directionHint: nil) }
+    let insertions = indicesAndItems.map { ListViewInsertItem(index: $0.0, previousIndex: $0.2, item: $0.1.item(context: context, presentationData: presentationData, enclosingPeer: enclosingPeer, addMemberAction: addMemberAction, action: action, contextAction: contextAction, blurred: $0.1.blurred), directionHint: nil) }
+    let updates = updateIndices.map { ListViewUpdateItem(index: $0.0, previousIndex: $0.2, item: $0.1.item(context: context, presentationData: presentationData, enclosingPeer: enclosingPeer, addMemberAction: addMemberAction, action: action, contextAction: contextAction, blurred: $0.1.blurred), directionHint: nil) }
     
     return PeerMembersListTransaction(deletions: deletions, insertions: insertions, updates: updates, animated: toEntries.count < fromEntries.count)
 }
@@ -240,7 +250,8 @@ final class PeerInfoMembersPaneNode: ASDisplayNode, PeerInfoPaneNode {
     private var currentState: PeerInfoMembersState?
     private var canLoadMore: Bool = false
     private var enqueuedTransactions: [PeerMembersListTransaction] = []
-    
+    private var whitelist: [EnginePeer.Id]? = nil
+
     private var currentParams: (size: CGSize, isScrollingLockedAtTop: Bool)?
     private let presentationDataPromise = Promise<PresentationData>()
     
@@ -278,19 +289,23 @@ final class PeerInfoMembersPaneNode: ASDisplayNode, PeerInfoPaneNode {
         self.listNode.preloadPages = true
         self.addSubnode(self.listNode)
         
+        let whitelist: Signal<(Bool, [EnginePeer.Id]), NoError> = (context.childModeManager?.whitelist() ?? .single((false, [])))
+
         self.disposable = (combineLatest(queue: .mainQueue(),
             membersContext.state,
             self.presentationDataPromise.get(),
-            context.engine.data.subscribe(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
+            context.engine.data.subscribe(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId)),
+            whitelist
         )
-        |> deliverOnMainQueue).startStrict(next: { [weak self] state, presentationData, enclosingPeer in
+        |> deliverOnMainQueue).startStrict(next: { [weak self] state, presentationData, enclosingPeer, whitelist in
             guard let strongSelf = self, let enclosingPeer = enclosingPeer else {
                 return
             }
             
             strongSelf.enclosingPeer = enclosingPeer._asPeer()
             strongSelf.currentState = state
-            strongSelf.updateState(enclosingPeer: enclosingPeer._asPeer(), state: state, presentationData: presentationData)
+            strongSelf.whitelist = whitelist.0 ? whitelist.1 : nil
+            strongSelf.updateState(enclosingPeer: enclosingPeer._asPeer(), state: state, presentationData: presentationData, whitelist: strongSelf.whitelist)
         })
         
         self.listNode.visibleBottomContentOffsetChanged = { [weak self] offset in
@@ -341,17 +356,21 @@ final class PeerInfoMembersPaneNode: ASDisplayNode, PeerInfoPaneNode {
         self.listNode.scrollEnabled = !isScrollingLockedAtTop
         
         if isFirstLayout, let enclosingPeer = self.enclosingPeer, let state = self.currentState {
-            self.updateState(enclosingPeer: enclosingPeer, state: state, presentationData: presentationData)
+            self.updateState(enclosingPeer: enclosingPeer, state: state, presentationData: presentationData, whitelist: whitelist)
         }
     }
     
-    private func updateState(enclosingPeer: Peer, state: PeerInfoMembersState, presentationData: PresentationData) {
+    private func updateState(enclosingPeer: Peer, state: PeerInfoMembersState, presentationData: PresentationData, whitelist: [EnginePeer.Id]?) {
         var entries: [PeerMembersListEntry] = []
         if state.canAddMembers {
             entries.append(.addMember(presentationData.theme, presentationData.strings.GroupInfo_AddParticipant))
         }
         for member in state.members {
-            entries.append(.member(theme: presentationData.theme, index: entries.count, member: member))
+            var blurred = whitelist != nil
+            if let whitelist {
+                blurred = !whitelist.contains(member.id)
+            }
+            entries.append(.member(theme: presentationData.theme, index: entries.count, member: member, blurred: blurred))
         }
         
         let transaction = preparedTransition(from: self.currentEntries, to: entries, context: self.context, presentationData: presentationData, enclosingPeer: enclosingPeer, addMemberAction: { [weak self] in

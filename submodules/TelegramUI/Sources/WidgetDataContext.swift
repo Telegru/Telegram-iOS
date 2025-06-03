@@ -12,6 +12,7 @@ import AccountContext
 import AppLock
 
 import GeneratedSources
+import TPStrings
 
 @available(iOSApplicationExtension 14.0, iOS 14.0, *)
 private extension SelectFriendsIntent {
@@ -310,7 +311,8 @@ final class WidgetDataContext {
             
             return NotificationsPresentationData(
                 applicationLockedMessageString: presentationData.strings.PUSH_LOCKED_MESSAGE("").string,
-                incomingCallString: incomingCallString
+                incomingCallString: incomingCallString,
+                messageHiddenString: "ChildMode.MessageHidden".tp_loc(lang: presentationData.strings.baseLanguageCode)
             )
         }
         |> distinctUntilChanged).startStrict(next: { value in

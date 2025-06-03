@@ -86,6 +86,13 @@ class ContactMultiselectionControllerImpl: ViewController, ContactMultiselection
     private let onlyWriteable: Bool
     private let isGroupInvitation: Bool
     private let limit: Int32?
+
+    public var isCallVideoOptionSelected: Bool {
+        guard self.displayNode.isNodeLoaded, let displayNode = self.displayNode as? ContactMultiselectionControllerNode else {
+            return false
+        }
+        return displayNode.isCallVideoOptionSelected
+    }
     
     init(_ params: ContactMultiselectionControllerParams) {
         self.params = params
@@ -142,12 +149,13 @@ class ContactMultiselectionControllerImpl: ViewController, ContactMultiselection
         case let .chatSelection(chatSelection):
             let selectedChats = chatSelection.selectedChats
             let additionalCategories = chatSelection.additionalCategories
-            let _ = (self.context.engine.data.get(
+            let whitelist: Signal<(Bool, [EnginePeer.Id]), NoError> = (context.childModeManager?.whitelist() ?? .single((false, [])))
+            let _ = (combineLatest(self.context.engine.data.get(
                 EngineDataList(
                     selectedChats.map(TelegramEngine.EngineData.Item.Peer.Peer.init)
                 )
-            )
-            |> deliverOnMainQueue).startStandalone(next: { [weak self] peerList in
+            ), whitelist)
+            |> deliverOnMainQueue).startStandalone(next: { [weak self] peerList, whitelist in
                 guard let strongSelf = self else {
                     return
                 }
@@ -160,7 +168,11 @@ class ContactMultiselectionControllerImpl: ViewController, ContactMultiselection
                     }
                 }
                 strongSelf.contactsNode.editableTokens.append(contentsOf: peers.map { peer -> EditableTokenListToken in
-                    return EditableTokenListToken(id: peer.id, title: peerTokenTitle(accountPeerId: params.context.account.peerId, peer: peer._asPeer(), strings: strongSelf.presentationData.strings, nameDisplayOrder: strongSelf.presentationData.nameDisplayOrder), fixedPosition: nil, subject: .peer(peer))
+                    var blurred = false
+                    if whitelist.0 {
+                        blurred = !whitelist.1.contains(peer.id)
+                    }
+                    return EditableTokenListToken(id: peer.id, title: peerTokenTitle(accountPeerId: params.context.account.peerId, peer: peer._asPeer(), strings: strongSelf.presentationData.strings, nameDisplayOrder: strongSelf.presentationData.nameDisplayOrder), fixedPosition: nil, subject: .peer(peer, blurred))
                 })
                 strongSelf._peersReady.set(.single(true))
                 if strongSelf.isNodeLoaded {
@@ -190,7 +202,7 @@ class ContactMultiselectionControllerImpl: ViewController, ContactMultiselection
                     }
                     let peers = peerList.compactMap { $0 }
                     strongSelf.contactsNode.editableTokens.append(contentsOf: peers.map { peer -> EditableTokenListToken in
-                        return EditableTokenListToken(id: peer.id, title: peerTokenTitle(accountPeerId: params.context.account.peerId, peer: peer._asPeer(), strings: strongSelf.presentationData.strings, nameDisplayOrder: strongSelf.presentationData.nameDisplayOrder), fixedPosition: nil, subject: .peer(peer))
+                        return EditableTokenListToken(id: peer.id, title: peerTokenTitle(accountPeerId: params.context.account.peerId, peer: peer._asPeer(), strings: strongSelf.presentationData.strings, nameDisplayOrder: strongSelf.presentationData.nameDisplayOrder), fixedPosition: nil, subject: .peer(peer, false))
                     })
                     strongSelf._peersReady.set(.single(true))
                     if strongSelf.isNodeLoaded {
@@ -241,8 +253,13 @@ class ContactMultiselectionControllerImpl: ViewController, ContactMultiselection
         }
         
         switch self.mode {
-        case .groupCreation:
-            let maxCount: Int32 = self.limitsConfiguration?.maxSupergroupMemberCount ?? 5000
+        case let .groupCreation(isCall):
+            let maxCount: Int32
+            if isCall {
+                maxCount = self.context.userLimits.maxConferenceParticipantCount
+            } else {
+                maxCount = self.limitsConfiguration?.maxSupergroupMemberCount ?? 5000
+            }
             let count: Int
             switch self.contactsNode.contentNode {
             case let .contacts(contactsNode):
@@ -250,8 +267,16 @@ class ContactMultiselectionControllerImpl: ViewController, ContactMultiselection
             case let .chats(chatsNode):
                 count = chatsNode.currentState.selectedPeerIds.count
             }
-            self.titleView.title = CounterControllerTitle(title: self.params.title ?? self.presentationData.strings.Compose_NewGroupTitle, counter: "\(count)/\(maxCount)")
-            if self.rightNavigationButton == nil {
+            if isCall && count <= 1 {
+                self.titleView.title = CounterControllerTitle(title: self.params.title ?? self.presentationData.strings.Compose_NewGroupTitle, counter: nil)
+            } else {
+                var count = count
+                if isCall {
+                    count += 1
+                }
+                self.titleView.title = CounterControllerTitle(title: self.params.title ?? self.presentationData.strings.Compose_NewGroupTitle, counter: "\(count)/\(maxCount)")
+            }
+            if self.rightNavigationButton == nil && !isCall {
                 let rightNavigationButton = UIBarButtonItem(title: self.presentationData.strings.Common_Next, style: .done, target: self, action: #selector(self.rightNavigationButtonPressed))
                 self.rightNavigationButton = rightNavigationButton
                 self.navigationItem.rightBarButtonItem = self.rightNavigationButton
@@ -322,13 +347,19 @@ class ContactMultiselectionControllerImpl: ViewController, ContactMultiselection
         }
         
         let limit = self.limit
-        self.contactsNode.openPeer = { [weak self] peer in
+        self.contactsNode.openPeer = { [weak self] peer, blurred in
             if let strongSelf = self, case let .peer(peer, _, _) = peer {
+                
                 var updatedCount: Int?
                 var addedToken: EditableTokenListToken?
                 var removedTokenId: AnyHashable?
                 
-                let maxRegularCount: Int32 = strongSelf.limitsConfiguration?.maxGroupMemberCount ?? 200
+                let maxRegularCount: Int32
+                if case .groupCreation(true) = strongSelf.mode {
+                    maxRegularCount = strongSelf.context.userLimits.maxConferenceParticipantCount
+                } else {
+                    maxRegularCount = strongSelf.limitsConfiguration?.maxGroupMemberCount ?? 200
+                }
                 var displayCountAlert = false
                 
                 var selectionState: ContactListNodeGroupSelectionState?
@@ -349,11 +380,15 @@ class ContactMultiselectionControllerImpl: ViewController, ContactMultiselection
                             if updatedState.selectedPeerIndices[.peer(peer.id)] == nil {
                                 removedTokenId = peer.id
                             } else {
+                                var selectedPeerMap = updatedState.selectedPeerMap
+                                selectedPeerMap[.peer(peer.id)] = .peer(peer: peer, isGlobal: false, participantCount: nil)
+                                updatedState = updatedState.withSelectedPeerMap(selectedPeerMap)
+                                
                                 if updatedState.selectedPeerIndices.count >= maxRegularCount {
                                     displayCountAlert = true
                                     updatedState = updatedState.withToggledPeerId(.peer(peer.id))
                                 } else {
-                                    addedToken = EditableTokenListToken(id: peer.id, title: peerTokenTitle(accountPeerId: accountPeerId, peer: peer, strings: strongSelf.presentationData.strings, nameDisplayOrder: strongSelf.presentationData.nameDisplayOrder), fixedPosition: nil, subject: .peer(EnginePeer(peer)))
+                                    addedToken = EditableTokenListToken(id: peer.id, title: peerTokenTitle(accountPeerId: accountPeerId, peer: peer, strings: strongSelf.presentationData.strings, nameDisplayOrder: strongSelf.presentationData.nameDisplayOrder), fixedPosition: nil, subject: .peer(EnginePeer(peer), blurred))
                                 }
                             }
                             updatedCount = updatedState.selectedPeerIndices.count
@@ -370,7 +405,7 @@ class ContactMultiselectionControllerImpl: ViewController, ContactMultiselection
                             state.selectedPeerIds.remove(peer.id)
                             removedTokenId = peer.id
                         } else {
-                            addedToken = EditableTokenListToken(id: peer.id, title: peerTokenTitle(accountPeerId: accountPeerId, peer: peer, strings: strongSelf.presentationData.strings, nameDisplayOrder: strongSelf.presentationData.nameDisplayOrder), fixedPosition: nil, subject: .peer(EnginePeer(peer)))
+                            addedToken = EditableTokenListToken(id: peer.id, title: peerTokenTitle(accountPeerId: accountPeerId, peer: peer, strings: strongSelf.presentationData.strings, nameDisplayOrder: strongSelf.presentationData.nameDisplayOrder), fixedPosition: nil, subject: .peer(EnginePeer(peer), false))
                             state.selectedPeerIds.insert(peer.id)
                         }
                         updatedCount = state.selectedPeerIds.count
@@ -414,6 +449,24 @@ class ContactMultiselectionControllerImpl: ViewController, ContactMultiselection
                     strongSelf.present(textAlertController(context: strongSelf.context, title: nil, text: strongSelf.presentationData.strings.CreateGroup_SoftUserLimitAlert, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
                 }
             }
+        }
+
+        if !self.params.initialSelectedPeers.isEmpty {
+            for peer in self.params.initialSelectedPeers {
+                self.contactsNode.openPeer?(.peer(peer: peer._asPeer(), isGlobal: false, participantCount: nil), false)
+            }
+            /*if case let .contacts(contactsNode) = self.contactsNode.contentNode {
+                contactsNode.updateSelectionState { state in
+                    var updatedState = state ?? ContactListNodeGroupSelectionState()
+                    var selectedPeerMap = updatedState.selectedPeerMap
+                    for peer in self.params.initialSelectedPeers {
+                        updatedState = updatedState.withToggledPeerId(.peer(peer.id))
+                        selectedPeerMap[.peer(peer.id)] = .peer(peer: peer._asPeer(), isGlobal: false, participantCount: nil)
+                    }
+                    updatedState = updatedState.withSelectedPeerMap(selectedPeerMap)
+                    return updatedState
+                }
+            }*/
         }
         
         self.contactsNode.openPeerMore  = { [weak self] peer, node, gesture in
@@ -538,8 +591,13 @@ class ContactMultiselectionControllerImpl: ViewController, ContactMultiselection
                             break
                     }
                     switch strongSelf.mode {
-                        case .groupCreation:
-                            let maxCount: Int32 = strongSelf.limitsConfiguration?.maxSupergroupMemberCount ?? 5000
+                        case let .groupCreation(isCall):
+                            let maxCount: Int32
+                            if isCall {
+                                maxCount = strongSelf.context.userLimits.maxConferenceParticipantCount
+                            } else {
+                                maxCount = strongSelf.limitsConfiguration?.maxSupergroupMemberCount ?? 5000
+                            }
                             strongSelf.titleView.title = CounterControllerTitle(title: strongSelf.presentationData.strings.Compose_NewGroupTitle, counter: "\(updatedCount)/\(maxCount)")
                         case .premiumGifting:
                             let maxCount: Int32 = strongSelf.limit ?? 10
@@ -692,7 +750,7 @@ class ContactMultiselectionControllerImpl: ViewController, ContactMultiselection
                     }
                     for peer in peers {
                         if !existingPeerIds.contains(peer.id) {
-                            tokens.append(EditableTokenListToken(id: peer.id, title: peerTokenTitle(accountPeerId: self.context.account.peerId, peer: peer._asPeer(), strings: self.presentationData.strings, nameDisplayOrder: self.presentationData.nameDisplayOrder), fixedPosition: nil, subject: .peer(peer)))
+                            tokens.append(EditableTokenListToken(id: peer.id, title: peerTokenTitle(accountPeerId: self.context.account.peerId, peer: peer._asPeer(), strings: self.presentationData.strings, nameDisplayOrder: self.presentationData.nameDisplayOrder), fixedPosition: nil, subject: .peer(peer, false)))
                         }
                     }
                 } else {

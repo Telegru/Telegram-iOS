@@ -7,19 +7,22 @@ public struct DAppearanceSettings: Codable, Equatable {
     public var alternativeAvatarFont: Bool
     public var showCustomWallpaperInChannels: Bool
     public var showChannelBottomPanel: Bool
+    public var showChatListSeparators: Bool
     
     public init(
         squareStyle: Bool,
         vkIcons: Bool,
         alternativeAvatarFont: Bool,
         showCustomWallpaperInChannels: Bool,
-        showChannelBottomPanel: Bool
+        showChannelBottomPanel: Bool,
+        showChatListSeparators: Bool
     ) {
         self.squareStyle = squareStyle
         self.vkIcons = vkIcons
         self.alternativeAvatarFont = alternativeAvatarFont
         self.showCustomWallpaperInChannels = showCustomWallpaperInChannels
         self.showChannelBottomPanel = showChannelBottomPanel
+        self.showChatListSeparators = showChatListSeparators
     }
     
     public init(from decoder: any Decoder) throws {
@@ -29,6 +32,7 @@ public struct DAppearanceSettings: Codable, Equatable {
         self.alternativeAvatarFont = try container.decode(Bool.self, forKey: .alternativeAvatarFont)
         self.showCustomWallpaperInChannels = try container.decodeIfPresent(Bool.self, forKey: .showCustomWallpaperInChannels) ?? true
         self.showChannelBottomPanel = try container.decodeIfPresent(Bool.self, forKey: .showChannelBottomPanel) ?? true
+        self.showChatListSeparators = try container.decodeIfPresent(Bool.self, forKey: .showChatListSeparators) ?? true
     }
     
     public func encode(to encoder: any Encoder) throws {
@@ -38,6 +42,7 @@ public struct DAppearanceSettings: Codable, Equatable {
         try container.encode(alternativeAvatarFont, forKey: .alternativeAvatarFont)
         try container.encode(showCustomWallpaperInChannels, forKey: .showCustomWallpaperInChannels)
         try container.encode(showChannelBottomPanel, forKey: .showChannelBottomPanel)
+        try container.encode(showChatListSeparators, forKey: .showChatListSeparators)
     }
     
     enum CodingKeys: CodingKey {
@@ -46,6 +51,7 @@ public struct DAppearanceSettings: Codable, Equatable {
         case alternativeAvatarFont
         case showCustomWallpaperInChannels
         case showChannelBottomPanel
+        case showChatListSeparators
     }
 }
 
@@ -57,7 +63,8 @@ extension DAppearanceSettings {
             vkIcons: false,
             alternativeAvatarFont: false,
             showCustomWallpaperInChannels: true,
-            showChannelBottomPanel: true
+            showChannelBottomPanel: true,
+            showChatListSeparators: true
         )
     }
 }

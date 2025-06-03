@@ -493,7 +493,7 @@ final class PeerInfoHeaderNode: ASDisplayNode {
     private var currentStatusIcon: CredibilityIcon?
     
     private var currentPanelStatusData: PeerInfoStatusData?
-    func update(width: CGFloat, containerHeight: CGFloat, containerInset: CGFloat, statusBarHeight: CGFloat, navigationHeight: CGFloat, isModalOverlay: Bool, isMediaOnly: Bool, contentOffset: CGFloat, paneContainerY: CGFloat, presentationData: PresentationData, peer: Peer?, cachedData: CachedPeerData?, threadData: MessageHistoryThreadData?, peerNotificationSettings: TelegramPeerNotificationSettings?, threadNotificationSettings: TelegramPeerNotificationSettings?, globalNotificationSettings: EngineGlobalNotificationSettings?, statusData: PeerInfoStatusData?, panelStatusData: (PeerInfoStatusData?, PeerInfoStatusData?, CGFloat?), isSecretChat: Bool, isContact: Bool, isSettings: Bool, state: PeerInfoState, profileGiftsContext: ProfileGiftsContext?, metrics: LayoutMetrics, deviceMetrics: DeviceMetrics, transition: ContainedViewLayoutTransition, additive: Bool, animateHeader: Bool, isHiddenPhone: Bool) -> CGFloat {
+    func update(width: CGFloat, containerHeight: CGFloat, containerInset: CGFloat, statusBarHeight: CGFloat, navigationHeight: CGFloat, isModalOverlay: Bool, isMediaOnly: Bool, contentOffset: CGFloat, paneContainerY: CGFloat, presentationData: PresentationData, peer: Peer?, cachedData: CachedPeerData?, threadData: MessageHistoryThreadData?, peerNotificationSettings: TelegramPeerNotificationSettings?, threadNotificationSettings: TelegramPeerNotificationSettings?, globalNotificationSettings: EngineGlobalNotificationSettings?, statusData: PeerInfoStatusData?, panelStatusData: (PeerInfoStatusData?, PeerInfoStatusData?, CGFloat?), isSecretChat: Bool, isContact: Bool, isSettings: Bool, state: PeerInfoState, profileGiftsContext: ProfileGiftsContext?, metrics: LayoutMetrics, deviceMetrics: DeviceMetrics, transition: ContainedViewLayoutTransition, additive: Bool, animateHeader: Bool, isHiddenPhone: Bool, isPeerBlurred: Bool = false) -> CGFloat {
         if self.appliedCustomNavigationContentNode !== self.customNavigationContentNode {
             if let previous = self.appliedCustomNavigationContentNode {
                 transition.updateAlpha(node: previous, alpha: 0.0, completion: { [weak previous] _ in
@@ -539,6 +539,11 @@ final class PeerInfoHeaderNode: ASDisplayNode {
             } else {
                 contentOffset = 212.0
             }
+        }
+        var isMediaOnly = isMediaOnly
+        if isPeerBlurred {
+            isMediaOnly = true
+            contentOffset = 312.0
         }
         
         let isLandscape = containerInset > 16.0
@@ -2306,6 +2311,9 @@ final class PeerInfoHeaderNode: ASDisplayNode {
             }
             if !buttonKeys.isEmpty {
                 backgroundDefaultHeight = 327.0
+                if metrics.isTablet {
+                    backgroundDefaultHeight += 60.0
+                }
             }
             hasBackground = true
         } else if let peer {
@@ -2325,6 +2333,7 @@ final class PeerInfoHeaderNode: ASDisplayNode {
                 files: [:],
                 isDark: presentationData.theme.overallDarkAppearance,
                 avatarCenter: apparentAvatarFrame.center.offsetBy(dx: bannerInset, dy: 0.0),
+                avatarSize: apparentAvatarFrame.size,
                 avatarScale: avatarScale,
                 defaultHeight: backgroundDefaultHeight,
                 gradientCenter: CGPoint(x: 0.5, y: buttonKeys.isEmpty ? 0.5 : 0.45),
@@ -2339,9 +2348,9 @@ final class PeerInfoHeaderNode: ASDisplayNode {
                 self.backgroundBannerView.addSubview(backgroundCoverView)
             }
             if additive {
-                transition.updateFrameAdditive(view: backgroundCoverView, frame: CGRect(origin: CGPoint(x: -bannerInset, y: bannerFrame.height - backgroundCoverSize.height - bannerInset), size: backgroundCoverSize))
+                transition.updateFrameAdditive(view: backgroundCoverView, frame: CGRect(origin: CGPoint(x: -bannerInset, y: bannerFrame.height - backgroundCoverSize.height), size: backgroundCoverSize))
             } else {
-                transition.updateFrame(view: backgroundCoverView, frame: CGRect(origin: CGPoint(x: -bannerInset, y: bannerFrame.height - backgroundCoverSize.height - bannerInset), size: backgroundCoverSize))
+                transition.updateFrame(view: backgroundCoverView, frame: CGRect(origin: CGPoint(x: -bannerInset, y: bannerFrame.height - backgroundCoverSize.height), size: backgroundCoverSize))
             }
             if backgroundCoverAnimateIn {
                 if !self.isAvatarExpanded {
@@ -2349,12 +2358,56 @@ final class PeerInfoHeaderNode: ASDisplayNode {
                     Queue.mainQueue().after(0.2) {
                         backgroundCoverView.animateIn()
                     }
-                    Queue.mainQueue().after(0.5) {
-                        self.invokeDisplayGiftInfo()
+                }
+                Queue.mainQueue().after(0.5) {
+                    self.invokeDisplayGiftInfo()
+                }
+            }
+        }
+        
+        if let profileGiftsContext, let peer {
+            let giftsCoverSize = self.giftsCover.update(
+                transition: ComponentTransition(transition),
+                component: AnyComponent(PeerInfoGiftsCoverComponent(
+                    context: self.context,
+                    peerId: peer.id,
+                    giftsContext: profileGiftsContext,
+                    hasBackground: hasBackground,
+                    avatarCenter: apparentAvatarFrame.center,
+                    avatarSize: apparentAvatarFrame.size,
+                    defaultHeight: backgroundDefaultHeight,
+                    avatarTransitionFraction: max(0.0, min(1.0, titleCollapseFraction + transitionFraction * 2.0)),
+                    statusBarHeight: statusBarHeight,
+                    topLeftButtonsSize: CGSize(width: (self.isSettings ? 57.0 : 47.0), height: 46.0),
+                    topRightButtonsSize: CGSize(width: 76.0 + (self.isMyProfile ? 38.0 : 0.0), height: 46.0),
+                    titleWidth: max(140.0, titleFrame.width) + 42.0,
+                    bottomHeight: !buttonKeys.isEmpty ? 81.0 : 30.0,
+                    action: { [weak self] gift in
+                        guard let self, case let .unique(gift) = gift.gift else {
+                            return
+                        }
+                        self.openUniqueGift?(self.view, gift.slug)
                     }
+                )),
+                environment: {},
+                containerSize: CGSize(width: width, height: apparentBackgroundHeight)
+            )
+            if let giftsCoverView = self.giftsCover.view as? PeerInfoGiftsCoverComponent.View {
+                if giftsCoverView.superview == nil {
+                    self.view.insertSubview(giftsCoverView, aboveSubview: self.backgroundBannerView)
+                }
+                if additive {
+                    transition.updateFrameAdditive(view: giftsCoverView, frame: CGRect(origin: CGPoint(x: 0.0, y: 0.0), size: giftsCoverSize))
                 } else {
-                    Queue.mainQueue().after(0.5) {
-                        self.invokeDisplayGiftInfo()
+                    transition.updateFrame(view: giftsCoverView, frame: CGRect(origin: CGPoint(x: 0.0, y: 0.0), size: giftsCoverSize))
+                }
+                navigationTransition.updateAlpha(layer: giftsCoverView.layer, alpha: backgroundBannerAlpha)
+                if backgroundCoverAnimateIn {
+                    if !self.isAvatarExpanded {
+                        giftsCoverView.willAnimateIn()
+                        Queue.mainQueue().after(0.2) {
+                            giftsCoverView.animateIn()
+                        }
                     }
                 }
             }
@@ -2369,6 +2422,7 @@ final class PeerInfoHeaderNode: ASDisplayNode {
                     giftsContext: profileGiftsContext,
                     hasBackground: hasBackground,
                     avatarCenter: apparentAvatarFrame.center,
+                    avatarSize: apparentAvatarFrame.size,
                     defaultHeight: backgroundDefaultHeight,
                     avatarTransitionFraction: max(0.0, min(1.0, titleCollapseFraction + transitionFraction * 2.0)),
                     statusBarHeight: statusBarHeight,

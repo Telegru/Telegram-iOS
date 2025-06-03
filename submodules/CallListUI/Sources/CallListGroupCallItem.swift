@@ -67,8 +67,9 @@ class CallListGroupCallItem: ListViewItem {
     let selectable: Bool = true
     let headerAccessoryItem: ListViewAccessoryItem?
     let header: ListViewItemHeader?
-    
-    init(presentationData: ItemListPresentationData, context: AccountContext, style: ItemListStyle, peer: EnginePeer, isActive: Bool, editing: Bool, interaction: CallListNodeInteraction) {
+    let blurred: Bool
+
+    init(presentationData: ItemListPresentationData, context: AccountContext, style: ItemListStyle, peer: EnginePeer, isActive: Bool, editing: Bool, interaction: CallListNodeInteraction, blurred: Bool) {
         self.presentationData = presentationData
         self.context = context
         self.style = style
@@ -76,6 +77,7 @@ class CallListGroupCallItem: ListViewItem {
         self.isActive = isActive
         self.editing = editing
         self.interaction = interaction
+        self.blurred = blurred
         
         self.headerAccessoryItem = nil
         self.header = ChatListSearchItemHeader(type: .activeVoiceChats, theme: presentationData.theme, strings: presentationData.strings)

@@ -1651,6 +1651,7 @@ public class CameraScreenImpl: ViewController, CameraScreen {
         case videoCollage(VideoCollage)
         case asset(PHAsset)
         case draft(MediaEditorDraft)
+        case assets([PHAsset])
         
         func withPIPPosition(_ position: CameraScreenImpl.PIPPosition) -> Result {
             switch self {
@@ -1668,15 +1669,18 @@ public class CameraScreenImpl: ViewController, CameraScreen {
         public weak var sourceView: UIView?
         public let sourceRect: CGRect
         public let sourceCornerRadius: CGFloat
+        public let useFillAnimation: Bool
         
         public init(
             sourceView: UIView,
             sourceRect: CGRect,
-            sourceCornerRadius: CGFloat
+            sourceCornerRadius: CGFloat,
+            useFillAnimation: Bool
         ) {
             self.sourceView = sourceView
             self.sourceRect = sourceRect
             self.sourceCornerRadius = sourceCornerRadius
+            self.useFillAnimation = useFillAnimation
         }
     }
     
@@ -1955,6 +1959,7 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                                         }
                                     },
                                     nil,
+                                    1,
                                     {}
                                 )
                             } else {
@@ -1991,6 +1996,7 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                                 }
                             },
                             nil,
+                            self.controller?.remainingStoryCount,
                             {}
                         )
                     }
@@ -2505,55 +2511,102 @@ public class CameraScreenImpl: ViewController, CameraScreen {
             
             if let transitionIn = self.controller?.transitionIn, let sourceView = transitionIn.sourceView {
                 let sourceLocalFrame = sourceView.convert(transitionIn.sourceRect, to: self.view)
-                if case .story = controller.mode {
-                    let sourceScale = sourceLocalFrame.width / self.previewContainerView.frame.width
+                if transitionIn.useFillAnimation {
+                    self.backgroundView.alpha = 1.0
+                    self.backgroundView.layer.removeAllAnimations()
                     
-                    self.previewContainerView.layer.animatePosition(from: sourceLocalFrame.center, to: self.previewContainerView.center, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, completion: { _ in
-                        self.requestUpdateLayout(hasAppeared: true, transition: .immediate)
-                    })
-                    self.previewContainerView.layer.animateScale(from: sourceScale, to: 1.0, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring)
+                    self.transitionDimView.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.3, delay: 0.15)
                     
-                    let minSide = min(self.previewContainerView.bounds.width, self.previewContainerView.bounds.height)
-                    self.previewContainerView.layer.animateBounds(from: CGRect(origin: CGPoint(x: (self.previewContainerView.bounds.width - minSide) / 2.0, y: (self.previewContainerView.bounds.height - minSide) / 2.0), size: CGSize(width: minSide, height: minSide)), to: self.previewContainerView.bounds, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring)
-                    self.previewContainerView.layer.animate(
-                        from: minSide / 2.0 as NSNumber,
-                        to: self.previewContainerView.layer.cornerRadius as NSNumber,
-                        keyPath: "cornerRadius",
-                        timingFunction: kCAMediaTimingFunctionSpring,
-                        duration: 0.3
-                    )
-                } else {
-                    self.mainPreviewAnimationWrapperView.bounds = self.mainPreviewView.bounds
-                    self.mainPreviewAnimationWrapperView.center = CGPoint(x: self.previewContainerView.frame.width / 2.0, y: self.previewContainerView.frame.height / 2.0)
+                    let transitionMaskView = UIView()
+                    transitionMaskView.frame = self.view.bounds
+                    self.view.mask = transitionMaskView
                     
-                    self.mainPreviewView.layer.position = CGPoint(x: self.previewContainerView.frame.width / 2.0, y: self.previewContainerView.frame.height / 2.0)
+                    let transitionCircleLayer = SimpleShapeLayer()
+                    transitionCircleLayer.path = CGPath(ellipseIn: CGRect(origin: .zero, size: CGSize(width: 320.0, height: 320.0)), transform: nil)
+                    transitionCircleLayer.fillColor = UIColor.white.cgColor
+                    transitionCircleLayer.frame = CGSize(width: 320.0, height: 320.0).centered(in: sourceLocalFrame)
+                    transitionMaskView.layer.addSublayer(transitionCircleLayer)
                     
-                    let sourceInnerFrame = sourceView.convert(transitionIn.sourceRect, to: self.previewContainerView)
-                    let sourceCenter = sourceInnerFrame.center
-                    self.mainPreviewAnimationWrapperView.layer.animatePosition(from: sourceCenter, to: self.mainPreviewAnimationWrapperView.center, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, completion: { _ in
-                        self.requestUpdateLayout(hasAppeared: true, transition: .immediate)
-                    })
+                    let colorFillView = UIView()
+                    colorFillView.backgroundColor = self.presentationData.theme.list.itemCheckColors.fillColor
+                    colorFillView.frame = self.view.bounds
+                    colorFillView.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.3, removeOnCompletion: false)
+                    self.view.addSubview(colorFillView)
                     
-                    var sourceBounds = self.mainPreviewView.bounds
-                    if let holder = controller.holder {
-                        sourceBounds = CGRect(origin: .zero, size: holder.parentView.frame.size.aspectFitted(sourceBounds.size))
+                    let iconLayer = SimpleLayer()
+                    iconLayer.contents = generateAddIcon(color: self.presentationData.theme.list.itemCheckColors.foregroundColor)?.cgImage
+                    iconLayer.bounds = CGRect(origin: .zero, size: CGSize(width: 30.0, height: 30.0))
+                    iconLayer.position = sourceLocalFrame.center
+                    colorFillView.layer.addSublayer(iconLayer)
+                    
+                    let labelLayer = SimpleLayer()
+                    if let image = generateAddLabel(strings: self.presentationData.strings, color: self.presentationData.theme.list.itemCheckColors.foregroundColor) {
+                        labelLayer.contents = image.cgImage
+                        labelLayer.bounds = CGRect(origin: .zero, size: image.size)
+                        labelLayer.position = CGPoint(x: sourceLocalFrame.center.x, y: sourceLocalFrame.center.y + 43.0 - UIScreenPixel)
+                        colorFillView.layer.addSublayer(labelLayer)
                     }
-                    self.mainPreviewAnimationWrapperView.layer.animateBounds(from: sourceBounds, to: self.mainPreviewView.bounds, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring)
                     
-                    let sourceScale = max(sourceInnerFrame.width / self.previewContainerView.frame.width, sourceInnerFrame.height / self.previewContainerView.frame.height)
-                    self.mainPreviewView.transform = CGAffineTransform.identity
-                    self.mainPreviewAnimationWrapperView.layer.animateScale(from: sourceScale, to: 1.0, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, completion: { _ in
-                        self.mainPreviewContainerView.addSubview(self.mainPreviewView)
-                        Queue.mainQueue().justDispatch {
-                            self.animatedIn = true
-                        }
+                    iconLayer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2, delay: 0.1, removeOnCompletion: false)
+                    labelLayer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2, delay: 0.1, removeOnCompletion: false)
+                    
+                    transitionCircleLayer.animateScale(from: sourceLocalFrame.width / 320.0, to: 6.0, duration: 0.6, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: false, completion: { _ in
+                        self.view.mask = nil
+                        colorFillView.removeFromSuperview()
+                        
+                        self.requestUpdateLayout(hasAppeared: true, transition: .immediate)
                     })
-                }
-                
-                if let view = self.componentHost.view {
-                    view.layer.animatePosition(from: sourceLocalFrame.center, to: view.center, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring)
-                    view.layer.animateScale(from: 0.1, to: 1.0, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring)
-                    view.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)
+                } else {
+                    if case .story = controller.mode {
+                        let sourceScale = sourceLocalFrame.width / self.previewContainerView.frame.width
+                        
+                        self.previewContainerView.layer.animatePosition(from: sourceLocalFrame.center, to: self.previewContainerView.center, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, completion: { _ in
+                            self.requestUpdateLayout(hasAppeared: true, transition: .immediate)
+                        })
+                        self.previewContainerView.layer.animateScale(from: sourceScale, to: 1.0, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring)
+                        
+                        let minSide = min(self.previewContainerView.bounds.width, self.previewContainerView.bounds.height)
+                        self.previewContainerView.layer.animateBounds(from: CGRect(origin: CGPoint(x: (self.previewContainerView.bounds.width - minSide) / 2.0, y: (self.previewContainerView.bounds.height - minSide) / 2.0), size: CGSize(width: minSide, height: minSide)), to: self.previewContainerView.bounds, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring)
+                        self.previewContainerView.layer.animate(
+                            from: minSide / 2.0 as NSNumber,
+                            to: self.previewContainerView.layer.cornerRadius as NSNumber,
+                            keyPath: "cornerRadius",
+                            timingFunction: kCAMediaTimingFunctionSpring,
+                            duration: 0.3
+                        )
+                    } else {
+                        self.mainPreviewAnimationWrapperView.bounds = self.mainPreviewView.bounds
+                        self.mainPreviewAnimationWrapperView.center = CGPoint(x: self.previewContainerView.frame.width / 2.0, y: self.previewContainerView.frame.height / 2.0)
+                        
+                        self.mainPreviewView.layer.position = CGPoint(x: self.previewContainerView.frame.width / 2.0, y: self.previewContainerView.frame.height / 2.0)
+                        
+                        let sourceInnerFrame = sourceView.convert(transitionIn.sourceRect, to: self.previewContainerView)
+                        let sourceCenter = sourceInnerFrame.center
+                        self.mainPreviewAnimationWrapperView.layer.animatePosition(from: sourceCenter, to: self.mainPreviewAnimationWrapperView.center, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, completion: { _ in
+                            self.requestUpdateLayout(hasAppeared: true, transition: .immediate)
+                        })
+                        
+                        var sourceBounds = self.mainPreviewView.bounds
+                        if let holder = controller.holder {
+                            sourceBounds = CGRect(origin: .zero, size: holder.parentView.frame.size.aspectFitted(sourceBounds.size))
+                        }
+                        self.mainPreviewAnimationWrapperView.layer.animateBounds(from: sourceBounds, to: self.mainPreviewView.bounds, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring)
+                        
+                        let sourceScale = max(sourceInnerFrame.width / self.previewContainerView.frame.width, sourceInnerFrame.height / self.previewContainerView.frame.height)
+                        self.mainPreviewView.transform = CGAffineTransform.identity
+                        self.mainPreviewAnimationWrapperView.layer.animateScale(from: sourceScale, to: 1.0, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, completion: { _ in
+                            self.mainPreviewContainerView.addSubview(self.mainPreviewView)
+                            Queue.mainQueue().justDispatch {
+                                self.animatedIn = true
+                            }
+                        })
+                    }
+                    
+                    if let view = self.componentHost.view {
+                        view.layer.animatePosition(from: sourceLocalFrame.center, to: view.center, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring)
+                        view.layer.animateScale(from: 0.1, to: 1.0, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring)
+                        view.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)
+                    }
                 }
             }
         }
@@ -2678,9 +2731,13 @@ public class CameraScreenImpl: ViewController, CameraScreen {
             self.additionalPreviewView.isEnabled = false
             self.collageView?.isEnabled = false
             
+            #if targetEnvironment(simulator)
+            
+            #else
             Queue.mainQueue().after(0.3) {
                 self.previewBlurPromise.set(true)
             }
+            #endif
             self.camera?.stopCapture()
             
             self.cameraIsActive = false
@@ -3321,7 +3378,7 @@ public class CameraScreenImpl: ViewController, CameraScreen {
             self.transitionOut = transitionOut
         }
     }
-    fileprivate let completion: (Signal<CameraScreenImpl.Result, NoError>, ResultTransition?, @escaping () -> Void) -> Void
+    fileprivate let completion: (Signal<CameraScreenImpl.Result, NoError>, ResultTransition?, Int32?, @escaping () -> Void) -> Void
     public var transitionedIn: () -> Void = {}
     public var transitionedOut: () -> Void = {}
     
@@ -3329,6 +3386,7 @@ public class CameraScreenImpl: ViewController, CameraScreen {
     
     private let postingAvailabilityPromise = Promise<StoriesUploadAvailability>()
     private var postingAvailabilityDisposable: Disposable?
+    private var remainingStoryCount: Int32?
     
     private var codeDisposable: Disposable?
     private var resolveCodeDisposable: Disposable?
@@ -3366,7 +3424,7 @@ public class CameraScreenImpl: ViewController, CameraScreen {
         holder: CameraHolder? = nil,
         transitionIn: TransitionIn?,
         transitionOut: @escaping (Bool) -> TransitionOut?,
-        completion: @escaping (Signal<CameraScreenImpl.Result, NoError>, ResultTransition?, @escaping () -> Void) -> Void
+        completion: @escaping (Signal<CameraScreenImpl.Result, NoError>, ResultTransition?, Int32?, @escaping () -> Void) -> Void
     ) {
         self.context = context
         self.mode = mode
@@ -3416,7 +3474,11 @@ public class CameraScreenImpl: ViewController, CameraScreen {
             }
             self.postingAvailabilityDisposable = (self.postingAvailabilityPromise.get()
             |> deliverOnMainQueue).start(next: { [weak self] availability in
-                guard let self, availability != .available else {
+                guard let self else {
+                    return
+                }
+                if case let .available(remainingCount) = availability {
+                    self.remainingStoryCount = remainingCount
                     return
                 }
                 self.node.postingAvailable = false
@@ -3570,7 +3632,13 @@ public class CameraScreenImpl: ViewController, CameraScreen {
             self.node.resumeCameraCapture(fromGallery: true)
         }
         
-        var dismissControllerImpl: (() -> Void)?
+        class DismissArgs {
+            var resumeOnDismiss = true
+        }
+        
+        var dismissControllerImpl: ((Bool) -> Void)?
+        let dismissArgs = DismissArgs()
+        
         let controller: ViewController
         if let current = self.galleryController {
             controller = current
@@ -3579,7 +3647,15 @@ public class CameraScreenImpl: ViewController, CameraScreen {
             if self.cameraState.isCollageEnabled, let collage = self.node.collage {
                 selectionLimit = collage.grid.count - collage.results.count
             } else {
-                selectionLimit = 6
+                if self.cameraState.isCollageEnabled {
+                    selectionLimit = 6
+                } else {
+                    if let remainingStoryCount = self.remainingStoryCount {
+                        selectionLimit = min(Int(remainingStoryCount), 10)
+                    } else {
+                        selectionLimit = 10
+                    }
+                }
             }
             controller = self.context.sharedContext.makeStoryMediaPickerScreen(
                 context: self.context,
@@ -3618,7 +3694,7 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                                 }
                             }
 
-                            dismissControllerImpl?()
+                            dismissControllerImpl?(true)
                         } else {
                             stopCameraCapture()
                             
@@ -3643,57 +3719,67 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                                     )
                                     self.present(alertController, in: .window(.root))
                                 } else {
-                                    self.completion(.single(.asset(asset)), resultTransition, dismissed)
+                                    self.completion(.single(.asset(asset)), resultTransition, self.remainingStoryCount, dismissed)
                                 }
                             } else if let draft = result as? MediaEditorDraft {
-                                self.completion(.single(.draft(draft)), resultTransition, dismissed)
+                                self.completion(.single(.draft(draft)), resultTransition, self.remainingStoryCount, dismissed)
                             }
                         }
                     }
-                }, multipleCompletion: { [weak self] results in
+                }, multipleCompletion: { [weak self] results, collage in
                     guard let self else {
                         return
                     }
-                                        
-                    if !self.cameraState.isCollageEnabled {
-                        var selectedGrid: Camera.CollageGrid = collageGrids.first!
-                        for grid in collageGrids {
-                            if grid.count == results.count {
-                                selectedGrid = grid
-                                break
+                            
+                    if collage {
+                        if !self.cameraState.isCollageEnabled {
+                            var selectedGrid: Camera.CollageGrid = collageGrids.first!
+                            for grid in collageGrids {
+                                if grid.count == results.count {
+                                    selectedGrid = grid
+                                    break
+                                }
                             }
+                            self.updateCameraState({
+                                $0.updatedIsCollageEnabled(true).updatedCollageProgress(0.0).updatedIsDualCameraEnabled(false).updatedCollageGrid(selectedGrid)
+                            }, transition: .spring(duration: 0.3))
                         }
-                        self.updateCameraState({
-                            $0.updatedIsCollageEnabled(true).updatedCollageProgress(0.0).updatedIsDualCameraEnabled(false).updatedCollageGrid(selectedGrid)
-                        }, transition: .spring(duration: 0.3))
-                    }
-                    
-                    if let assets = results as? [PHAsset] {
-                        var results: [Signal<CameraScreenImpl.Result, NoError>] = []
-                        for asset in assets {
-                            if asset.mediaType == .video && asset.duration > 1.0 {
-                                results.append(.single(.asset(asset)))
-                            } else {
-                                results.append(
-                                    assetImage(asset: asset, targetSize: CGSize(width: 1080, height: 1080), exact: false, deliveryMode: .highQualityFormat)
-                                    |> runOn(Queue.concurrentDefaultQueue())
-                                    |> mapToSignal { image -> Signal<CameraScreenImpl.Result, NoError> in
-                                        if let image {
-                                            return .single(.image(Result.Image(image: image, additionalImage: nil, additionalImagePosition: .topLeft)))
-                                        } else {
-                                            return .complete()
+                        
+                        if let assets = results as? [PHAsset] {
+                            var results: [Signal<CameraScreenImpl.Result, NoError>] = []
+                            for asset in assets {
+                                if asset.mediaType == .video && asset.duration > 1.0 {
+                                    results.append(.single(.asset(asset)))
+                                } else {
+                                    results.append(
+                                        assetImage(asset: asset, targetSize: CGSize(width: 1080, height: 1080), exact: false, deliveryMode: .highQualityFormat)
+                                        |> runOn(Queue.concurrentDefaultQueue())
+                                        |> mapToSignal { image -> Signal<CameraScreenImpl.Result, NoError> in
+                                            if let image {
+                                                return .single(.image(Result.Image(image: image, additionalImage: nil, additionalImagePosition: .topLeft)))
+                                            } else {
+                                                return .complete()
+                                            }
                                         }
-                                    }
-                                )
+                                    )
+                                }
                             }
+                            self.node.collage?.addResults(signals: results)
                         }
-                        self.node.collage?.addResults(signals: results)
+                    } else {
+                        self.node.animateOutToEditor()
+                        if let assets = results as? [PHAsset] {
+                            self.completion(.single(.assets(assets)), nil, self.remainingStoryCount, {
+                            })
+                        }
                     }
                     self.galleryController = nil
                     
-                    dismissControllerImpl?()
+                    dismissControllerImpl?(false)
                 }, dismissed: { [weak self] in
-                    resumeCameraCapture()
+                    if dismissArgs.resumeOnDismiss {
+                        resumeCameraCapture()
+                    }
                     if let self {
                         self.node.hasGallery = false
                         self.node.requestUpdateLayout(transition: .immediate)
@@ -3704,7 +3790,8 @@ public class CameraScreenImpl: ViewController, CameraScreen {
             )
             self.galleryController = controller
             
-            dismissControllerImpl = { [weak controller] in
+            dismissControllerImpl = { [weak controller] resume in
+                dismissArgs.resumeOnDismiss = resume
                 controller?.dismiss(animated: true)
             }
         }
@@ -3766,6 +3853,10 @@ public class CameraScreenImpl: ViewController, CameraScreen {
         } else {
             self.dismiss(animated: false)
         }
+    }
+    
+    public func animateIn() {
+        self.node.animateIn()
     }
         
     public func updateTransitionProgress(_ transitionFraction: CGFloat, transition: ContainedViewLayoutTransition, completion: @escaping () -> Void = {}) {
@@ -4009,3 +4100,37 @@ private func pipPositionForLocation(layout: ContainerViewLayout, position: CGPoi
     return position
 }
 
+
+private func generateAddIcon(color: UIColor) -> UIImage? {
+    return generateImage(CGSize(width: 30.0, height: 30.0), contextGenerator: { size, context in
+        context.clear(CGRect(origin: .zero, size: size))
+        context.setStrokeColor(color.cgColor)
+        context.setLineWidth(3.0)
+        context.setLineCap(.round)
+        
+        context.move(to: CGPoint(x: 15.0, y: 5.5))
+        context.addLine(to: CGPoint(x: 15.0, y: 24.5))
+        context.strokePath()
+        
+        context.move(to: CGPoint(x: 5.5, y: 15.0))
+        context.addLine(to: CGPoint(x: 24.5, y: 15.0))
+        context.strokePath()
+    })
+}
+
+
+private func generateAddLabel(strings: PresentationStrings, color: UIColor) -> UIImage? {
+    let titleString = NSAttributedString(string: strings.StoryFeed_AddStory, font: Font.regular(11.0), textColor: color, paragraphAlignment: .center)
+    var textRect = titleString.boundingRect(with: CGSize(width: 200.0, height: 20.0), options: .usesLineFragmentOrigin, context: nil)
+    textRect.size.width = ceil(textRect.size.width)
+    textRect.size.height = ceil(textRect.size.height)
+    
+    return generateImage(textRect.size, rotatedContext: { size, context in
+        let bounds = CGRect(origin: CGPoint(), size: size)
+        context.clear(bounds)
+    
+        UIGraphicsPushContext(context)
+        titleString.draw(in: textRect)
+        UIGraphicsPopContext()
+    })
+}

@@ -15,7 +15,7 @@ import BuildConfig
 
 import TPUI
 import TPStrings
-import DClient
+import DNetwork
 
 private struct DisplayProxyServerStatus: Equatable {
     let activity: Bool
@@ -587,12 +587,12 @@ private func dGeneralSettingsEntries(
         )
     )
     
-//    entries.append(
-//        .contextMenu(
-//            presentationData.theme,
-//            title: "DahlSettings.ContextMenu.Title".tp_loc(lang: lang)
-//        )
-//    )
+    entries.append(
+        .contextMenu(
+            presentationData.theme,
+            title: "DahlSettings.ContextMenu.Title".tp_loc(lang: lang)
+        )
+    )
     
     entries.append(
         .tabBar(
@@ -656,7 +656,6 @@ public func dGeneralSettingsController(
     
     var openPremiumSettings: (() -> Void)?
     var openWallSettings: (() -> Void)?
-    
     var openSettingsItemsConfiguration: (() -> Void)?
     var openTabBarSettings: (() -> Void)?
     var openContextMenuSettings: (() -> Void)?

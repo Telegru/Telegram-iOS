@@ -131,6 +131,7 @@ final class PeerSelectionScreenComponent: Component {
                     actionIcon: .none,
                     index: nil,
                     header: nil,
+                    blurred: false,
                     action: { [weak listNode] _ in
                         guard let listNode, let parentView = listNode.parentView else {
                             return

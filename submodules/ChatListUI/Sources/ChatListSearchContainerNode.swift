@@ -50,10 +50,11 @@ final class ChatListSearchInteraction {
     let openDisabledPeer: (EnginePeer, Int64?, ChatListDisabledPeerReason) -> Void
     let openMessage: (EnginePeer, Int64?, EngineMessage.Id, Bool) -> Void
     let openUrl: (String) -> Void
+    let openRequiredPermissionDialog: (EnginePeer.Id, Bool, Message) -> Void
     let clearRecentSearch: () -> Void
     let addContact: (String) -> Void
     let toggleMessageSelection: (EngineMessage.Id, Bool) -> Void
-    let messageContextAction: ((EngineMessage, ASDisplayNode?, CGRect?, UIGestureRecognizer?, ChatListSearchPaneKey, (id: String, size: Int64, isFirstInList: Bool)?) -> Void)
+    let messageContextAction: ((EngineMessage, ASDisplayNode?, CGRect?, UIGestureRecognizer?, ChatListSearchPaneKey, (id: String, size: Int64, isFirstInList: Bool)?, Bool) -> Void)
     let mediaMessageContextAction: ((EngineMessage, ASDisplayNode?, CGRect?, UIGestureRecognizer?) -> Void)
     let peerContextAction: ((EnginePeer, ChatListSearchContextActionSource, ASDisplayNode, ContextGesture?, CGPoint?) -> Void)?
     let present: (ViewController, Any?) -> Void
@@ -62,9 +63,9 @@ final class ChatListSearchInteraction {
     let openStories: ((PeerId, ASDisplayNode) -> Void)?
     let switchToFilter: (ChatListSearchPaneKey) -> Void
     let dismissSearch: () -> Void
-    let openAdInfo: (ASDisplayNode) -> Void
+    let openAdInfo: (ASDisplayNode, AdPeer) -> Void
     
-    init(openPeer: @escaping (EnginePeer, EnginePeer?, Int64?, Bool) -> Void, openDisabledPeer: @escaping (EnginePeer, Int64?, ChatListDisabledPeerReason) -> Void, openMessage: @escaping (EnginePeer, Int64?, EngineMessage.Id, Bool) -> Void, openUrl: @escaping (String) -> Void, clearRecentSearch: @escaping () -> Void, addContact: @escaping (String) -> Void, toggleMessageSelection: @escaping (EngineMessage.Id, Bool) -> Void, messageContextAction: @escaping ((EngineMessage, ASDisplayNode?, CGRect?, UIGestureRecognizer?, ChatListSearchPaneKey, (id: String, size: Int64, isFirstInList: Bool)?) -> Void), mediaMessageContextAction: @escaping ((EngineMessage, ASDisplayNode?, CGRect?, UIGestureRecognizer?) -> Void), peerContextAction: ((EnginePeer, ChatListSearchContextActionSource, ASDisplayNode, ContextGesture?, CGPoint?) -> Void)?, present: @escaping (ViewController, Any?) -> Void, dismissInput: @escaping () -> Void, getSelectedMessageIds: @escaping () -> Set<EngineMessage.Id>?, openStories: ((PeerId, ASDisplayNode) -> Void)?, switchToFilter: @escaping (ChatListSearchPaneKey) -> Void, dismissSearch: @escaping () -> Void, openAdInfo: @escaping (ASDisplayNode) -> Void) {
+    init(openPeer: @escaping (EnginePeer, EnginePeer?, Int64?, Bool) -> Void, openDisabledPeer: @escaping (EnginePeer, Int64?, ChatListDisabledPeerReason) -> Void, openMessage: @escaping (EnginePeer, Int64?, EngineMessage.Id, Bool) -> Void, openUrl: @escaping (String) -> Void, openRequiredPermissionDialog: @escaping (EnginePeer.Id, Bool, Message) -> Void, clearRecentSearch: @escaping () -> Void, addContact: @escaping (String) -> Void, toggleMessageSelection: @escaping (EngineMessage.Id, Bool) -> Void, messageContextAction: @escaping ((EngineMessage, ASDisplayNode?, CGRect?, UIGestureRecognizer?, ChatListSearchPaneKey, (id: String, size: Int64, isFirstInList: Bool)?, Bool) -> Void), mediaMessageContextAction: @escaping ((EngineMessage, ASDisplayNode?, CGRect?, UIGestureRecognizer?) -> Void), peerContextAction: ((EnginePeer, ChatListSearchContextActionSource, ASDisplayNode, ContextGesture?, CGPoint?) -> Void)?, present: @escaping (ViewController, Any?) -> Void, dismissInput: @escaping () -> Void, getSelectedMessageIds: @escaping () -> Set<EngineMessage.Id>?, openStories: ((PeerId, ASDisplayNode) -> Void)?, switchToFilter: @escaping (ChatListSearchPaneKey) -> Void, dismissSearch: @escaping () -> Void, openAdInfo: @escaping (ASDisplayNode, AdPeer) -> Void) {
         self.openPeer = openPeer
         self.openDisabledPeer = openDisabledPeer
         self.openMessage = openMessage
@@ -82,6 +83,7 @@ final class ChatListSearchInteraction {
         self.switchToFilter = switchToFilter
         self.dismissSearch = dismissSearch
         self.openAdInfo = openAdInfo
+        self.openRequiredPermissionDialog = openRequiredPermissionDialog
     }
 }
 
@@ -100,12 +102,13 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
     private var location: ChatListControllerLocation
     private let displaySearchFilters: Bool
     private let hasDownloads: Bool
+    private let isChildModeActive: Bool
     private var interaction: ChatListSearchInteraction?
     private let openMessage: (EnginePeer, Int64?, EngineMessage.Id, Bool) -> Void
     private let navigationController: NavigationController?
     
     var dismissSearch: (() -> Void)?
-    var openAdInfo: ((ASDisplayNode) -> Void)?
+    var openAdInfo: ((ASDisplayNode, AdPeer) -> Void)?
     
     private let dimNode: ASDisplayNode
     let filterContainerNode: ChatListSearchFiltersContainerNode
@@ -158,7 +161,7 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
     private let sharedOpenStoryDisposable = MetaDisposable()
     private var recentAppsDisposable: Disposable?
     
-    public init(context: AccountContext, animationCache: AnimationCache, animationRenderer: MultiAnimationRenderer, updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)? = nil, filter: ChatListNodePeersFilter, requestPeerType: [ReplyMarkupButtonRequestPeerType]?, location: ChatListControllerLocation, displaySearchFilters: Bool, hasDownloads: Bool, initialFilter: ChatListSearchFilter = .chats, openPeer originalOpenPeer: @escaping (EnginePeer, EnginePeer?, Int64?, Bool) -> Void, openDisabledPeer: @escaping (EnginePeer, Int64?, ChatListDisabledPeerReason) -> Void, openRecentPeerOptions: @escaping (EnginePeer) -> Void, openMessage originalOpenMessage: @escaping (EnginePeer, Int64?, EngineMessage.Id, Bool) -> Void, addContact: ((String) -> Void)?, peerContextAction: ((EnginePeer, ChatListSearchContextActionSource, ASDisplayNode, ContextGesture?, CGPoint?) -> Void)?, present: @escaping (ViewController, Any?) -> Void, presentInGlobalOverlay: @escaping (ViewController, Any?) -> Void, navigationController: NavigationController?, parentController: @escaping () -> ViewController?) {
+    public init(context: AccountContext, animationCache: AnimationCache, animationRenderer: MultiAnimationRenderer, updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)? = nil, filter: ChatListNodePeersFilter, requestPeerType: [ReplyMarkupButtonRequestPeerType]?, location: ChatListControllerLocation, displaySearchFilters: Bool, hasDownloads: Bool, isChildModeActive: Bool, initialFilter: ChatListSearchFilter = .chats, openPeer originalOpenPeer: @escaping (EnginePeer, EnginePeer?, Int64?, Bool) -> Void, openDisabledPeer: @escaping (EnginePeer, Int64?, ChatListDisabledPeerReason) -> Void, openRecentPeerOptions: @escaping (EnginePeer) -> Void, openMessage originalOpenMessage: @escaping (EnginePeer, Int64?, EngineMessage.Id, Bool) -> Void, addContact: ((String) -> Void)?, peerContextAction: ((EnginePeer, ChatListSearchContextActionSource, ASDisplayNode, ContextGesture?, CGPoint?) -> Void)?, present: @escaping (ViewController, Any?) -> Void, presentInGlobalOverlay: @escaping (ViewController, Any?) -> Void, navigationController: NavigationController?, parentController: @escaping () -> ViewController?) {
         var initialFilter = initialFilter
         if case .chats = initialFilter, case .forum = location {
             initialFilter = .topics
@@ -172,7 +175,7 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
         self.hasDownloads = hasDownloads
         self.navigationController = navigationController
         self.presentationData = updatedPresentationData?.initial ?? context.sharedContext.currentPresentationData.with { $0 }
-        
+        self.isChildModeActive = isChildModeActive
         self.selectedFilter = .filter(initialFilter)
         self.selectedFilterPromise.set(.single(self.selectedFilter))
         
@@ -224,6 +227,8 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
                     self?.dismissInput()
                 }, contentContext: nil, progress: nil, completion: nil)
             })
+        }, openRequiredPermissionDialog: { peerId, isLink, _ in
+            self.showParentalControlsDialog(peerId: peerId, isLink: isLink)
         }, clearRecentSearch: { [weak self] in
             guard let strongSelf = self else {
                 return
@@ -262,8 +267,8 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
                     return state.withUpdatedSelectedMessageIds(selectedMessageIds)
                 }
             }
-        }, messageContextAction: { [weak self] message, node, rect, gesture, paneKey, downloadResource in
-            self?.messageContextAction(message, node: node, rect: rect, gesture: gesture, paneKey: paneKey, downloadResource: downloadResource)
+        }, messageContextAction: { [weak self] message, node, rect, gesture, paneKey, downloadResource, blurred in
+            self?.messageContextAction(message, node: node, rect: rect, gesture: gesture, paneKey: paneKey, downloadResource: downloadResource, blurred: blurred)
         }, mediaMessageContextAction: { [weak self] message, node, rect, gesture in
             self?.mediaMessageContextAction(message, node: node, rect: rect, gesture: gesture)
         }, peerContextAction: { peer, source, node, gesture, location in
@@ -307,8 +312,8 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
             }
         }, dismissSearch: { [weak self] in
             self?.dismissSearch?()
-        }, openAdInfo: { [weak self] node in
-            self?.openAdInfo?(node)
+        }, openAdInfo: { [weak self] node, adPeer in
+            self?.openAdInfo?(node, adPeer)
         })
         self.paneContainerNode.interaction = interaction
         
@@ -357,6 +362,8 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
                 key = .music
             case .voice:
                 key = .voice
+            case .instantVideo:
+                key = .instantVideo
             case .publicPosts:
                 key = .publicPosts
             case let .date(minDate, maxDate, title):
@@ -570,6 +577,12 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
         self.selectionPanelNode?.selectedMessages = self.stateValue.selectedMessageIds ?? []
     }
 
+    public func removeAds() {
+        for pane in self.paneContainerNode.currentPanes.values {
+            pane.node.removeAds()
+        }
+    }
+    
     private var currentSearchOptions: ChatListSearchOptions {
         return self.searchOptionsValue ?? ChatListSearchOptions(peer: nil, date: nil)
     }
@@ -679,6 +692,8 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
             filterKey = .music
         case .voice:
             filterKey = .voice
+        case .instantVideo:
+            filterKey = .instantVideo
         case .publicPosts:
             filterKey = .publicPosts
         }
@@ -696,7 +711,7 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
                     isForum = true
                 }
                 
-                filters = defaultAvailableSearchPanes(isForum: isForum, hasDownloads: !isForum && self.hasDownloads, hasPublicPosts: self.showPublicPostsTab).map(\.filter)
+                filters = defaultAvailableSearchPanes(isForum: isForum, hasDownloads: !isForum && self.hasDownloads, hasPublicPosts: self.showPublicPostsTab, isChildModeActive: self.isChildModeActive).map(\.filter)
             }
             self.filterContainerNode.update(size: CGSize(width: layout.size.width - 40.0, height: 38.0), sideInset: layout.safeInsets.left - 20.0, filters: filters.map { .filter($0) }, selectedFilter: self.selectedFilter?.id, transitionFraction: self.transitionFraction, presentationData: self.presentationData, transition: transition)
         }
@@ -719,6 +734,8 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
             key = .music
         case .voice:
             key = .voice
+        case .instantVideo:
+            key = .instantVideo
         case .downloads:
             key = .downloads
         default:
@@ -763,7 +780,7 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
         if let suggestedFilters = self.suggestedFilters, !suggestedFilters.isEmpty {
             filters = suggestedFilters
         } else {
-            filters = defaultAvailableSearchPanes(isForum: isForum, hasDownloads: self.hasDownloads, hasPublicPosts: self.showPublicPostsTab).map(\.filter)
+            filters = defaultAvailableSearchPanes(isForum: isForum, hasDownloads: self.hasDownloads, hasPublicPosts: self.showPublicPostsTab, isChildModeActive: self.isChildModeActive).map(\.filter)
         }
         
         let overflowInset: CGFloat = 20.0
@@ -941,7 +958,7 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
         
         let availablePanes: [ChatListSearchPaneKey]
         if self.displaySearchFilters {
-            availablePanes = defaultAvailableSearchPanes(isForum: isForum, hasDownloads: self.hasDownloads, hasPublicPosts: self.hasPublicPostsTab)
+            availablePanes = defaultAvailableSearchPanes(isForum: isForum, hasDownloads: self.hasDownloads, hasPublicPosts: self.hasPublicPostsTab, isChildModeActive: self.isChildModeActive)
         } else {
             availablePanes = isForum ? [.topics] : [.chats]
         }
@@ -973,7 +990,7 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
         let _ = self.paneContainerNode.scrollToTop()
     }
     
-    private func messageContextAction(_ message: EngineMessage, node: ASDisplayNode?, rect: CGRect?, gesture anyRecognizer: UIGestureRecognizer?, paneKey: ChatListSearchPaneKey, downloadResource: (id: String, size: Int64, isFirstInList: Bool)?) {
+    private func messageContextAction(_ message: EngineMessage, node: ASDisplayNode?, rect: CGRect?, gesture anyRecognizer: UIGestureRecognizer?, paneKey: ChatListSearchPaneKey, downloadResource: (id: String, size: Int64, isFirstInList: Bool)?, blurred: Bool) {
         guard let node = node as? ContextExtractedContentContainingNode else {
             return
         }
@@ -1153,7 +1170,7 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
             }
             var items: [ContextMenuItem] = []
             
-            if let linkForCopying = linkForCopying {
+            if let linkForCopying = linkForCopying, !blurred {
                 items.append(.action(ContextMenuActionItem(text: strongSelf.presentationData.strings.Conversation_ContextMenuCopyLink, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Copy"), color: theme.contextMenu.primaryColor) }, action: { [weak self] c, _ in
                     c?.dismiss(completion: {})
                     UIPasteboard.general.string = linkForCopying
@@ -1163,7 +1180,7 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
                 })))
             }
             
-            if !message._asMessage().isCopyProtected() {
+            if !message._asMessage().isCopyProtected(), !blurred {
                 items.append(.action(ContextMenuActionItem(text: strongSelf.presentationData.strings.Conversation_ContextMenuForward, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Forward"), color: theme.contextMenu.primaryColor) }, action: { [weak self] c, _ in
                     c?.dismiss(completion: { [weak self] in
                         if let strongSelf = self {
@@ -1632,6 +1649,93 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
     
     private func dismissInput() {
         self.view.window?.endEditing(true)
+    }
+    
+    
+    private func showParentalControlsDialog(peerId: EnginePeer.Id, isLink: Bool) {
+        let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
+        
+        let title = (isLink ? "ChildMode.LinkHidden" : "ChildMode.FileHidden").tp_loc(lang: presentationData.strings.baseLanguageCode)
+        let text = (isLink ? "ChildMode.LinkHiddenDescription" : "ChildMode.FileHiddenDescription").tp_loc(lang: presentationData.strings.baseLanguageCode)
+        let successMessage = (isLink ? "ChildMode.Link.AvailableAfterConfirmation" : "ChildMode.File.AvailableAfterConfirmation" ).tp_loc(lang: presentationData.strings.baseLanguageCode)
+
+        var dismissImpl: (() -> Void)?
+        let alertController = standardTextAlertController(
+            theme: AlertControllerTheme(presentationData: presentationData),
+            title: title,
+            text: text,
+            actions: [
+                TextAlertAction(
+                    type: .genericAction,
+                    title: "ChildMode.RequestPermission".tp_loc(lang: presentationData.strings.baseLanguageCode),
+                    action: { [weak self] in
+                        dismissImpl?()
+                        guard let strongSelf = self else {
+                            return
+                        }
+                        strongSelf.requestChatAccess(peerId: peerId, successMessage: successMessage)
+                    }
+                ),
+                TextAlertAction(
+                    type: .genericAction,
+                    title: presentationData.strings.Common_Cancel,
+                    action: {
+                        dismissImpl?()
+                    }
+                )
+            ]
+        )
+        
+        self.paneContainerNode.interaction?.dismissInput()
+        self.paneContainerNode.interaction?.present(alertController, nil)
+        
+        dismissImpl = { [weak alertController] in
+            alertController?.dismissAnimated()
+        }
+    }
+
+    private func requestChatAccess(peerId: EnginePeer.Id, successMessage: String) {
+        guard let childModeManager = self.context.childModeManager else { return }
+                
+        _ = (childModeManager.requestPermission(for: peerId, title: nil, description: nil)
+             |> deliverOnMainQueue).start(next: { [weak self] _ in
+            
+            guard let self = self else {
+                return
+            }
+            
+            Queue.mainQueue().after(0.2) {
+                let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
+                
+                let content = UndoOverlayContent.universalImage(
+                    image: UIImage(named: "Child Mode/Check") ?? UIImage(),
+                    size: CGSize(width: 24, height: 24),
+                    title: "ChildMode.Request.Sent".tp_loc(lang: presentationData.strings.baseLanguageCode),
+                    text: successMessage,
+                    customUndoText: nil,
+                    timeout: 5.0
+                )
+                self.paneContainerNode.interaction?.present(UndoOverlayController(presentationData: presentationData, content: content, elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), nil)
+            }
+        }, error: { [weak self] _ in
+            guard let self = self else {
+                return
+            }
+            
+            Queue.mainQueue().after(0.2) {
+                let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
+                
+                let content = UndoOverlayContent.universalImage(
+                    image: UIImage(named: "Child Mode/Dissmis") ?? UIImage(),
+                    size: CGSize(width: 24, height: 24),
+                    title: "ChildMode.Request.FailedToSend".tp_loc(lang: presentationData.strings.baseLanguageCode),
+                    text: "ChildMode.Internet.CheckConnection".tp_loc(lang: presentationData.strings.baseLanguageCode),
+                    customUndoText: nil,
+                    timeout: 5.0
+                )
+                self.paneContainerNode.interaction?.present(UndoOverlayController(presentationData: presentationData, content: content, elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), nil)
+            }
+        })
     }
 }
 

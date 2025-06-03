@@ -55,6 +55,7 @@ import TextFormat
 import AvatarUploadToastScreen
 import TPUI
 import AdsInfoScreen
+import AdsReportScreen
 
 private final class ContextControllerContentSourceImpl: ContextControllerContentSource {
     let controller: ViewController
@@ -165,6 +166,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
     let recentChatsNode: SparseNode
     private let recentChatsContainerNode: ChatListRecentChatsPaneNode
 
+    private var isChildModeActive: Bool = false
     private var hasDownloads: Bool = false
     private var activeDownloadsDisposable: Disposable?
     private var clearUnseenDownloadsTimer: SwiftSignalKit.Timer?
@@ -797,15 +799,20 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             }
         })
         
-        self.dalSettingsDisposable = (self.context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
+        let dalSettings = self.context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
             |> map { sharedData -> DalSettings in
             return sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
         }
+        
+        let isChildModeActive = (self.context.childModeManager?.isChildModeActive ?? .single(false))
+            |> distinctUntilChanged
+        self.dalSettingsDisposable = (combineLatest(dalSettings, isChildModeActive)
         |> deliverOnMainQueue
-        ).startStrict(next: { [weak self] dalSettings in
+        ).startStrict(next: { [weak self] dalSettings, isChildModeActive  in
             if let self {
-                self.storyPostingHidden = dalSettings.hidePublishStoriesButton
-                self.storyPostingHiddenValue.set(dalSettings.hidePublishStoriesButton)
+                self.isChildModeActive = isChildModeActive
+                self.storyPostingHidden = dalSettings.hidePublishStoriesButton || isChildModeActive
+                self.storyPostingHiddenValue.set(dalSettings.hidePublishStoriesButton || isChildModeActive)
                 self.foldersAtBottom = dalSettings.chatsFoldersAtBottom
                 let oldAllChatsHidden = self.allChatsHidden
                 self.allChatsHidden = dalSettings.hideAllChatsFolder
@@ -1162,7 +1169,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                     let chatLocation: NavigateToChatControllerParams.Location
                     chatLocation = .peer(peer)
                     
-                    self.context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: self.context, chatLocation: chatLocation, activateInput: (activateInput && !peer.isDeleted) ? .text : nil, scrollToEndIfExists: scrollToEndIfExists, animated: !scrollToEndIfExists, options: navigationAnimationOptions, parentGroupId: groupId._asGroup(), chatListFilter: self.chatListDisplayNode.mainContainerNode.currentItemNode.chatListFilter?.id, completion: { [weak self] controller in
+                    self.context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: self.context, chatLocation: chatLocation, activateInput: (activateInput && !peer.isDeleted) ? .text : nil, openedFromChatList: true, scrollToEndIfExists: scrollToEndIfExists, animated: !scrollToEndIfExists, options: navigationAnimationOptions, parentGroupId: groupId._asGroup(), chatListFilter: self.chatListDisplayNode.mainContainerNode.currentItemNode.chatListFilter?.id, completion: { [weak self] controller in
                         guard let self else {
                             return
                         }
@@ -1294,6 +1301,14 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             )
         }
         
+        self.chatListDisplayNode.mainContainerNode.openAccountFreezeInfo = { [weak self] in
+            guard let self else {
+                return
+            }
+            let controller = self.context.sharedContext.makeAccountFreezeInfoScreen(context: self.context)
+            self.push(controller)
+        }
+        
         self.chatListDisplayNode.mainContainerNode.openPhotoSetup = { [weak self] in
             guard let self else {
                 return
@@ -1414,7 +1429,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                             if case let .channel(channel) = peer, channel.flags.contains(.isForum), let threadId {
                                 let _ = strongSelf.context.sharedContext.navigateToForumThread(context: strongSelf.context, peerId: peer.id, threadId: threadId, messageId: nil, navigationController: navigationController, activateInput: nil, scrollToEndIfExists: false, keepStack: .never).startStandalone()
                             } else {
-                                strongSelf.context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: strongSelf.context, chatLocation: .peer(peer), purposefulAction: { [weak self] in
+                                strongSelf.context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: strongSelf.context, chatLocation: .peer(peer), openedFromChatList: dismissSearch, purposefulAction: { [weak self] in
                                     self?.deactivateSearch(animated: false)
                                 }, scrollToEndIfExists: scrollToEndIfExists, options: navigationAnimationOptions))
                             }
@@ -1579,7 +1594,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                             strongSelf.presentInGlobalOverlay(contextController)
                         }
                     } else {
-                        var dismissPreviewingImpl: (() -> Void)?
+                        var dismissPreviewingImpl: ((Bool) -> (() -> Void))?
                         let source: ContextContentSource
                         if let location = location {
                             source = .location(ChatListContextLocationContentSource(controller: strongSelf, location: location))
@@ -1587,8 +1602,8 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                             let chatController = strongSelf.context.sharedContext.makeChatController(context: strongSelf.context, chatLocation: .peer(id: peer.peerId), subject: nil, botStart: nil, mode: .standard(.previewing), params: nil)
                             chatController.customNavigationController = strongSelf.navigationController as? NavigationController
                             chatController.canReadHistory.set(false)
-                            chatController.dismissPreviewing = {
-                                dismissPreviewingImpl?()
+                            chatController.dismissPreviewing = { animateIn in
+                                return dismissPreviewingImpl?(animateIn) ?? {}
                             }
                             source = .controller(ContextControllerContentSourceImpl(controller: chatController, sourceNode: node, navigationController: strongSelf.navigationController as? NavigationController))
                         }
@@ -1596,8 +1611,20 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                         let contextController = ContextController(context: strongSelf.context, presentationData: strongSelf.presentationData, source: source, items: chatContextMenuItems(context: strongSelf.context, peerId: peer.peerId, promoInfo: promoInfo, source: .chatList(filter: strongSelf.chatListDisplayNode.mainContainerNode.currentItemNode.chatListFilter), chatListController: strongSelf, joined: joined) |> map { ContextController.Items(content: .list($0)) }, gesture: gesture)
                         strongSelf.presentInGlobalOverlay(contextController)
                         
-                        dismissPreviewingImpl = { [weak contextController] in
-                            contextController?.dismiss()
+                        dismissPreviewingImpl = { [weak self, weak contextController] animateIn in
+                            if let self, let contextController {
+                                if animateIn {
+                                    contextController.statusBar.statusBarStyle = .Ignore
+                                    contextController.animateDismissalIfNeeded()
+                                    self.present(contextController, in: .window(.root))
+                                    return {
+                                        contextController.dismissNow()
+                                    }
+                                } else {
+                                    contextController.dismiss()
+                                }
+                            }
+                            return {}
                         }
                     }
                 case let .forum(pinnedIndex, _, threadId, _, _):
@@ -2181,15 +2208,18 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                     return dalSettings
                 }
      
-                self.storySubscriptionsDisposable = (combineLatest(dalSettings, self.context.engine.messages.storySubscriptions(isHidden: self.location == .chatList(groupId: .archive)))
+                let isChildModeActive = (self.context.childModeManager?.isChildModeActive ?? .single(false))
+                    |> distinctUntilChanged
+                
+                self.storySubscriptionsDisposable = (combineLatest(dalSettings, self.context.engine.messages.storySubscriptions(isHidden: self.location == .chatList(groupId: .archive)), isChildModeActive)
                     |> deliverOnMainQueue
                 )
-                .startStrict(next: { [weak self] dalSettings, rawStorySubscriptions in
+                .startStrict(next: { [weak self] dalSettings, rawStorySubscriptions, isChildModeActive in
                     guard let self else { return }
                     
                     self.rawStorySubscriptions = rawStorySubscriptions
 
-                    if dalSettings.hideStories {
+                    if dalSettings.hideStories || isChildModeActive {
                         // Если истории должны быть скрыты, очищаем подписки
                         self.orderedStorySubscriptions = EngineStorySubscriptions(
                             accountItem: rawStorySubscriptions.accountItem,
@@ -2260,10 +2290,10 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                 })
                 
                 if case .chatList(.root) = self.location {
-                    self.storyArchiveSubscriptionsDisposable = (combineLatest(dalSettings, self.context.engine.messages.storySubscriptions(isHidden: true))
+                    self.storyArchiveSubscriptionsDisposable = (combineLatest(dalSettings, self.context.engine.messages.storySubscriptions(isHidden: true), isChildModeActive)
                         |> deliverOnMainQueue
                     )
-                        .startStrict(next: { [weak self] dalSettings, rawStoryArchiveSubscriptions in
+                        .startStrict(next: { [weak self] dalSettings, rawStoryArchiveSubscriptions, isChildModeActive in
                         guard let self else {
                             return
                         }
@@ -2272,7 +2302,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                         
                         let archiveStoryState: ChatListNodeState.StoryState?
 
-                        if dalSettings.hideStories || rawStoryArchiveSubscriptions.items.isEmpty {
+                        if dalSettings.hideStories || rawStoryArchiveSubscriptions.items.isEmpty || isChildModeActive {
                             archiveStoryState = nil
                         } else {
                             var unseenCount = 0
@@ -2673,13 +2703,13 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                         guard let strongSelf = self else {
                             return
                         }
-                        strongSelf.dismissAutoarchiveDisposable.set(strongSelf.context.engine.notices.dismissServerProvidedSuggestion(suggestion: .autoarchivePopular).startStrict())
+                        strongSelf.dismissAutoarchiveDisposable.set(strongSelf.context.engine.notices.dismissServerProvidedSuggestion(suggestion: ServerProvidedSuggestion.autoarchivePopular.id).startStrict())
                     }),
                     TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.ChatList_AutoarchiveSuggestion_OpenSettings, action: {
                         guard let strongSelf = self else {
                             return
                         }
-                        strongSelf.dismissAutoarchiveDisposable.set(strongSelf.context.engine.notices.dismissServerProvidedSuggestion(suggestion: .autoarchivePopular).startStrict())
+                        strongSelf.dismissAutoarchiveDisposable.set(strongSelf.context.engine.notices.dismissServerProvidedSuggestion(suggestion: ServerProvidedSuggestion.autoarchivePopular.id).startStrict())
                         strongSelf.push(strongSelf.context.sharedContext.makePrivacyAndSecurityController(context: strongSelf.context))
                     })
                 ], actionLayout: .vertical, parseMarkdown: true), in: .window(.root))
@@ -2978,7 +3008,13 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
     }
     
     private weak var storyCameraTooltip: TooltipScreen?
-    fileprivate func openStoryCamera(fromList: Bool) {
+    fileprivate func openStoryCamera(fromList: Bool, gesturePullOffset: CGFloat? = nil) {
+        guard !self.context.isFrozen else {
+            let controller = self.context.sharedContext.makeAccountFreezeInfoScreen(context: self.context)
+            self.push(controller)
+            return
+        }
+        
         var reachedCountLimit = false
         var premiumNeeded = false
         var hasActiveCall = false
@@ -3098,8 +3134,9 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                 if let (transitionView, _) = componentView.storyPeerListView()?.transitionViewForItem(peerId: self.context.account.peerId) {
                     cameraTransitionIn = StoryCameraTransitionIn(
                         sourceView: transitionView,
-                        sourceRect: transitionView.bounds,
-                        sourceCornerRadius: transitionView.bounds.height * 0.5
+                        sourceRect: gesturePullOffset.flatMap({ transitionView.bounds.offsetBy(dx: -$0, dy: 0) }) ?? transitionView.bounds,
+                        sourceCornerRadius: transitionView.bounds.height * 0.5,
+                        useFillAnimation: gesturePullOffset != nil
                     )
                 }
             } else {
@@ -3107,7 +3144,8 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                     cameraTransitionIn = StoryCameraTransitionIn(
                         sourceView: rightButtonView,
                         sourceRect: rightButtonView.bounds,
-                        sourceCornerRadius: rightButtonView.bounds.height * 0.5
+                        sourceCornerRadius: rightButtonView.bounds.height * 0.5,
+                        useFillAnimation: false
                     )
                 }
             }
@@ -3161,6 +3199,13 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
         }
         
         if case .chatList = self.location, let componentView = self.chatListHeaderView() {
+            componentView.storyComposeAction = { [weak self] offset in
+                guard let self else {
+                    return
+                }
+                self.openStoryCamera(fromList: true, gesturePullOffset: offset)
+            }
+            
             componentView.storyPeerAction = { [weak self] peer in
                 guard let self else {
                     return
@@ -4125,13 +4170,13 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             }
             
             if resetCurrentEntry {
-                strongSelf.selectTab(id: selectedEntryId)
+                strongSelf.selectTab(id: selectedEntryId, switchToChatsIfNeeded: false)
             }
         }))
     }
     
-    private func selectTab(id: ChatListFilterTabEntryId) {
-        if self.parent == nil {
+    private func selectTab(id: ChatListFilterTabEntryId, switchToChatsIfNeeded: Bool = true) {
+        if self.parent == nil, switchToChatsIfNeeded {
             if let navigationController = self.context.sharedContext.mainWindow?.viewController as? NavigationController {
                 for controller in navigationController.viewControllers {
                     if let controller = controller as? TabBarController {
@@ -4744,7 +4789,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                 
                 let displaySearchFilters = true
                                   
-                if let filterContainerNodeAndActivate = strongSelf.chatListDisplayNode.activateSearch(placeholderNode: searchContentNode.placeholderNode, displaySearchFilters: displaySearchFilters, hasDownloads: strongSelf.hasDownloads, initialFilter: filter, navigationController: strongSelf.navigationController as? NavigationController) {
+                if let filterContainerNodeAndActivate = strongSelf.chatListDisplayNode.activateSearch(placeholderNode: searchContentNode.placeholderNode, displaySearchFilters: displaySearchFilters, hasDownloads: strongSelf.hasDownloads, initialFilter: filter, navigationController: strongSelf.navigationController as? NavigationController, isChildModeActive: strongSelf.isChildModeActive) {
                     let (filterContainerNode, activate) = filterContainerNodeAndActivate
                     if displaySearchFilters {
                         let searchTabsNode = SparseNode()
@@ -4839,6 +4884,12 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
     }
     
     @objc fileprivate func composePressed() {
+        guard !self.context.isFrozen else {
+            let controller = self.context.sharedContext.makeAccountFreezeInfoScreen(context: self.context)
+            self.push(controller)
+            return
+        }
+        
         guard let navigationController = self.navigationController as? NavigationController else {
             return
         }
@@ -6278,7 +6329,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
     
     func openBirthdaySetup() {
         let context = self.context
-        let _ = context.engine.notices.dismissServerProvidedSuggestion(suggestion: .setupBirthday).startStandalone()
+        let _ = context.engine.notices.dismissServerProvidedSuggestion(suggestion: ServerProvidedSuggestion.setupBirthday.id).startStandalone()
                 
         let settingsPromise: Promise<AccountPrivacySettings?>
         if let rootController = self.context.sharedContext.mainWindow?.viewController as? TelegramRootControllerInterface, let current = rootController.getPrivacySettings() {
@@ -6317,7 +6368,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
         self.push(controller)
     }
     
-    func openAdInfo(_ node: ASDisplayNode) {
+    func openAdInfo(node: ASDisplayNode, adPeer: AdPeer) {
         let controller = self
         let referenceView = node.view
 
@@ -6325,7 +6376,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
         
         var actions: [ContextMenuItem] = []
-        //if adAttribute.sponsorInfo != nil || adAttribute.additionalInfo != nil {
+        if adPeer.sponsorInfo != nil || adPeer.additionalInfo != nil {
             actions.append(.action(ContextMenuActionItem(text: presentationData.strings.Chat_ContextMenu_AdSponsorInfo, textColor: .primary, icon: { theme in
                 return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Channels"), color: theme.actionSheet.primaryTextColor)
             }, iconSource: nil, action: { [weak self] c, _ in
@@ -6340,34 +6391,42 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                 
                 subItems.append(.separator)
                 
-//                if let sponsorInfo = adAttribute.sponsorInfo {
-//                    subItems.append(.action(ContextMenuActionItem(text: sponsorInfo, textColor: .primary, textLayout: .multiline, textFont: .custom(font: Font.regular(floor(presentationData.listsFontSize.baseDisplaySize * 0.8)), height: nil, verticalOffset: nil), badge: nil, icon: { theme in
-//                        return nil
-//                    }, iconSource: nil, action: { [weak self] c, _ in
-//                        c?.dismiss(completion: {
-//                            UIPasteboard.general.string = sponsorInfo
-//                            
-//                            self?.displayUndo(.copy(text: presentationData.strings.Chat_ContextMenu_AdSponsorInfoCopied))
-//                        })
-//                    })))
-//                }
-//                if let additionalInfo = adAttribute.additionalInfo {
-//                    subItems.append(.action(ContextMenuActionItem(text: additionalInfo, textColor: .primary, textLayout: .multiline, textFont: .custom(font: Font.regular(floor(presentationData.listsFontSize.baseDisplaySize * 0.8)), height: nil, verticalOffset: nil), badge: nil, icon: { theme in
-//                        return nil
-//                    }, iconSource: nil, action: { [weak self] c, _ in
-//                        c?.dismiss(completion: {
-//                            UIPasteboard.general.string = additionalInfo
-//                            
-//                            self?.displayUndo(.copy(text: presentationData.strings.Chat_ContextMenu_AdSponsorInfoCopied))
-//                        })
-//                    })))
-//                }
+                if let sponsorInfo = adPeer.sponsorInfo {
+                    subItems.append(.action(ContextMenuActionItem(text: sponsorInfo, textColor: .primary, textLayout: .multiline, textFont: .custom(font: Font.regular(floor(presentationData.listsFontSize.baseDisplaySize * 0.8)), height: nil, verticalOffset: nil), badge: nil, icon: { theme in
+                        return nil
+                    }, iconSource: nil, action: { [weak self] c, _ in
+                        c?.dismiss(completion: {
+                            UIPasteboard.general.string = sponsorInfo
+                            
+                            if let self {
+                                self.present(UndoOverlayController(presentationData: presentationData, content: .copy(text: presentationData.strings.Chat_ContextMenu_AdSponsorInfoCopied), elevatedLayout: false, action: { _ in
+                                    return true
+                                }), in: .current)
+                            }
+                        })
+                    })))
+                }
+                if let additionalInfo = adPeer.additionalInfo {
+                    subItems.append(.action(ContextMenuActionItem(text: additionalInfo, textColor: .primary, textLayout: .multiline, textFont: .custom(font: Font.regular(floor(presentationData.listsFontSize.baseDisplaySize * 0.8)), height: nil, verticalOffset: nil), badge: nil, icon: { theme in
+                        return nil
+                    }, iconSource: nil, action: { [weak self] c, _ in
+                        c?.dismiss(completion: {
+                            UIPasteboard.general.string = additionalInfo
+                            
+                            if let self {
+                                self.present(UndoOverlayController(presentationData: presentationData, content: .copy(text: presentationData.strings.Chat_ContextMenu_AdSponsorInfoCopied), elevatedLayout: false, action: { _ in
+                                    return true
+                                }), in: .current)
+                            }
+                        })
+                    })))
+                }
                 
                 c?.pushItems(items: .single(ContextController.Items(content: .list(subItems))))
             })))
-        //}
+        }
         
-        actions.append(.action(ContextMenuActionItem(text: "About These Ads", textColor: .primary, textLayout: .twoLinesMax, textFont: .custom(font: Font.regular(presentationData.listsFontSize.baseDisplaySize - 1.0), height: nil, verticalOffset: nil), badge: nil, icon: { theme in
+        actions.append(.action(ContextMenuActionItem(text: presentationData.strings.Chat_ContextMenu_AboutAd, textColor: .primary, textLayout: .twoLinesMax, textFont: .custom(font: Font.regular(presentationData.listsFontSize.baseDisplaySize - 1.0), height: nil, verticalOffset: nil), badge: nil, icon: { theme in
             return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Info"), color: theme.actionSheet.primaryTextColor)
         }, iconSource: nil, action: { [weak self] _, f in
             f(.default)
@@ -6376,70 +6435,69 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             }
         })))
         
-        if "".isEmpty {
-            actions.append(.action(ContextMenuActionItem(text: presentationData.strings.Chat_ContextMenu_ReportAd, textColor: .primary, textLayout: .twoLinesMax, textFont: .custom(font: Font.regular(presentationData.listsFontSize.baseDisplaySize - 1.0), height: nil, verticalOffset: nil), badge: nil, icon: { theme in
-                return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Restrict"), color: theme.actionSheet.primaryTextColor)
-            }, iconSource: nil, action: { [weak self] _, f in
-                f(.default)
-                
-                guard let navigationController = self?.navigationController as? NavigationController else {
+        actions.append(.action(ContextMenuActionItem(text: presentationData.strings.Chat_ContextMenu_ReportAd, textColor: .primary, textLayout: .twoLinesMax, textFont: .custom(font: Font.regular(presentationData.listsFontSize.baseDisplaySize - 1.0), height: nil, verticalOffset: nil), badge: nil, icon: { theme in
+            return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Restrict"), color: theme.actionSheet.primaryTextColor)
+        }, iconSource: nil, action: { [weak self] _, f in
+            f(.default)
+            
+            guard let navigationController = self?.navigationController as? NavigationController else {
+                return
+            }
+            
+            let _ = (context.engine.messages.reportAdMessage(opaqueId: adPeer.opaqueId, option: nil)
+                     |> deliverOnMainQueue).start(next: { [weak navigationController] result in
+                if case let .options(title, options) = result {
+                    Queue.mainQueue().after(0.2) {
+                        navigationController?.pushViewController(
+                            AdsReportScreen(
+                                context: context,
+                                opaqueId: adPeer.opaqueId,
+                                title: title,
+                                options: options,
+                                completed: {
+                                }
+                            )
+                        )
+                    }
+                }
+            })
+        })))
+        
+        actions.append(.separator)
+        
+        actions.append(.action(ContextMenuActionItem(text: presentationData.strings.Chat_ContextMenu_RemoveAd, textColor: .primary, textLayout: .twoLinesMax, textFont: .custom(font: Font.regular(presentationData.listsFontSize.baseDisplaySize - 1.0), height: nil, verticalOffset: nil), badge: nil, icon: { theme in
+            return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Clear"), color: theme.actionSheet.primaryTextColor)
+        }, iconSource: nil, action: { [weak self] c, _ in
+            guard let navigationController = self?.navigationController as? NavigationController else {
+                return
+            }
+            c?.dismiss(completion: { [weak self] in
+                guard let self else {
                     return
                 }
-                let _ = navigationController
-                //.dismiss(animated: true)
-                
-                //                let _ = (context.engine.messages.reportAdMessage(peerId: message.id.peerId, opaqueId: adAttribute.opaqueId, option: nil)
-                //                |> deliverOnMainQueue).start(next: { [weak navigationController] result in
-                //                    if case let .options(title, options) = result {
-                //                        Queue.mainQueue().after(0.2) {
-                //                            navigationController?.pushViewController(
-                //                                AdsReportScreen(
-                //                                    context: context,
-                //                                    peerId: message.id.peerId,
-                //                                    opaqueId: adAttribute.opaqueId,
-                //                                    title: title,
-                //                                    options: options,
-                //                                    completed: {
-                //                                        removeAd?(adAttribute.opaqueId)
-                //                                    }
-                //                                )
-                //                            )
-                //                        }
-                //                    }
-                //                })
-            })))
-            
-            actions.append(.separator)
-            
-            actions.append(.action(ContextMenuActionItem(text: presentationData.strings.Chat_ContextMenu_RemoveAd, textColor: .primary, textLayout: .twoLinesMax, textFont: .custom(font: Font.regular(presentationData.listsFontSize.baseDisplaySize - 1.0), height: nil, verticalOffset: nil), badge: nil, icon: { theme in
-                return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Clear"), color: theme.actionSheet.primaryTextColor)
-            }, iconSource: nil, action: { [weak self] c, _ in
-                c?.dismiss(completion: {
-                    let _ = self
-//                    if context.isPremium {
-//                        removeAd?(adAttribute.opaqueId)
-//                    } else {
-//                        self?.presentNoAdsDemo()
-//                    }
-                })
-            })))
-        }
-//        } else {
-//            if !actions.isEmpty {
-//                actions.append(.separator)
-//            }
-//            actions.append(.action(ContextMenuActionItem(text: presentationData.strings.SponsoredMessageMenu_Hide, textColor: .primary, textLayout: .twoLinesMax, textFont: .custom(font: Font.regular(presentationData.listsFontSize.baseDisplaySize - 1.0), height: nil, verticalOffset: nil), badge: nil, icon: { theme in
-//                return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Clear"), color: theme.actionSheet.primaryTextColor)
-//            }, iconSource: nil, action: { [weak self] c, _ in
-//                c?.dismiss(completion: {
-//                    if context.isPremium {
-//                        removeAd?(adAttribute.opaqueId)
-//                    } else {
-//                        self?.presentNoAdsDemo()
-//                    }
-//                })
-//            })))
-//        }
+                if context.isPremium {
+                    self.present(UndoOverlayController(presentationData: self.presentationData, content: .actionSucceeded(title: nil, text: self.presentationData.strings.ReportAd_Hidden, cancel: nil, destructive: false), elevatedLayout: false, action: { _ in
+                        return true
+                    }), in: .current)
+                    
+                    let _ = self.context.engine.accountData.updateAdMessagesEnabled(enabled: false).start()
+                    
+                    if let searchContentNode = self.chatListDisplayNode.searchDisplayController?.contentNode as? ChatListSearchContainerNode {
+                        searchContentNode.removeAds()
+                    }
+                } else {
+                    var replaceImpl: ((ViewController) -> Void)?
+                    let demoController = context.sharedContext.makePremiumDemoController(context: context, subject: .noAds, forceDark: false, action: {
+                        let controller = context.sharedContext.makePremiumIntroController(context: context, source: .ads, forceDark: false, dismissed: nil)
+                        replaceImpl?(controller)
+                    }, dismissed: nil)
+                    replaceImpl = { [weak demoController] c in
+                        demoController?.replace(with: c)
+                    }
+                    navigationController.pushViewController(demoController)
+                }
+            })
+        })))
         
         let contextController = ContextController(presentationData: presentationData, source: .reference(AdsInfoContextReferenceContentSource(controller: controller, sourceView: referenceView, insets: .zero, contentInsets: .zero)), items: .single(ContextController.Items(content: .list(actions))), gesture: nil)
         controller.presentInGlobalOverlay(contextController)
@@ -6496,6 +6554,9 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
     }
     
     var isStoryPostingAvailable: Bool {
+        guard !self.context.isFrozen else {
+            return false
+        }
         switch self.storyPostingAvailability {
         case .enabled:
             return true
@@ -6662,6 +6723,7 @@ private final class ChatListLocationContext {
         self.context = context
         self.location = location
         self.parentController = parentController
+        let childModeStateSignal = context.childModeManager?.isChildModeActive ?? .single(false)
         
         let hasProxy = context.sharedContext.accountManager.sharedData(keys: [SharedDataKeys.proxySettings])
         |> map { sharedData -> (Bool, Bool) in
@@ -6752,8 +6814,9 @@ private final class ChatListLocationContext {
                     parentController.updatedPresentationData.1,
                     storyPostingAvailable,
                     storyPostingHidden,
-                    showRecentChats
-                ).startStrict(next: { [weak self] networkState, proxy, passcode, stateAndFilterId, isReorderingTabs, peerStatus, presentationData, storyPostingAvailable, storyPostingHidden, showRecentChats in
+                    showRecentChats,
+                    childModeStateSignal
+                ).startStrict(next: { [weak self] networkState, proxy, passcode, stateAndFilterId, isReorderingTabs, peerStatus, presentationData, storyPostingAvailable, storyPostingHidden, showRecentChats, isChildModeActive in
                     guard let self else {
                         return
                     }
@@ -6768,7 +6831,8 @@ private final class ChatListLocationContext {
                         presentationData: presentationData,
                         storyPostingAvailable: storyPostingAvailable,
                         storyPostingHidden: storyPostingHidden,
-                        showRecentChats: showRecentChats
+                        showRecentChats: showRecentChats,
+                        isChildModeActive: isChildModeActive
                     )
                 })
             } else {
@@ -6996,7 +7060,8 @@ private final class ChatListLocationContext {
         presentationData: PresentationData,
         storyPostingAvailable: Bool,
         storyPostingHidden: Bool,
-        showRecentChats: Bool
+        showRecentChats: Bool,
+        isChildModeActive: Bool
     ) {
         let defaultTitle: String
         switch location {
@@ -7157,7 +7222,7 @@ private final class ChatListLocationContext {
                 titleContent = NetworkStatusTitle(text: defaultTitle, activity: false, hasProxy: isRoot && hasProxy, connectsViaProxy: connectsViaProxy, isPasscodeSet: isRoot && isPasscodeSet, isManuallyLocked: isRoot && isManuallyLocked, peerStatus: peerStatus)
             }
             
-            if titleContent.hasProxy {
+            if titleContent.hasProxy || isChildModeActive {
                 let proxyStatus: ChatTitleProxyStatus
                 if titleContent.connectsViaProxy {
                     proxyStatus = titleContent.activity ? .connecting : .connected

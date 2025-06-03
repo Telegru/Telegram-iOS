@@ -6,7 +6,7 @@ import TelegramUIPreferences
 import BuildConfig
 import MtProtoKit
 import TelegramApi
-import DClient
+import DNetwork
 
 enum ConnectionError {
     case firstConnectError
@@ -56,10 +56,7 @@ public final class DConnectionChecker {
     public func checkAndEnableProxyIfNeeded(network: Network, sharedContext: SharedAccountContext) {
         statusPromise.set(.single(.checking))
         
-        let firstCheck: Signal<Bool, NoError> = network.request(Api.functions.help.getNearestDc())
-        |> map { _ in true }
-        |> `catch` { _ in .single(false) }
-        |> timeout(connectionTimeout, queue: Queue.concurrentDefaultQueue(), alternate: .single(false))
+        let firstCheck: Signal<Bool, NoError> = self.checkConnection(network: network)
         
         connectionCheckDisposable.set((firstCheck
                                        |> mapToSignal { [weak self] ok -> Signal<Bool, NoError> in
@@ -86,6 +83,37 @@ public final class DConnectionChecker {
             }
         })
         .start())
+    }
+    
+    private func checkConnection(network: Network) -> Signal<Bool, NoError> {
+        return network.connectionStatus
+            |> mapToSignal { status -> Signal<Bool, NoError> in
+                switch status {
+                case .online:
+                    return network.request(Api.functions.help.getConfig())
+                        |> map { _ -> Bool in
+                            return true
+                        }
+                        |> `catch` { error -> Signal<Bool, NoError> in
+                            return .single(false)
+                        }
+                        |> take(1)
+                
+                case .connecting(_, let proxyHasConnectionIssues):
+                    if proxyHasConnectionIssues {
+                        return .single(false)
+                    }
+                    return .never()
+                
+                case .waitingForNetwork:
+                    return .never()
+                
+                case .updating:
+                    return .never()
+                }
+            }
+            |> take(1)
+            |> timeout(self.connectionTimeout, queue: Queue.concurrentDefaultQueue(), alternate: .single(false))
     }
     
     private func attemptProxy(
@@ -123,11 +151,10 @@ public final class DConnectionChecker {
             return new
         }
         |> mapToSignal { _ in
-
             network.context.updateApiEnvironment { environment in
                 let current = environment?.socksProxySettings
                 let updateNetwork: Bool
-                let updated =  settings.mtProxySettings
+                let updated = settings.mtProxySettings
                 if let current = current {
                     updateNetwork = !current.isEqual(updated)
                 } else {
@@ -145,11 +172,11 @@ public final class DConnectionChecker {
             |> take(2)
             |> last
         }
-        |> mapToSignal { _ in
-            network.request(Api.functions.help.getNearestDc())
-            |> map { _ in true }
-            |> `catch` { _ in .single(false) }
-            |> timeout(self.connectionTimeout, queue: Queue.concurrentDefaultQueue(), alternate: .single(false))
+        |> mapToSignal { [weak self] _ in
+            guard let self = self else {
+                return .single(false)
+            }
+            return self.checkConnection(network: network)
             |> deliverOnMainQueue
         }
         |> mapToSignal { [weak self] success -> Signal<Bool, NoError> in

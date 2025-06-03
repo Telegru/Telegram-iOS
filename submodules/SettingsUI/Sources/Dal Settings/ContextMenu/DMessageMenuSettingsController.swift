@@ -18,18 +18,27 @@ private final class DMessageMenuSettingsArguments {
     let context: AccountContext
     let updateSaveSound: (Bool) -> Void
     let updateReply: (Bool) -> Void
+    let updateReplyPrivately: (Bool) -> Void
     let updateReport: (Bool) -> Void
+    let updateForwardWithoutName: (Bool) -> Void
+    let updateSaved: (Bool) -> Void
     
     init(
         context: AccountContext,
         updateSaveSound: @escaping (Bool) -> Void,
         updateReply: @escaping (Bool) -> Void,
-        updateReport: @escaping (Bool) -> Void
+        updateReport: @escaping (Bool) -> Void,
+        updateReplyPrivately: @escaping (Bool) -> Void,
+        updateForwardWithoutName: @escaping (Bool) -> Void,
+        updateSaved: @escaping (Bool) -> Void
     ) {
         self.context = context
         self.updateSaveSound = updateSaveSound
         self.updateReply = updateReply
+        self.updateReplyPrivately = updateReplyPrivately
         self.updateReport = updateReport
+        self.updateForwardWithoutName = updateForwardWithoutName
+        self.updateSaved = updateSaved
     }
 }
 
@@ -40,7 +49,10 @@ private enum DMessageMenuSettingsSection: Int32, CaseIterable {
 private enum DMessageMenuSettingsEntryTag: ItemListItemTag {
     case saveSound
     case reply
+    case replyPrivately
     case report
+    case forwardWithoutName
+    case saved
     
     func isEqual(to other: ItemListItemTag) -> Bool {
         if let other = other as? DMessageMenuSettingsEntryTag, self == other {
@@ -54,12 +66,15 @@ private enum DMessageMenuSettingsEntryTag: ItemListItemTag {
 private enum DMessageMenuSettingsEntry: ItemListNodeEntry {
     case saveSoundItem(PresentationTheme, title: String, value: Bool)
     case replyItem(PresentationTheme, title: String, value: Bool)
+    case replyPrivatelyItem(PresentationTheme, title: String, text: String, value: Bool)
     case reportItem(PresentationTheme, title: String, text: String, value: Bool)
+    case forwardWithoutName(PresentationTheme, title: String, value: Bool)
+    case savedItem(PresentationTheme, title: String, value: Bool)
     case footer(PresentationTheme, title: String)
     
     var section: ItemListSectionId {
         switch self {
-        case .saveSoundItem, .replyItem, .reportItem, .footer:
+        case .saveSoundItem, .replyItem, .reportItem, .forwardWithoutName, .savedItem, .replyPrivatelyItem, .footer:
             return DMessageMenuSettingsSection.options.rawValue
         }
     }
@@ -70,10 +85,16 @@ private enum DMessageMenuSettingsEntry: ItemListNodeEntry {
             return 0
         case .replyItem:
             return 1
-        case .reportItem:
+        case .replyPrivatelyItem:
             return 2
-        case .footer:
+        case .forwardWithoutName:
             return 3
+        case .savedItem:
+            return 4
+        case .reportItem:
+            return 5
+        case .footer:
+            return 1000
         }
     }
     
@@ -83,8 +104,14 @@ private enum DMessageMenuSettingsEntry: ItemListNodeEntry {
             return DMessageMenuSettingsEntryTag.saveSound
         case .replyItem:
             return DMessageMenuSettingsEntryTag.reply
+        case .replyPrivatelyItem:
+            return DMessageMenuSettingsEntryTag.replyPrivately
         case .reportItem:
             return DMessageMenuSettingsEntryTag.report
+        case .forwardWithoutName:
+            return DMessageMenuSettingsEntryTag.forwardWithoutName
+        case .savedItem:
+            return DMessageMenuSettingsEntryTag.saved
         case .footer:
             return nil
         }
@@ -112,11 +139,42 @@ private enum DMessageMenuSettingsEntry: ItemListNodeEntry {
                 return false
             }
             
+        case let .replyPrivatelyItem(lhsTheme, lhsTitle, lhsText, lhsValue):
+            if case let .replyPrivatelyItem(rhsTheme, rhsTitle, rhsText, rhsValue) = rhs,
+               lhsTheme === rhsTheme,
+               lhsTitle == rhsTitle,
+               lhsText == rhsText,
+               lhsValue == rhsValue {
+                return true
+            } else {
+                return false
+            }
+            
         case let .reportItem(lhsTheme, lhsTitle, lhsText, lhsValue):
             if case let .reportItem(rhsTheme, rhsTitle, rhsText, rhsValue) = rhs,
                lhsTheme === rhsTheme,
                lhsTitle == rhsTitle,
                lhsText == rhsText,
+               lhsValue == rhsValue {
+                return true
+            } else {
+                return false
+            }
+            
+        case let .forwardWithoutName(lhsTheme, lhsTitle, lhsValue):
+            if case let .forwardWithoutName(rhsTheme, rhsTitle, rhsValue) = rhs,
+               lhsTheme === rhsTheme,
+               lhsTitle == rhsTitle,
+               lhsValue == rhsValue {
+                return true
+            } else {
+                return false
+            }
+
+        case let .savedItem(lhsTheme, lhsTitle, lhsValue):
+            if case let .savedItem(rhsTheme, rhsTitle, rhsValue) = rhs,
+               lhsTheme === rhsTheme,
+               lhsTitle == rhsTitle,
                lhsValue == rhsValue {
                 return true
             } else {
@@ -173,6 +231,21 @@ private enum DMessageMenuSettingsEntry: ItemListNodeEntry {
                 tag: self.tag
             )
             
+        case let .replyPrivatelyItem(_, title, text, value):
+            return ItemListSwitchItem(
+                presentationData: presentationData,
+                icon: generateTintedImage(image: TPIconManager.shared.icon(.contextMenuReplyPrivately), color: presentationData.theme.contextMenu.primaryColor),
+                title: title,
+                text: text,
+                value: value,
+                sectionId: self.section,
+                style: .blocks,
+                updated: { updatedValue in
+                    arguments.updateReplyPrivately(updatedValue)
+                },
+                tag: self.tag
+            )
+            
         case let .reportItem(_, title, text, value):
             return ItemListSwitchItem(
                 presentationData: presentationData,
@@ -184,6 +257,34 @@ private enum DMessageMenuSettingsEntry: ItemListNodeEntry {
                 style: .blocks,
                 updated: { updatedValue in
                     arguments.updateReport(updatedValue)
+                },
+                tag: self.tag
+            )
+            
+        case let .forwardWithoutName(_, title, value):
+            return ItemListSwitchItem(
+                presentationData: presentationData,
+                icon: generateTintedImage(image: TPIconManager.shared.icon(.contextMenuForwardWithoutName), color: presentationData.theme.contextMenu.primaryColor),
+                title: title,
+                value: value,
+                sectionId: self.section,
+                style: .blocks,
+                updated: { updatedValue in
+                    arguments.updateForwardWithoutName(updatedValue)
+                },
+                tag: self.tag
+            )
+
+        case let .savedItem(_, title, value):
+            return ItemListSwitchItem(
+                presentationData: presentationData,
+                icon: generateTintedImage(image: TPIconManager.shared.icon(.contextMenuSaved), color: presentationData.theme.contextMenu.primaryColor),
+                title: title,
+                value: value,
+                sectionId: self.section,
+                style: .blocks,
+                updated: { updatedValue in
+                    arguments.updateSaved(updatedValue)
                 },
                 tag: self.tag
             )
@@ -218,6 +319,31 @@ private func dMessageMenuSettingsEntries(
             presentationData.theme,
             title: "DahlSettings.MessageMenu.Reply".tp_loc(lang: lang),
             value: messageMenuSettings.reply
+        )
+    )
+    
+    entries.append(
+        .replyPrivatelyItem(
+            presentationData.theme,
+            title: "DahlSettings.MessageMenu.ReplyPrivately".tp_loc(lang: lang),
+            text: "DahlSettings.MessageMenu.ReplyPrivatelyGroups".tp_loc(lang: lang),
+            value: messageMenuSettings.replyPrivately
+        )
+    )
+    
+    entries.append(
+        .forwardWithoutName(
+            presentationData.theme,
+            title: "DahlSettings.MessageMenu.ForwardWithoutName".tp_loc(lang: lang),
+            value: messageMenuSettings.forwardWithoutName
+        )
+    )
+
+    entries.append(
+        .savedItem(
+            presentationData.theme,
+            title: "DahlSettings.MessageMenu.Saved".tp_loc(lang: lang),
+            value: messageMenuSettings.saved
         )
     )
     
@@ -276,6 +402,42 @@ public func dMessageMenuSettingsController(
                     var updatedSettings = settings
                     var updatedMessageMenuSettings = settings.messageMenuSettings
                     updatedMessageMenuSettings.report = value
+                    updatedSettings.messageMenuSettings = updatedMessageMenuSettings
+                    return updatedSettings
+                }
+            ).start()
+        },
+        updateReplyPrivately: { value in
+            let _ = updateDalSettingsInteractively(
+                accountManager: context.sharedContext.accountManager,
+                { settings in
+                    var updatedSettings = settings
+                    var updatedMessageMenuSettings = settings.messageMenuSettings
+                    updatedMessageMenuSettings.replyPrivately = value
+                    updatedSettings.messageMenuSettings = updatedMessageMenuSettings
+                    return updatedSettings
+                }
+            ).start()
+        },
+        updateForwardWithoutName: { value in
+            let _ = updateDalSettingsInteractively(
+                accountManager: context.sharedContext.accountManager,
+                { settings in
+                    var updatedSettings = settings
+                    var updatedMessageMenuSettings = settings.messageMenuSettings
+                    updatedMessageMenuSettings.forwardWithoutName = value
+                    updatedSettings.messageMenuSettings = updatedMessageMenuSettings
+                    return updatedSettings
+                }
+            ).start()
+        },
+        updateSaved: { value in
+            let _ = updateDalSettingsInteractively(
+                accountManager: context.sharedContext.accountManager,
+                { settings in
+                    var updatedSettings = settings
+                    var updatedMessageMenuSettings = settings.messageMenuSettings
+                    updatedMessageMenuSettings.saved = value
                     updatedSettings.messageMenuSettings = updatedMessageMenuSettings
                     return updatedSettings
                 }

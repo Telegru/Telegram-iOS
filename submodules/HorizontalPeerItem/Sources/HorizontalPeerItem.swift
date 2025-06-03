@@ -39,6 +39,7 @@ public final class HorizontalPeerItem: ListViewItem {
     let action: (EnginePeer) -> Void
     let contextAction: ((EnginePeer, ASDisplayNode, ContextGesture?, CGPoint?) -> Void)?
     let isPeerSelected: (EnginePeer.Id) -> Bool
+    let isPeerBlurred: (EnginePeer.Id) -> Bool
     let customWidth: CGFloat?
     let presence: EnginePeer.Presence?
     let unreadBadge: (Int32, Bool)?
@@ -61,6 +62,7 @@ public final class HorizontalPeerItem: ListViewItem {
         action: @escaping (EnginePeer) -> Void,
         contextAction: ((EnginePeer, ASDisplayNode, ContextGesture?, CGPoint?) -> Void)?,
         isPeerSelected: @escaping (EnginePeer.Id) -> Bool,
+        isPeerBlurred: @escaping (EnginePeer.Id) -> Bool,
         customWidth: CGFloat?
     ) {
         self.theme = theme
@@ -78,6 +80,7 @@ public final class HorizontalPeerItem: ListViewItem {
         self.action = action
         self.contextAction = contextAction
         self.isPeerSelected = isPeerSelected
+        self.isPeerBlurred = isPeerBlurred
         self.customWidth = customWidth
         self.presence = presence
         self.unreadBadge = unreadBadge
@@ -179,7 +182,8 @@ public final class HorizontalPeerItemNode: ListViewItemNode {
             }
             let currentBadgeBackgroundImage: UIImage?
             let badgeAttributedString: NSAttributedString
-            if let unreadBadge = item.unreadBadge {
+            let blurred = item.isPeerBlurred(item.peer.id)
+            if let unreadBadge = item.unreadBadge, !blurred {
                 let badgeTextColor: UIColor
                 let (unreadCount, isMuted) = unreadBadge
                 if isMuted {
@@ -202,7 +206,7 @@ public final class HorizontalPeerItemNode: ListViewItemNode {
             if case let .user(peer) = item.peer, let presence = item.presence, !item.peer.isService, !peer.flags.contains(.isSupport) {
                 let relativeStatus = relativeUserPresenceStatus(presence, relativeTo: Int32(timestamp))
                 if case .online = relativeStatus {
-                    online = true
+                    online = !blurred
                 }
             }
             
@@ -228,7 +232,7 @@ public final class HorizontalPeerItemNode: ListViewItemNode {
                     } else {
                         strongSelf.peerNode.compact = false
                     }
-                    strongSelf.peerNode.setup(accountPeerId: item.accountPeerId, postbox: item.postbox, network: item.network, energyUsageSettings: item.energyUsageSettings, contentSettings: item.contentSettings, animationCache: item.animationCache, animationRenderer: item.animationRenderer, resolveInlineStickers: item.resolveInlineStickers, theme: item.theme, strings: item.strings, peer: EngineRenderedPeer(peer: item.peer), requiresPremiumForMessaging: false, numberOfLines: 1, synchronousLoad: synchronousLoads)
+                    strongSelf.peerNode.setup(accountPeerId: item.accountPeerId, postbox: item.postbox, network: item.network, energyUsageSettings: item.energyUsageSettings, contentSettings: item.contentSettings, animationCache: item.animationCache, animationRenderer: item.animationRenderer, resolveInlineStickers: item.resolveInlineStickers, theme: item.theme, strings: item.strings, peer: EngineRenderedPeer(peer: item.peer), requiresPremiumForMessaging: false, numberOfLines: 1, synchronousLoad: synchronousLoads, blurred: blurred)
                     strongSelf.peerNode.frame = CGRect(origin: CGPoint(), size: itemLayout.size)
                     strongSelf.peerNode.updateSelection(selected: item.isPeerSelected(item.peer.id), animated: false)
                     

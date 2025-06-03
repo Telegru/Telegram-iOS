@@ -24,6 +24,8 @@ private struct ChatListRecentChatsEntry: Comparable, Identifiable {
     var stableId: EnginePeer.Id {
         return self.peer.id
     }
+    let blurred: Bool
+
     
     static func ==(lhs: ChatListRecentChatsEntry, rhs: ChatListRecentChatsEntry) -> Bool {
         if lhs.index != rhs.index {
@@ -68,7 +70,8 @@ private struct ChatListRecentChatsEntry: Comparable, Identifiable {
                 peerContextAction(peer, node, gesture, location)
             },
             isPeerSelected: isPeerSelected,
-            customWidth: 56.0
+            customWidth: 56.0,
+            blurred: self.blurred
         )
     }
 }
@@ -165,6 +168,8 @@ public final class ChatListRecentChatsNode: ASDisplayNode {
         
         let postbox = context.account.postbox
         
+        let whitelist: Signal<(Bool, [EnginePeer.Id]), NoError> = (context.childModeManager?.whitelist() ?? .single((false, [])))
+        
         let recent: Signal<([EnginePeer], [EnginePeer.Id: (Int32, Bool)], [EnginePeer.Id : EnginePeer.Presence]), NoError> = _internal_recentChats(postbox: postbox)
         |> mapToSignal { peers in
             return combineLatest(
@@ -224,7 +229,7 @@ public final class ChatListRecentChatsNode: ASDisplayNode {
         
         let previous: Atomic<[ChatListRecentChatsEntry]> = Atomic(value: [])
         let firstTime:Atomic<Bool> = Atomic(value: true)
-        peersDisposable.add((combineLatest(queue: .mainQueue(), recent,  self.themePromise.get()) |> deliverOnMainQueue).startStrict(next: { [weak self] peers, theme in
+        peersDisposable.add((combineLatest(queue: .mainQueue(), recent, whitelist,  self.themePromise.get()) |> deliverOnMainQueue).startStrict(next: { [weak self] peers, whitelist, theme in
             if let strongSelf = self {
                 var entries: [ChatListRecentChatsEntry] = []
                 for peer in peers.0 {
@@ -234,7 +239,8 @@ public final class ChatListRecentChatsNode: ASDisplayNode {
                             peer: peer,
                             presence: peers.2[peer.id],
                             unreadBadge: peers.1[peer.id],
-                            theme: theme
+                            theme: theme,
+                            blurred: whitelist.0 && !whitelist.1.contains(peer.id)
                         )
                     )
                 }

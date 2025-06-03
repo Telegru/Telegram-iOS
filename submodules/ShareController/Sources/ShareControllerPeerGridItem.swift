@@ -248,7 +248,8 @@ final class ShareControllerPeerGridItemNode: GridItemNode {
                     iconId: threadData?.info.icon,
                     iconColor: threadData?.info.iconColor ?? 0,
                     online: isOnline,
-                    synchronousLoad: synchronousLoad
+                    synchronousLoad: synchronousLoad,
+                    blurred: false
                 )
                 if let shimmerNode = self.placeholderNode {
                     self.placeholderNode = nil

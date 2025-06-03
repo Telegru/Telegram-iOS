@@ -228,7 +228,7 @@ private final class SemanticStatusNodeAppearanceDrawingState {
     
     func drawBackground(context: CGContext, size: CGSize) {
         let bounds = CGRect(origin: CGPoint(), size: size)
-                
+        
         context.setBlendMode(.normal)
         if let backgroundImage = self.backgroundImage?.cgImage {
             context.saveGState()
@@ -400,14 +400,18 @@ public final class SemanticStatusNode: ASControlNode {
         
         super.init()
         
-        self.layer.addSublayer(self.hierarchyTrackingLayer)
-        
         self.isOpaque = false
         self.displaysAsynchronously = false
         
         if let image {
             self.setBackgroundImage(image, size: CGSize(width: 44.0, height: 44.0))
         }
+    }
+    
+    public override func didLoad() {
+        super.didLoad()
+        
+        self.layer.addSublayer(self.hierarchyTrackingLayer)
     }
     
     deinit {
@@ -493,7 +497,7 @@ public final class SemanticStatusNode: ASControlNode {
             let timestamp = CACurrentMediaTime()
             var t = CGFloat((timestamp - transitionContext.startTime) / transitionContext.duration)
             t = min(1.0, max(0.0, t))
-
+            
             if let _ = transitionContext.previousStateContext {
                 transitionFraction = t
             }
@@ -535,7 +539,7 @@ public final class SemanticStatusNode: ASControlNode {
             transitionDrawingState.draw(context: context, size: bounds.size, foregroundColor: parameters.appearanceState.effectiveForegroundColor)
         }
         parameters.drawingState.draw(context: context, size: bounds.size, foregroundColor: parameters.appearanceState.effectiveForegroundColor)
-
+        
         if let transitionAppearanceState = parameters.transitionState?.appearanceState {
             transitionAppearanceState.drawForeground(context: context, size: bounds.size)
         }

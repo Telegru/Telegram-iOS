@@ -12,32 +12,36 @@ import ItemListUI
 
 public final class ListMessageItemInteraction {
     public let openMessage: (Message, ChatControllerInteractionOpenMessageMode) -> Bool
-    public let openMessageContextMenu: (Message, Bool, ASDisplayNode, CGRect, UIGestureRecognizer?) -> Void
+    public let openMessageContextMenu: (Message, Bool, ASDisplayNode, CGRect, UIGestureRecognizer?, Bool) -> Void
     public let toggleMessagesSelection: ([MessageId], Bool) -> Void
     let openUrl: (String, Bool, Bool?, Message?) -> Void
     let openInstantPage: (Message, ChatMessageItemAssociatedData?) -> Void
+    let openRequiredPermissionDialog: (EnginePeer.Id, Bool, Message) -> Void
+
     let longTap: (ChatControllerInteractionLongTapAction, Message?) -> Void
     let getHiddenMedia: () -> [MessageId: [Media]]
     
     public var searchTextHighightState: String?
     public var preferredStoryHighQuality: Bool = false
     
-    public init(openMessage: @escaping (Message, ChatControllerInteractionOpenMessageMode) -> Bool, openMessageContextMenu: @escaping (Message, Bool, ASDisplayNode, CGRect, UIGestureRecognizer?) -> Void, toggleMessagesSelection: @escaping ([MessageId], Bool) -> Void, openUrl: @escaping (String, Bool, Bool?, Message?) -> Void, openInstantPage: @escaping (Message, ChatMessageItemAssociatedData?) -> Void, longTap: @escaping (ChatControllerInteractionLongTapAction, Message?) -> Void, getHiddenMedia: @escaping () -> [MessageId: [Media]]) {
+    public init(openMessage: @escaping (Message, ChatControllerInteractionOpenMessageMode) -> Bool, openMessageContextMenu: @escaping (Message, Bool, ASDisplayNode, CGRect, UIGestureRecognizer?, Bool) -> Void, toggleMessagesSelection: @escaping ([MessageId], Bool) -> Void, openUrl: @escaping (String, Bool, Bool?, Message?) -> Void, openInstantPage: @escaping (Message, ChatMessageItemAssociatedData?) -> Void, openRequiredPermissionDialog: @escaping (EnginePeer.Id, Bool, Message) -> Void, longTap: @escaping (ChatControllerInteractionLongTapAction, Message?) -> Void, getHiddenMedia: @escaping () -> [MessageId: [Media]]) {
         self.openMessage = openMessage
         self.openMessageContextMenu = openMessageContextMenu
         self.toggleMessagesSelection = toggleMessagesSelection
         self.openUrl = openUrl
         self.openInstantPage = openInstantPage
         self.longTap = longTap
+        self.openRequiredPermissionDialog = openRequiredPermissionDialog
         self.getHiddenMedia = getHiddenMedia
     }
     
     public static var `default`: ListMessageItemInteraction = ListMessageItemInteraction(openMessage: { _, _ in
         return false
-    }, openMessageContextMenu: { _, _, _, _, _ in
+    }, openMessageContextMenu: { _, _, _, _, _, _ in
     }, toggleMessagesSelection: { _, _ in
     }, openUrl: { _, _, _, _ in
     }, openInstantPage: { _, _ in
+    }, openRequiredPermissionDialog: { _, _, _ in
     }, longTap: { _, _ in
     }, getHiddenMedia: { () -> [MessageId : [Media]] in
         return [:]
@@ -60,10 +64,11 @@ public final class ListMessageItem: ListViewItem {
     let style: ItemListStyle
     
     let header: ListViewItemHeader?
-    
+
     public let selectable: Bool = true
-    
-    public init(presentationData: ChatPresentationData, context: AccountContext, chatLocation: ChatLocation, interaction: ListMessageItemInteraction, message: Message?, translateToLanguage: String? = nil, selection: ChatHistoryMessageSelection, displayHeader: Bool, customHeader: ListViewItemHeader? = nil, hintIsLink: Bool = false, isGlobalSearchResult: Bool = false, isDownloadList: Bool = false, displayFileInfo: Bool = true, displayBackground: Bool = false, style: ItemListStyle = .plain) {
+    public let blurred: Bool
+
+    public init(presentationData: ChatPresentationData, context: AccountContext, chatLocation: ChatLocation, interaction: ListMessageItemInteraction, message: Message?, translateToLanguage: String? = nil, selection: ChatHistoryMessageSelection, displayHeader: Bool, customHeader: ListViewItemHeader? = nil, hintIsLink: Bool = false, isGlobalSearchResult: Bool = false, isDownloadList: Bool = false, displayFileInfo: Bool = true, displayBackground: Bool = false, style: ItemListStyle = .plain, blurred: Bool = false) {
         self.presentationData = presentationData
         self.context = context
         self.chatLocation = chatLocation
@@ -84,6 +89,7 @@ public final class ListMessageItem: ListViewItem {
         self.displayFileInfo = displayFileInfo
         self.displayBackground = displayBackground
         self.style = style
+        self.blurred = blurred
     }
     
     public func nodeConfiguredForParams(async: @escaping (@escaping () -> Void) -> Void, params: ListViewItemLayoutParams, synchronousLoads: Bool, previousItem: ListViewItem?, nextItem: ListViewItem?, completion: @escaping (ListViewItemNode, @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)) -> Void) {
@@ -166,6 +172,11 @@ public final class ListMessageItem: ListViewItem {
         listView.clearHighlightAnimated(true)
         
         guard let message = self.message else {
+            return
+        }
+        
+        guard !blurred else {
+            self.interaction.openRequiredPermissionDialog(message.id.peerId, self.hintIsLink, message)
             return
         }
         

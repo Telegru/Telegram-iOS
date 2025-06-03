@@ -18,7 +18,7 @@ import TelegramStringFormatting
 import MtProtoKit
 import TPStrings
 import BuildConfig
-import DClient
+import DNetwork
 
 public enum DahlSettingsControllerMode {
     case tab

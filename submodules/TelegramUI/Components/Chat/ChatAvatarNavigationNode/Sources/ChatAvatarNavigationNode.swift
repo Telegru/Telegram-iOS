@@ -117,9 +117,9 @@ public final class ChatAvatarNavigationNode: ASDisplayNode {
         self.avatarNode.isHidden = true
     }
     
-    public func setPeer(context: AccountContext, theme: PresentationTheme, peer: EnginePeer?, authorOfMessage: MessageReference? = nil, overrideImage: AvatarNodeImageOverride? = nil, emptyColor: UIColor? = nil, clipStyle: AvatarNodeClipStyle = .round, synchronousLoad: Bool = false, displayDimensions: CGSize = CGSize(width: 60.0, height: 60.0), storeUnrounded: Bool = false) {
+    public func setPeer(context: AccountContext, theme: PresentationTheme, peer: EnginePeer?, authorOfMessage: MessageReference? = nil, overrideImage: AvatarNodeImageOverride? = nil, emptyColor: UIColor? = nil, clipStyle: AvatarNodeClipStyle = .round, synchronousLoad: Bool = false, displayDimensions: CGSize = CGSize(width: 60.0, height: 60.0), storeUnrounded: Bool = false, blurred: Bool = false) {
         self.context = context
-        self.avatarNode.setPeer(context: context, theme: theme, peer: peer, authorOfMessage: authorOfMessage, overrideImage: overrideImage, emptyColor: emptyColor, clipStyle: clipStyle, synchronousLoad: synchronousLoad, displayDimensions: displayDimensions, storeUnrounded: storeUnrounded)
+        self.avatarNode.setPeer(context: context, theme: theme, peer: peer, authorOfMessage: authorOfMessage, overrideImage: overrideImage, emptyColor: emptyColor, clipStyle: clipStyle, synchronousLoad: synchronousLoad, displayDimensions: displayDimensions, storeUnrounded: storeUnrounded, blurred: blurred, displayLetters: !blurred)
         
         if let peer, peer.isSubscription {
             let starView: StarView
@@ -164,7 +164,7 @@ public final class ChatAvatarNavigationNode: ASDisplayNode {
                 
                 if isKnown {
                     let photo = personalPhoto ?? profilePhoto
-                    if let photo = photo, !photo.videoRepresentations.isEmpty || photo.emojiMarkup != nil {
+                    if let photo = photo, !photo.videoRepresentations.isEmpty || photo.emojiMarkup != nil, !blurred  {
                         let videoNode: AvatarVideoNode
                         if let current = strongSelf.avatarVideoNode {
                             videoNode = current

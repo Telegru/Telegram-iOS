@@ -26,6 +26,8 @@ import AdUI
 import AdsInfoScreen
 import AdsReportScreen
 
+import ContentHiddenOverlayNode
+
 enum ChatMediaGalleryThumbnail: Equatable {
     case image(ImageMediaReference)
     case video(FileMediaReference)
@@ -124,11 +126,13 @@ class ChatImageGalleryItem: GalleryItem {
     let peerIsCopyProtected: Bool
     let isSecret: Bool
     let displayInfoOnTop: Bool
+    let blurred: Bool
     let performAction: (GalleryControllerInteractionTapAction) -> Void
     let openActionOptions: (GalleryControllerInteractionTapAction, Message) -> Void
     let present: (ViewController, Any?) -> Void
+    let dismissAction: () -> Void
     
-    init(context: AccountContext, presentationData: PresentationData, message: Message, mediaIndex: Int? = nil, location: MessageHistoryEntryLocation?, translateToLanguage: String? = nil, peerIsCopyProtected: Bool = false, isSecret: Bool = false, displayInfoOnTop: Bool, performAction: @escaping (GalleryControllerInteractionTapAction) -> Void, openActionOptions: @escaping (GalleryControllerInteractionTapAction, Message) -> Void, present: @escaping (ViewController, Any?) -> Void) {
+    init(context: AccountContext, presentationData: PresentationData, message: Message, mediaIndex: Int? = nil, location: MessageHistoryEntryLocation?, translateToLanguage: String? = nil, peerIsCopyProtected: Bool = false, isSecret: Bool = false, displayInfoOnTop: Bool, blurred: Bool,  performAction: @escaping (GalleryControllerInteractionTapAction) -> Void, openActionOptions: @escaping (GalleryControllerInteractionTapAction, Message) -> Void, present: @escaping (ViewController, Any?) -> Void, dismissAction:  @escaping () -> Void) {
         self.context = context
         self.presentationData = presentationData
         self.message = message
@@ -141,12 +145,14 @@ class ChatImageGalleryItem: GalleryItem {
         self.performAction = performAction
         self.openActionOptions = openActionOptions
         self.present = present
+        self.blurred = blurred
+        self.dismissAction = dismissAction
     }
     
     func node(synchronous: Bool) -> GalleryItemNode {
-        let node = ChatImageGalleryItemNode(context: self.context, presentationData: self.presentationData, performAction: self.performAction, openActionOptions: self.openActionOptions, present: self.present)
+        let node = ChatImageGalleryItemNode(context: self.context, presentationData: self.presentationData, performAction: self.performAction, openActionOptions: self.openActionOptions, present: self.present, dismissAction: self.dismissAction)
         
-        node.setMessage(self.message, displayInfo: !self.displayInfoOnTop, translateToLanguage: self.translateToLanguage, peerIsCopyProtected: self.peerIsCopyProtected, isSecret: self.isSecret)
+        node.setMessage(self.message, displayInfo: !self.displayInfoOnTop, translateToLanguage: self.translateToLanguage, peerIsCopyProtected: self.peerIsCopyProtected, isSecret: self.isSecret, blurred: self.blurred)
         for media in self.message.media {
             if let paidContent = media as? TelegramMediaPaidContent {
                 let mediaIndex = self.mediaIndex ?? 0
@@ -192,7 +198,7 @@ class ChatImageGalleryItem: GalleryItem {
             if self.displayInfoOnTop {
                 node.titleContentView?.setMessage(self.message, presentationData: self.presentationData, accountPeerId: self.context.account.peerId)
             }
-            node.setMessage(self.message, displayInfo: !self.displayInfoOnTop, translateToLanguage: self.translateToLanguage, peerIsCopyProtected: self.peerIsCopyProtected, isSecret: self.isSecret)
+            node.setMessage(self.message, displayInfo: !self.displayInfoOnTop, translateToLanguage: self.translateToLanguage, peerIsCopyProtected: self.peerIsCopyProtected, isSecret: self.isSecret, blurred: self.blurred)
         }
     }
     
@@ -234,7 +240,7 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
     private var peerIsCopyProtected: Bool = false
     private var isSecret: Bool = false
     private let presentationData: PresentationData
-    
+    private var blurred: Bool = false
     private let imageNode: TransformImageNode
     private var recognizedContentNode: RecognizedContentContainer?
     
@@ -260,10 +266,14 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
     private let recognitionDisposable = MetaDisposable()
     private var status: MediaResourceStatus?
     private var fetchedDimensions: PixelDimensions?
+    private var contentHiddenOverlayNode: ContentHiddenOverlayNode?
+    private var childModeDisposable: Disposable?
+    private var isContentAccessGranted: Bool = true
     
     private let pagingEnabledPromise = ValuePromise<Bool>(true)
     
     private var currentSpeechHolder: SpeechSynthesizerHolder?
+    private var dismissAction: (() -> Void)?
     
     override var baseNavigationController: () -> NavigationController? {
         didSet {
@@ -275,7 +285,7 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         }
     }
     
-    init(context: AccountContext, presentationData: PresentationData, performAction: @escaping (GalleryControllerInteractionTapAction) -> Void, openActionOptions: @escaping (GalleryControllerInteractionTapAction, Message) -> Void, present: @escaping (ViewController, Any?) -> Void) {
+    init(context: AccountContext, presentationData: PresentationData, performAction: @escaping (GalleryControllerInteractionTapAction) -> Void, openActionOptions: @escaping (GalleryControllerInteractionTapAction, Message) -> Void, present: @escaping (ViewController, Any?) -> Void, dismissAction: @escaping () -> Void) {
         self.context = context
         self.presentationData = presentationData
         
@@ -292,10 +302,11 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         self.statusNode.frame = CGRect(origin: CGPoint(), size: CGSize(width: 50.0, height: 50.0))
         self.statusNode.isHidden = true
         
+        self.dismissAction = dismissAction
+        
         self.moreBarButton = MoreHeaderButton()
         self.moreBarButton.isUserInteractionEnabled = true
         self.moreBarButton.setContent(.more(optionsCircleImage(dark: false)))
-        
         super.init()
         
         self.clipsToBounds = true
@@ -321,7 +332,7 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
             if let strongSelf = self {
                 let transition = ContainedViewLayoutTransition.animated(duration: 0.2, curve: .easeInOut)
                 if let recognizedContentNode = strongSelf.recognizedContentNode {
-                    strongSelf.imageNode.isUserInteractionEnabled = active
+                    strongSelf.imageNode.isUserInteractionEnabled = active && strongSelf.isContentAccessGranted
                     transition.updateAlpha(node: recognizedContentNode, alpha: active ? 1.0 : 0.0)
                     if active {
                         strongSelf.updateControlsVisibility(false)
@@ -329,14 +340,129 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
                         recognizedContentNode.dismissSelection()
                         strongSelf.updateControlsVisibility(true)
                     }
-                    strongSelf.pagingEnabledPromise.set(!active)
+                    strongSelf.pagingEnabledPromise.set(!active && strongSelf.isContentAccessGranted)
                 }
             }
         }
         
         self.moreBarButton.addTarget(self, action: #selector(self.moreButtonPressed), forControlEvents: .touchUpInside)
         self.moreBarButton.contextAction = { [weak self] sourceNode, gesture in
-            self?.openMoreMenu(sourceNode: sourceNode, gesture: gesture)
+            if self?.isContentAccessGranted == true {
+                self?.openMoreMenu(sourceNode: sourceNode, gesture: gesture)
+            }
+        }
+        
+        self.setupChildModeOverlay()
+
+    }
+    
+    private func setupChildModeOverlay() {
+
+        self.contentHiddenOverlayNode = ContentHiddenOverlayNode(
+            theme: self.presentationData.theme,
+            strings: self.presentationData.strings,
+            contentType: .media
+        )
+        
+        self.contentHiddenOverlayNode?.requestAccessAction = { [weak self] in
+            self?.requestContentAccess()
+        }
+        
+        if let overlayNode = self.contentHiddenOverlayNode {
+            overlayNode.isHidden = true
+            overlayNode.alpha = 0.0
+            self.addSubnode(overlayNode)
+        }
+    }
+    
+    private func requestContentAccess() {
+        guard let childModeManager = self.context.childModeManager,
+              let message = self.message else { return }
+        
+        let peerId = message.id.peerId
+        let title = "ChildMode.Media.RequestTitle".tp_loc(lang: self.presentationData.strings.baseLanguageCode)
+        let description = "ChildMode.Media.RequestDescription".tp_loc(lang: self.presentationData.strings.baseLanguageCode)
+        
+        _ = (childModeManager.requestPermission(for: peerId, title: title, description: description)
+             |> deliverOnMainQueue).start(next: { [weak self] _ in
+            
+            guard let self = self else { return }
+            
+            self.dismissAction?()
+            
+            Queue.mainQueue().after(0.2) {
+                let content = UndoOverlayContent.universalImage(
+                    image: UIImage(named: "Child Mode/Check") ?? UIImage(),
+                    size: CGSize(width: 24, height: 24),
+                    title: "ChildMode.Request.Sent".tp_loc(lang: self.presentationData.strings.baseLanguageCode),
+                    text: "ChildMode.Content.AvailableAfterConfirmation".tp_loc(lang: self.presentationData.strings.baseLanguageCode),
+                    customUndoText: nil,
+                    timeout: 5.0
+                )
+                
+                if let controller = self.baseNavigationController()?.topViewController as? ViewController {
+                    controller.present(UndoOverlayController(presentationData: self.presentationData, content: content, elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))
+                }
+            }
+        }, error: { [weak self]  _ in
+            guard let self = self else {
+                return
+            }
+            self.dismissAction?()
+
+            Queue.mainQueue().after(0.2) {
+                let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
+                
+                let content = UndoOverlayContent.universalImage(
+                    image: UIImage(named: "Child Mode/Dissmis") ?? UIImage(),
+                    size: CGSize(width: 24, height: 24),
+                    title: "ChildMode.Request.FailedToSend".tp_loc(lang: presentationData.strings.baseLanguageCode),
+                    text: "ChildMode.Internet.CheckConnection".tp_loc(lang: presentationData.strings.baseLanguageCode),
+                    customUndoText: nil,
+                    timeout: 5.0
+                )
+                
+                if let controller = self.baseNavigationController()?.topViewController as? ViewController {
+                    controller.present(UndoOverlayController(presentationData: self.presentationData, content: content, elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))
+                }
+            }
+        })
+    }
+    
+    private func updateAccessState(accessGranted: Bool, animated: Bool) {
+        self.isContentAccessGranted = accessGranted
+        
+        guard let overlayNode = self.contentHiddenOverlayNode else { return }
+        
+        let transition: ContainedViewLayoutTransition = animated
+            ? .animated(duration: 0.3, curve: .easeInOut)
+            : .immediate
+        
+        if accessGranted {
+            transition.updateAlpha(node: overlayNode, alpha: 0.0) { [weak self] _ in
+                guard let self = self else { return }
+                overlayNode.isHidden = true
+                overlayNode.view.isUserInteractionEnabled = false
+                
+                self.imageNode.isUserInteractionEnabled = true
+                self.moreBarButton.isUserInteractionEnabled = true
+                self.statusNodeContainer.isUserInteractionEnabled = self.status != .Local
+            }
+            self.footerContentNode.setCompletelyHidden(false)
+        } else {
+            overlayNode.isHidden = false
+            overlayNode.view.isUserInteractionEnabled = true
+            transition.updateAlpha(node: overlayNode, alpha: 1.0)
+            self.imageNode.isUserInteractionEnabled = false
+            self.moreBarButton.isUserInteractionEnabled = false
+            self.statusNodeContainer.isUserInteractionEnabled = false
+
+            if let recognizedContentNode = self.recognizedContentNode {
+                recognizedContentNode.dismissSelection()
+                transition.updateAlpha(node: recognizedContentNode, alpha: 0.0)
+            }
+            self.pagingEnabledPromise.set(true)
+            self.footerContentNode.setCompletelyHidden(true)
         }
     }
     
@@ -349,6 +475,7 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         self.statusDisposable.dispose()
         self.dataDisposable.dispose()
         self.recognitionDisposable.dispose()
+        self.childModeDisposable?.dispose()
     }
     
     override func ready() -> Signal<Void, NoError> {
@@ -366,6 +493,9 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         let statusSize = CGSize(width: 50.0, height: 50.0)
         transition.updateFrame(node: self.statusNodeContainer, frame: CGRect(origin: CGPoint(x: floor((layout.size.width - statusSize.width) / 2.0), y: floor((layout.size.height - statusSize.height) / 2.0)), size: statusSize))
         transition.updateFrame(node: self.statusNode, frame: CGRect(origin: CGPoint(), size: statusSize))
+        if let overlayNode = self.contentHiddenOverlayNode {
+            transition.updateFrame(node: overlayNode, frame: CGRect(origin: CGPoint(), size: layout.size))
+        }
     }
     
     private func setupImageRecognition(_ generate: @escaping (TransformImageArguments) -> DrawingContext?, dimensions: PixelDimensions) {
@@ -374,6 +504,9 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         }
         let displaySize = dimensions.cgSize.fitted(CGSize(width: 1280.0, height: 1280.0)).dividedByScreenScale().integralFloor
         
+        guard self.isContentAccessGranted else {
+            return
+        }
         self.recognitionDisposable.set((recognizedContent(context: self.context, image: { return generate(TransformImageArguments(corners: ImageCorners(), imageSize: displaySize, boundingSize: displaySize, intrinsicInsets: UIEdgeInsets()))?.generateImage() }, messageId: message.id)
         |> deliverOnMainQueue).start(next: { [weak self] results in
             if let strongSelf = self {
@@ -448,13 +581,16 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         }))
     }
     
-    fileprivate func setMessage(_ message: Message, displayInfo: Bool, translateToLanguage: String?, peerIsCopyProtected: Bool, isSecret: Bool) {
+    fileprivate func setMessage(_ message: Message, displayInfo: Bool, translateToLanguage: String?, peerIsCopyProtected: Bool, isSecret: Bool, blurred: Bool) {
         self.message = message
         self.translateToLanguage = translateToLanguage
         self.peerIsCopyProtected = peerIsCopyProtected
         self.isSecret = isSecret
+        self.blurred = blurred
         self.imageNode.captureProtected = message.id.peerId.namespace == Namespaces.Peer.SecretChat || message.isCopyProtected() || peerIsCopyProtected || isSecret || message.paidContent != nil
-        self.footerContentNode.setMessage(message, displayInfo: displayInfo, translateToLanguage: translateToLanguage, peerIsCopyProtected: peerIsCopyProtected)
+        self.footerContentNode.setMessage(message, displayInfo: displayInfo && !blurred, translateToLanguage: translateToLanguage, peerIsCopyProtected: peerIsCopyProtected, blurred: blurred)
+        self.updateAccessState(accessGranted: !blurred, animated: true)
+
     }
     
     fileprivate func setImage(userLocation: MediaResourceUserLocation, imageReference: ImageMediaReference) {
@@ -569,14 +705,13 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
             }, iconSource: nil, action: { [weak self] _, f in
                 f(.default)
                 
-                let _ = (context.engine.messages.reportAdMessage(peerId: message.id.peerId, opaqueId: adAttribute.opaqueId, option: nil)
+                let _ = (context.engine.messages.reportAdMessage(opaqueId: adAttribute.opaqueId, option: nil)
                 |> deliverOnMainQueue).start(next: { [weak self] result in
                     if case let .options(title, options) = result {
                         if let navigationController = self?.baseNavigationController() as? NavigationController {
                             navigationController.pushViewController(
                                 AdsReportScreen(
                                     context: context,
-                                    peerId: message.id.peerId,
                                     opaqueId: adAttribute.opaqueId,
                                     title: title,
                                     options: options,

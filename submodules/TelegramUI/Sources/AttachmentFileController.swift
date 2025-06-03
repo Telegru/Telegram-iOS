@@ -20,7 +20,7 @@ private final class AttachmentFileControllerArguments {
     let openGallery: () -> Void
     let openFiles: () -> Void
     let send: (Message) -> Void
-   
+    
     init(context: AccountContext, openGallery: @escaping () -> Void, openFiles: @escaping () -> Void, send: @escaping (Message) -> Void) {
         self.context = context
         self.openGallery = openGallery
@@ -53,55 +53,55 @@ private enum AttachmentFileEntry: ItemListNodeEntry {
     
     case recentHeader(PresentationTheme, String)
     case file(Int32, PresentationTheme, Message?)
-  
+    
     var section: ItemListSectionId {
         switch self {
-            case .selectFromGallery, .selectFromFiles:
-                return AttachmentFileSection.select.rawValue
-            case .recentHeader, .file:
-                return AttachmentFileSection.recent.rawValue
+        case .selectFromGallery, .selectFromFiles:
+            return AttachmentFileSection.select.rawValue
+        case .recentHeader, .file:
+            return AttachmentFileSection.recent.rawValue
         }
     }
     
     var stableId: Int32 {
         switch self {
-            case .selectFromGallery:
-                return 0
-            case .selectFromFiles:
-                return 1
-            case .recentHeader:
-                return 2
-            case let .file(index, _, _):
-                return 3 + index
+        case .selectFromGallery:
+            return 0
+        case .selectFromFiles:
+            return 1
+        case .recentHeader:
+            return 2
+        case let .file(index, _, _):
+            return 3 + index
         }
     }
     
     static func ==(lhs: AttachmentFileEntry, rhs: AttachmentFileEntry) -> Bool {
         switch lhs {
-            case let .selectFromGallery(lhsTheme, lhsText):
-                if case let .selectFromGallery(rhsTheme, rhsText) = rhs, lhsTheme === rhsTheme, lhsText == rhsText {
-                    return true
-                } else {
-                    return false
-                }
-            case let .selectFromFiles(lhsTheme, lhsText):
-                if case let .selectFromFiles(rhsTheme, rhsText) = rhs, lhsTheme === rhsTheme, lhsText == rhsText {
-                    return true
-                } else {
-                    return false
-                }
-            case let .recentHeader(lhsTheme, lhsText):
-                if case let .recentHeader(rhsTheme, rhsText) = rhs, lhsTheme === rhsTheme, lhsText == rhsText {
-                    return true
-                } else {
-                    return false
-                }
-            case let .file(lhsIndex, lhsTheme, lhsMessage):
-                if case let .file(rhsIndex, rhsTheme, rhsMessage) = rhs, lhsIndex == rhsIndex, lhsTheme === rhsTheme, areMessagesEqual(lhsMessage, rhsMessage) {
-                    return true
-                } else {
-                    return false
-                }
+        case let .selectFromGallery(lhsTheme, lhsText):
+            if case let .selectFromGallery(rhsTheme, rhsText) = rhs, lhsTheme === rhsTheme, lhsText == rhsText {
+                return true
+            } else {
+                return false
+            }
+        case let .selectFromFiles(lhsTheme, lhsText):
+            if case let .selectFromFiles(rhsTheme, rhsText) = rhs, lhsTheme === rhsTheme, lhsText == rhsText {
+                return true
+            } else {
+                return false
+            }
+        case let .recentHeader(lhsTheme, lhsText):
+            if case let .recentHeader(rhsTheme, rhsText) = rhs, lhsTheme === rhsTheme, lhsText == rhsText {
+                return true
+            } else {
+                return false
+            }
+        case let .file(lhsIndex, lhsTheme, lhsMessage):
+            if case let .file(rhsIndex, rhsTheme, rhsMessage) = rhs, lhsIndex == rhsIndex, lhsTheme === rhsTheme, areMessagesEqual(lhsMessage, rhsMessage) {
+                return true
+            } else {
+                return false
+            }
         }
     }
     
@@ -112,26 +112,25 @@ private enum AttachmentFileEntry: ItemListNodeEntry {
     func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
         let arguments = arguments as! AttachmentFileControllerArguments
         switch self {
-            case let .selectFromGallery(_, text):
-                return ItemListPeerActionItem(presentationData: presentationData, icon: PresentationResourcesItemList.imageIcon(presentationData.theme), title: text, alwaysPlain: false, sectionId: self.section, height: .generic, editing: false, action: {
-                    arguments.openGallery()
-                })
-            case let .selectFromFiles(_, text):
-                return ItemListPeerActionItem(presentationData: presentationData, icon: PresentationResourcesItemList.cloudIcon(presentationData.theme), title: text, alwaysPlain: false, sectionId: self.section, height: .generic, editing: false, action: {
-                    arguments.openFiles()
-                })
-            case let .recentHeader(_, text):
-                return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
-            case let .file(_, _, message):
-                let interaction = ListMessageItemInteraction(openMessage: { message, _ in
-                    arguments.send(message)
-                    return false
-                }, openMessageContextMenu: { _, _, _, _, _ in }, toggleMessagesSelection: { _, _ in }, openUrl: { _, _, _, _ in }, openInstantPage: { _, _ in }, longTap: { _, _ in }, getHiddenMedia: { return [:] })
+        case let .selectFromGallery(_, text):
+            return ItemListPeerActionItem(presentationData: presentationData, icon: PresentationResourcesItemList.imageIcon(presentationData.theme), title: text, alwaysPlain: false, sectionId: self.section, height: .generic, editing: false, action: {
+                arguments.openGallery()
+            })
+        case let .selectFromFiles(_, text):
+            return ItemListPeerActionItem(presentationData: presentationData, icon: PresentationResourcesItemList.cloudIcon(presentationData.theme), title: text, alwaysPlain: false, sectionId: self.section, height: .generic, editing: false, action: {
+                arguments.openFiles()
+            })
+        case let .recentHeader(_, text):
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
+        case let .file(_, _, message):
+            let interaction = ListMessageItemInteraction(openMessage: { message, _ in
+                arguments.send(message)
+                return false
+            }, openMessageContextMenu: { _, _, _, _, _, _ in }, toggleMessagesSelection: { _, _ in }, openUrl: { _, _, _, _ in }, openInstantPage: { _, _ in }, openRequiredPermissionDialog: { _, _, _ in }, longTap: { _, _ in }, getHiddenMedia: { return [:] })
+            let dateTimeFormat = arguments.context.sharedContext.currentPresentationData.with({$0}).dateTimeFormat
+            let chatPresentationData = ChatPresentationData(theme: ChatPresentationThemeData(theme: presentationData.theme, wallpaper: .color(0)), fontSize: presentationData.fontSize, strings: presentationData.strings, dateTimeFormat: dateTimeFormat, nameDisplayOrder: .firstLast, disableAnimations: false, largeEmoji: false, chatBubbleCorners: PresentationChatBubbleCorners(mainRadius: 0, auxiliaryRadius: 0, mergeBubbleCorners: false))
             
-                let dateTimeFormat = arguments.context.sharedContext.currentPresentationData.with({$0}).dateTimeFormat
-                let chatPresentationData = ChatPresentationData(theme: ChatPresentationThemeData(theme: presentationData.theme, wallpaper: .color(0)), fontSize: presentationData.fontSize, strings: presentationData.strings, dateTimeFormat: dateTimeFormat, nameDisplayOrder: .firstLast, disableAnimations: false, largeEmoji: false, chatBubbleCorners: PresentationChatBubbleCorners(mainRadius: 0, auxiliaryRadius: 0, mergeBubbleCorners: false))
-            
-                return ListMessageItem(presentationData: chatPresentationData, context: arguments.context, chatLocation: .peer(id: PeerId(0)), interaction: interaction, message: message, selection: .none, displayHeader: false, displayFileInfo: false, displayBackground: true, style: .blocks)
+            return ListMessageItem(presentationData: chatPresentationData, context: arguments.context, chatLocation: .peer(id: PeerId(0)), interaction: interaction, message: message, selection: .none, displayHeader: false, displayFileInfo: false, displayBackground: true, style: .blocks, blurred: false)
         }
     }
 }
@@ -159,7 +158,7 @@ private func attachmentFileControllerEntries(presentationData: PresentationData,
             entries.append(.file(Int32(i), presentationData.theme, nil))
         }
     }
-
+    
     return entries
 }
 
@@ -224,16 +223,16 @@ func makeAttachmentFileControllerImpl(context: AccountContext, updatedPresentati
         },
         send: { message in
             let _ = (context.engine.messages.getMessagesLoadIfNecessary([message.id], strategy: .cloud(skipLocal: true))
-            |> `catch` { _ in
+                     |> `catch` { _ in
                 return .single(.result([]))
             }
-            |> mapToSignal { result -> Signal<[Message], NoError> in
+                     |> mapToSignal { result -> Signal<[Message], NoError> in
                 guard case let .result(result) = result else {
                     return .complete()
                 }
                 return .single(result)
             }
-            |> deliverOnMainQueue).startStandalone(next: { messages in
+                     |> deliverOnMainQueue).startStandalone(next: { messages in
                 if let message = messages.first, let file = message.media.first(where: { $0 is TelegramMediaFile }) as? TelegramMediaFile {
                     send(.message(message: MessageReference(message), media: file))
                 }
@@ -251,12 +250,12 @@ func makeAttachmentFileControllerImpl(context: AccountContext, updatedPresentati
     )
     
     let presentationData = updatedPresentationData?.signal ?? context.sharedContext.presentationData
-
+    
     let previousRecentDocuments = Atomic<[Message]?>(value: nil)
     let signal = combineLatest(queue: Queue.mainQueue(),
-       presentationData,
-       recentDocuments,
-       statePromise.get()
+                               presentationData,
+                               recentDocuments,
+                               statePromise.get()
     )
     |> map { presentationData, recentDocuments, state -> (ItemListControllerState, (ItemListNodeState, Any)) in
         var presentationData = presentationData
@@ -329,18 +328,18 @@ func makeAttachmentFileControllerImpl(context: AccountContext, updatedPresentati
     controller.delayDisappear = true
     controller.visibleBottomContentOffsetChanged = { [weak controller] offset in
         switch offset {
-            case let .known(value):
-                let backgroundAlpha: CGFloat = min(30.0, max(0.0, value)) / 30.0
-                if backgroundAlpha.isZero && controller?.delayDisappear == true {
-                    Queue.mainQueue().after(0.25, {
-                        controller?.updateTabBarAlpha(backgroundAlpha, .animated(duration: 0.1, curve: .easeInOut))
-                    })
-                } else {
-                    controller?.updateTabBarAlpha(backgroundAlpha, .immediate)
-                }
-            case .unknown, .none:
-                controller?.updateTabBarAlpha(1.0, .immediate)
-                controller?.delayDisappear = false
+        case let .known(value):
+            let backgroundAlpha: CGFloat = min(30.0, max(0.0, value)) / 30.0
+            if backgroundAlpha.isZero && controller?.delayDisappear == true {
+                Queue.mainQueue().after(0.25, {
+                    controller?.updateTabBarAlpha(backgroundAlpha, .animated(duration: 0.1, curve: .easeInOut))
+                })
+            } else {
+                controller?.updateTabBarAlpha(backgroundAlpha, .immediate)
+            }
+        case .unknown, .none:
+            controller?.updateTabBarAlpha(1.0, .immediate)
+            controller?.delayDisappear = false
         }
     }
     controller.resetForReuseImpl = {

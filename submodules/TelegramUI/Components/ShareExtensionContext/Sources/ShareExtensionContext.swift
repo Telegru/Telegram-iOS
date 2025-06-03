@@ -32,6 +32,9 @@ import TelegramAccountAuxiliaryMethods
 import PeerSelectionController
 import ContextMenuScreen
 
+import DChildMode
+import DNetwork
+
 private var installedSharedLogger = false
 
 private func setupSharedLogger(rootPath: String, path: String) {
@@ -92,7 +95,8 @@ private final class ShareControllerAccountContextExtension: ShareControllerAccou
     let animationRenderer: MultiAnimationRenderer
     let contentSettings: ContentSettings
     let appConfiguration: AppConfiguration
-    
+    let childManager: DChildModeManager?
+
     init(
         accountId: AccountRecordId,
         stateManager: AccountStateManager,
@@ -114,10 +118,31 @@ private final class ShareControllerAccountContextExtension: ShareControllerAccou
         self.animationRenderer = MultiAnimationRendererImpl()
         self.contentSettings = contentSettings
         self.appConfiguration = appConfiguration
+        
+        let userID = stateManager.accountPeerId.toInt64()
+        let networkAssembly = DNetworkAssembly(
+            userID: userID,
+            postbox: stateManager.postbox,
+            authBot: TempBotHandler()
+        )
+        let childModeAssembly = DChildModeAssembly(
+            userID: userID,
+            networkAssembly: networkAssembly,
+            postbox: stateManager.postbox,
+            engine: nil
+        )
+            
+        self.childManager = childModeAssembly.childModeManager()
     }
     
     func resolveInlineStickers(fileIds: [Int64]) -> Signal<[Int64: TelegramMediaFile], NoError> {
         return _internal_resolveInlineStickers(postbox: self.stateManager.postbox, network: self.stateManager.network, fileIds: fileIds)
+    }
+}
+
+private class TempBotHandler: DBotHandler {
+    func startBot(authKeyId: String) -> SwiftSignalKit.Signal<Bool, SwiftSignalKit.NoError> {
+        return .single(false)
     }
 }
 

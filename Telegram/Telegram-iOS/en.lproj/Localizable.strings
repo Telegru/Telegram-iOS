@@ -13573,6 +13573,7 @@ Sorry for the inconvenience.";
 "FolderLinkPreview.ToastFolderAddedTitleV2" = "Folder {folder} Added";
 
 "Stars.Purchase.UpgradeStarGiftInfo" = "Buy Stars to upgrade your gift into a unique collectible.";
+"Stars.Purchase.TransferStarGiftInfo" = "Buy Stars to transfer ownership of your unique collectible.";
 
 "Gift.Send.Upgrade" = "Make Unique for %@";
 "Gift.Send.Upgrade.Info" = "Enable this to let %1$@ turn your gift into a unique collectible. [Learn More >]()";
@@ -13960,6 +13961,8 @@ Sorry for the inconvenience.";
 "PeerInfo.Gifts.ToastUnpinned.Text" = "Gift Unpinned.";
 "PeerInfo.Gifts.ToastPinned.Title" = "Gift Pinned";
 "PeerInfo.Gifts.ToastPinned.Text" = "Now it will always be shown on the top.";
+"PeerInfo.Gifts.ToastPinned.TitleNew" = "%@ Pinned";
+"PeerInfo.Gifts.ToastPinned.ReplacingText" = "replacing %@.";
 
 "Chat.PaidMessage.Confirm.Title" = "Confirm Payment";
 "Chat.PaidMessage.Confirm.DontAskAgain" = "Don't ask again";
@@ -14002,6 +14005,16 @@ Sorry for the inconvenience.";
 "Share.VideoStartAt" = "Start at %@";
 "SendStarReactions.SubtitleFrom" = "from %@";
 
+"Notification.PaidMessageRefund.Stars_1" = "%@ Star";
+"Notification.PaidMessageRefund.Stars_any" = "%@ Stars";
+"Notification.PaidMessageRefund" = "%1$@ refunded you %2$@";
+"Notification.PaidMessageRefundYou" = "You refunded %1$@ to %2$@";
+
+"Notification.PaidMessagePriceChanged.Stars_1" = "%@ Star";
+"Notification.PaidMessagePriceChanged.Stars_any" = "%@ Stars";
+"Notification.PaidMessagePriceChanged" = "%1$@ changed price to %2$@ per message";
+"Notification.PaidMessagePriceChangedYou" = "You changed price to %1$@ per message";
+
 "Premium.MaxExpiringStoriesTextNumberFormat_1" = "**%d** story";
 "Premium.MaxExpiringStoriesTextNumberFormat_any" = "**%d** stories";
 "Premium.MaxExpiringStoriesTextPremiumNumberFormat_1" = "**%d** story";
@@ -14018,3 +14031,292 @@ Sorry for the inconvenience.";
 
 "Stars.AccountRevenue.Proceeds.Info" = "Stars from your total balance can be withdrawn as rewards 21 days after they are earned.";
 "Stars.AccountRevenue.Withdraw.Info" = "You can collect rewards for Stars using Fragment. You cannot withdraw less than 1000 stars. [Learn More >]()";
+
+"Privacy.Gifts.PremiumToast.Text" = "Subscribe to **Telegram Premium** to use this setting.";
+"Privacy.Gifts.PremiumToast.Action" = "Open";
+
+"Gift.Send.ErrorDisallowed" = "**%@** doesn't accept this kind of gifts.";
+"Gift.Send.GiftsDisallowed" = "%@ doesn't accept gifts.";
+
+"ChatbotSetup.Rights.ManageMessages" = "Manage Messages";
+"ChatbotSetup.Rights.ReadMessages" = "Read Messages";
+"ChatbotSetup.Rights.ReplyToMessages" = "Reply to Messages";
+"ChatbotSetup.Rights.MarkAsRead" = "Mark Messages as Read";
+"ChatbotSetup.Rights.DeleteSentMessages" = "Delete Sent Messages";
+"ChatbotSetup.Rights.DeleteReceivedMessages" = "Delete Received Messages";
+
+"ChatbotSetup.Rights.ManageProfile" = "Manage Profile";
+"ChatbotSetup.Rights.EditName" = "Edit Name";
+"ChatbotSetup.Rights.EditBio" = "Edit Bio";
+"ChatbotSetup.Rights.EditProfilePhoto" = "Edit Profile Photo";
+"ChatbotSetup.Rights.EditUsername" = "Edit Username";
+
+"ChatbotSetup.Rights.ManageGiftsAndStars" = "Manage Gifts and Stars";
+"ChatbotSetup.Rights.ViewGifts" = "View Gifts";
+"ChatbotSetup.Rights.SellGifts" = "Sell Gifts";
+"ChatbotSetup.Rights.ChangeGiftSettings" = "Change Gift Settings";
+"ChatbotSetup.Rights.TransferAndUpgradeGifts" = "Transfer and Upgrade Gifts";
+"ChatbotSetup.Rights.TransferStars" = "Transfer Stars";
+"ChatbotSetup.Rights.ManageStories" = "Manage Stories";
+
+"Gift.Send.Upgrade.ForcedInfo" = "%1$@ accepts only unique gifts. [Learn More >]()";
+
+"Privacy.Gifts.ShowGiftButton" = "Show Gift Icon in Chats";
+"Privacy.Gifts.ShowGiftButtonInfo" = "Display the #Gift icon in the message input field for both participants in all chats.";
+
+"Privacy.Gifts.AcceptedTypes" = "ACCEPTED GIFT TYPES";
+"Privacy.Gifts.AcceptedTypes.Unlimited" = "Unlimited";
+"Privacy.Gifts.AcceptedTypes.Limited" = "Limited-Edition";
+"Privacy.Gifts.AcceptedTypes.Unique" = "Unique";
+"Privacy.Gifts.AcceptedTypes.Premium" = "Premium Subscriptions";
+"Privacy.Gifts.AcceptedTypes.Info" = "Choose the types of gifts that you allow others to send you.";
+
+"Chat.PanelFrozenAccount.Title" = "You account is frozen";
+"Chat.PanelFrozenAccount.Text" = "Tap to view details";
+
+"FrozenAccount.Title" = "Your Account is Frozen";
+"FrozenAccount.Violation.Title" = "Violation of Terms";
+"FrozenAccount.Violation.Text" = "Your account was frozen for breaking Telegram's Terms and Conditions.";
+"FrozenAccount.ReadOnly.Title" = "Read-Only Mode";
+"FrozenAccount.ReadOnly.Text" = "You can access your account but can't send messages or take actions.";
+"FrozenAccount.Appeal.Title" = "Appeal Before Deactivation";
+"FrozenAccount.Appeal.Text" = "Appeal via [@SpamBot]() before %@, or your account will be deleted.";
+"FrozenAccount.SubmitAppeal" = "Submit an Appeal";
+"FrozenAccount.Understood" = "Understood";
+
+"AdsInfo.Search.Respect.Text" = "Ads like this do not use your personal information and are based on the search query you entered.";
+"AdsInfo.Search.Ads.Text" = "You can turn off ads by subscribing to [Telegram Premium]().";
+"AdsInfo.Search.Launch.Text" = "Anyone can create an ad to display in search results for any query. Check out the Telegram Ad Platform for details. [Learn More >]()";
+
+"ChatList.FrozenAccount.Title" = "Your account is frozen";
+"ChatList.FrozenAccount.Text" = "Tap to view details and submit an appeal.";
+
+"Gift.Unpin.Title" = "Too Manu Pinned Gifts";
+"Gift.Unpin.Subtitle" = "Select a gift to unpin below:";
+"Gift.Unpin.Unpin" = "Unpin";
+"Gift.Unpin.Replace" = "Replace";
+
+"ChatList.Search.Ad" = "Ad";
+
+"Login.Fee.Title" = "SMS Fee";
+"Login.Fee.SmsCost.Title" = "High SMS Costs";
+"Login.Fee.SmsCost.Text" = "Telecom providers in your country (%@) charge Telegram very high prices for SMS.";
+"Login.Fee.Verification.Title" = "Verification Required";
+"Login.Fee.Verification.Text" = "Telegram needs to send you an SMS with a verification code to confirm your phone number.";
+"Login.Fee.Support.Title" = "Support via [Telegram Premium >]()";
+"Login.Fee.Support.Text" = "Sign up for a 1-week Telegram Premium subscription to help cover the SMS costs.";
+"Login.Fee.SignUp" = "Sign Up for %@";
+"Login.Fee.GetPremiumForAWeek" = "Get Telegram Premium for 1 week";
+
+"StoryFeed.AddStory" = "Add Story";
+
+"WebApp.ImportData.Title" = "Import Data";
+"WebApp.ImportData.Description" = "**%@** is requesting permission to import data from a previous Telegram account used on this device.";
+"WebApp.ImportData.AccountHeader" = "ACCOUNT TO IMPORT DATA FROM";
+"WebApp.ImportData.CreatedOn" = "created on %@";
+"WebApp.ImportData.Import" = "Import";
+
+"CallList.ToastCallLinkCopied.Text" = "Call link copied";
+"CallList.ToastCallLinkCopied.Action" = "View Call";
+"CallList.NewCall" = "Start New Call";
+"CallList.NewCallLink" = "Create Call Link";
+
+"Chat.SendStarsToBecomeTopInfo" = "Send %@ or more to highlight your profile";
+
+"VideoChat.RevokeLink" = "Revoke Link";
+
+"InviteLink.GroupCallLinkHelp" = "Anyone on Telegram can join your call by following the link below.";
+"InviteLink.CallLinkTitle" = "Call Link";
+"InviteLink.CreatedGroupCallFooter" = "Be the first to join the call and add people from there. [Open Call >](open_call)";
+"InviteLink.QRCode.InfoGroupCall" = "Everyone on Telegram can scan this code to join your group call.";
+
+"Call.GenericGroupCallTitle" = "Group Call";
+
+"VideoChat.EncryptionKeyLabel" = "End-to-end encrypted";
+"VideoChat.EncryptionKeyText" = "These four emojis represent the call's encryption key. They must match for all participants and change when someone joins or leaves.";
+"VideoChat.EncryptionKeyDone" = "Close";
+"VideoChat.InviteMember" = "Add Member";
+
+"VideoChat.GroupCallTitle" = "Group Call";
+
+"Chat.ViewGroupCall" = "JOIN GROUP CALL";
+
+"NewCall.SearchPlaceholder" = "Search for contacts or usernames";
+"NewCall.VideoOption" = "Call with video enabled";
+"NewCall.ActionCallSingle" = "Call %@";
+"NewCall.ActionCallMultiple" = "Call";
+
+"Chat.ToastCallLinkExpired.Text" = "This link is no longer active";
+
+"Chat.CallMessage.GroupCallParticipantCount_1" = "1 person";
+"Chat.CallMessage.GroupCallParticipantCount_any" = "%d people";
+
+"Chat.CallMessage.DeclinedGroupCall" = "Declined Group Call";
+"Chat.CallMessage.MissedGroupCall" = "Missed Group Call";
+"Chat.CallMessage.CancelledGroupCall" = "Cancelled Group Call";
+"Chat.CallMessage.IncomingGroupCall" = "Incoming Group Call";
+"Chat.CallMessage.OutgoingGroupCall" = "Outgoing Group Call";
+
+"Invitation.GroupCall" = "Group Call";
+"Invitation.JoinGroupCall" = "Join Group Call";
+"Invitation.PublicGroup" = "public group";
+"Invitation.PrivateGroup" = "private group";
+
+"Invitation.GroupCall.Text" = "You are invited to join a group call.";
+
+"Invitation.Group.AlreadyJoinedSingle" = "**%@** already joined this group.";
+"Invitation.Group.AlreadyJoinedMultiple" = "%@ already joined this group.";
+"Invitation.Group.AlreadyJoinedMultipleWithCount_1" = "{} and **%d** other person already joined this group.";
+"Invitation.Group.AlreadyJoinedMultipleWithCount_any" = "{} and **%d** other people already joined this group.";
+
+"Invitation.GroupCall.AlreadyJoinedSingle" = "**%@** already joined this call.";
+"Invitation.GroupCall.AlreadyJoinedMultiple" = "%@ already joined this call.";
+"Invitation.GroupCall.AlreadyJoinedMultipleWithCount_1" = "{} and **%d** other person already joined this call.";
+"Invitation.GroupCall.AlreadyJoinedMultipleWithCount_any" = "{} and **%d** other people already joined this call.";
+
+"Call.ShareLink" = "Share Call Link";
+"Call.AddMemberTitle" = "Add Member";
+
+"Call.IncomingGroupCallTitle.Single" = "%@";
+"Call.IncomingGroupCallTitle.Multiple_1" = "{} and 1 other";
+"Call.IncomingGroupCallTitle.Multiple_any" = "{} and %d others";
+
+"GroupCall.RevokeLinkText" = "Are you sure you want to revoke this link? Once you do, no one will be able to join the call using it.";
+
+
+"SendInviteLink.TextCallsRestrictedOneUser" = "%@ does not accept calls.";
+"SendInviteLink.TextCallsRestrictedMultipleUsers_1" = "{user_list}, and **%d** more person do not accept calls.";
+"SendInviteLink.TextCallsRestrictedMultipleUsers_any" = "{user_list}, and **%d** more people do not accept calls.";
+"SendInviteLink.TextCallsRestrictedSendInviteLink" = "You can try to send an invite link instead.";
+
+"Call.VoiceChatInProgressConferenceMessage" = "Leave voice chat in %1$@ and start a conference?";
+"Call.LiveStreamInProgressConferenceMessage" = "Leave live stream in %1$@ and start a conference?";
+
+"VoiceChat.RemoveConferencePeerConfirmation" = "Are you sure you want to remove %@ from this call?";
+
+"Story.Privacy.ShareStories" = "Share Stories";
+"Story.Privacy.PostStoriesAsHeader" = "POST STORIES AS";
+"Story.Privacy.WhoCanViewStoriesHeader" = "WHO CAN VIEW THIS STORIES";
+"Story.Privacy.PostStories_1" = "Post %@ Story";
+"Story.Privacy.PostStories_any" = "Post %@ Stories";
+"Story.Privacy.KeepOnMyPageManyInfo" = "Keep these stories on your profile even after they expire in %@. Privacy settings will apply.";
+"Story.Privacy.KeepOnChannelPageManyInfo" = "Keep these stories on the channel profile even after they expire in %@.";
+"Story.Privacy.KeepOnGroupPageManyInfo" = "Keep these stories on the group page even after they expire in %@.";
+
+"Gift.Options.Gift.Filter.Resale" = "Resale";
+"Gift.Options.Gift.Resale" = "resale";
+
+"Stars.Intro.Transaction.GiftPurchase" = "Gift Purchase";
+"Stars.Intro.Transaction.GiftSale" = "Gift Sale";
+
+"Stars.Transaction.GiftPurchase" = "Gift Purchase";
+"Stars.Transaction.GiftSale" = "Gift Sale";
+
+"Channel.Info.AutoTranslate" = "Auto-Translate Messages";
+
+"ChannelBoost.Table.AutoTranslate" = "Autotranslation of Messages";
+"ChannelBoost.AutoTranslate" = "Autotranslation of Messages";
+"ChannelBoost.AutoTranslateLevelText" = "Your channel needs **Level %1$@** to enable autotranslation of messages.";
+
+"Channel.AdminLog.MessageToggleAutoTranslateOn" = "%@ enabled autotranslation of messages";
+"Channel.AdminLog.MessageToggleAutoTranslateOff" = "%@ disabled autotranslation of messages";
+
+"Notification.StarsGift.Bought" = "%1$@ gifted you %2$@ for %3$@";
+"Notification.StarsGift.Bought.Stars_1" = "%@ Star";
+"Notification.StarsGift.Bought.Stars_any" = "%@ Stars";
+"Notification.StarsGift.BoughtYou" = "You gifted %1$@ for %2$@";
+"Notification.StarsGift.BoughtForYouself" = "You bought this gift for %1$@";
+
+"Gift.View.Context.ChangePrice" = "Change Price";
+"Gift.View.Context.ViewInProfile" = "View in Profile";
+
+"Gift.View.Sell" = "sell";
+"Gift.View.Unlist" = "unlist";
+
+"Gift.View.BuyFor" = "Buy for";
+"Gift.View.SellingGiftInfo" = "%@ is selling this gift and you can buy it.";
+
+"Gift.View.Resale.Success.Title" = "Gift Sent";
+"Gift.View.Resale.Success.Text" = "%@ has been notified about your gift.";
+"Gift.View.Resale.SuccessYou.Title" = "Gift Acquired";
+"Gift.View.Resale.SuccessYou.Text" = "%@ is now yours.";
+
+"Gift.View.Resale.Unlist.Title" = "Unlist This Item?";
+"Gift.View.Resale.Unlist.Text" = "It will no longer be for sale.";
+"Gift.View.Resale.Unlist.Unlist" = "Unlist";
+"Gift.View.Resale.Unlist.Success" = "%@ is removed from sale.";
+"Gift.View.Resale.List.Success" = "%@ is now for sale!";
+"Gift.View.Resale.Relist.Success" = "%1$@ is relisted for %2$@.";
+"Gift.View.Resale.Relist.Success.Stars_1" = "%@ Star";
+"Gift.View.Resale.Relist.Success.Stars_any" = "%@ Stars";
+
+"Stars.SellGift.Title" = "Sell Gift";
+"Stars.SellGift.EditTitle" = "Edit Price";
+"Stars.SellGift.AmountTitle" = "PRICE IN STARS";
+"Stars.SellGift.AmountPlaceholder" = "Enter Price";
+"Stars.SellGift.AmountInfo" = "You will receive **%@**.";
+"Stars.SellGift.AmountInfo.Stars_1" = "%@ Star";
+"Stars.SellGift.AmountInfo.Stars_any" = "%@ Stars";
+"Stars.SellGift.Sell" = "Sell";
+"Stars.SellGift.SellFor" = "Sell for";
+
+"PeerInfo.Gifts.Sale" = "sale";
+
+"Gift.Store.ForResaleNoResults" = "no results";
+"Gift.Store.ForResale_1" = "%@ for resale";
+"Gift.Store.ForResale_any" = "%@ for resale";
+"Gift.Store.Sort.Price" = "Price";
+"Gift.Store.Sort.Date" = "Date";
+"Gift.Store.Sort.Number" = "Number";
+"Gift.Store.SortByPrice" = "Sort By Price";
+"Gift.Store.SortByDate" = "Sort By Date";
+"Gift.Store.SortByNumber" = "Sort By Number";
+"Gift.Store.Filter.Model" = "Model";
+"Gift.Store.Filter.Backdrop" = "Backdrop";
+"Gift.Store.Filter.Symbol" = "Symbol";
+"Gift.Store.Filter.Selected.Model_1" = "%@ Model";
+"Gift.Store.Filter.Selected.Model_any" = "%@ Models";
+"Gift.Store.Filter.Selected.Backdrop_1" = "%@ Backdrop";
+"Gift.Store.Filter.Selected.Backdrop_any" = "%@ Backdrops";
+"Gift.Store.Filter.Selected.Symbol_1" = "%@ Symbol";
+"Gift.Store.Filter.Selected.Symbol_any" = "%@ Symbols";
+"Gift.Store.Search" = "Search";
+"Gift.Store.SelectAll" = "Select All";
+"Gift.Store.NoResults" = "No Results";
+"Gift.Store.EmptyResults" = "No Matching Gifts";
+"Gift.Store.ClearFilters" = "Clear Filters";
+
+"Gift.Send.AvailableForResale" = "Available for Resale";
+
+"MediaPicker.CreateStory_1" = "Create %@ Story";
+"MediaPicker.CreateStory_any" = "Create %@ Stories";
+"MediaPicker.CombineIntoCollage" = "Combine into Collage";
+
+"Gift.Resale.Unavailable.Title" = "Try Later";
+"Gift.Resale.Unavailable.Text" = "You will be able to resell this gift on %@.";
+
+"Gift.Transfer.Unavailable.Title" = "Try Later";
+"Gift.Transfer.Unavailable.Text" = "You will be able to transfer this gift on %@.";
+
+"Premium.CreateMultipleStories" = "Create Multiple Stories";
+
+"FrozenAccount.Violation.TextNew" = "Your account was frozen for breaking Telegram's [Terms and Conditions]().";
+"FrozenAccount.Violation.TextNew_URL" = "https://telegram.org/tos";
+
+"Stars.Purchase.BuyStarGiftInfo" = "Buy Stars to acquire a unique collectible.";
+
+"Stars.Purchase.EnoughStars" = "You have enough stars at the moment.";
+"Stars.Purchase.BuyAnyway" = "Buy Anyway";
+
+"Gift.Buy.Confirm.Title" = "Confirm Payment";
+"Gift.Buy.Confirm.Text" = "Do you really want to buy **%1$@** for %2$@?";
+"Gift.Buy.Confirm.GiftText" = "Do you really want to buy **%1$@** for %2$@ and gift it to **%3$@**?";
+"Gift.Buy.Confirm.Text.Stars_1" = "**%@** Star";
+"Gift.Buy.Confirm.Text.Stars_any" = "**%@** Stars";
+"Gift.Buy.Confirm.BuyFor_1" = "Buy for %@ Star";
+"Gift.Buy.Confirm.BuyFor_any" = "Buy for %@ Stars";
+
+"Calls.HideCallsTab" = "Hide Calls Tab";
+
+"Story.Editor.TooltipSelection_1" = "Tap here to view your %@ story";
+"Story.Editor.TooltipSelection_any" = "Tap here to view your %@ stories";

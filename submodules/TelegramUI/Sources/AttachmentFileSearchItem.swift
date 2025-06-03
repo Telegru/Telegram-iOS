@@ -268,7 +268,7 @@ private final class AttachmentFileSearchEntry: Comparable, Identifiable {
         let itemInteraction = ListMessageItemInteraction(openMessage: { message, _ in
             interaction.send(message)
             return false
-        }, openMessageContextMenu: { _, _, _, _, _ in }, toggleMessagesSelection: { _, _ in }, openUrl: { _, _, _, _ in }, openInstantPage: { _, _ in }, longTap: { _, _ in }, getHiddenMedia: { return [:] })
+        }, openMessageContextMenu: { _, _, _, _, _, _ in }, toggleMessagesSelection: { _, _ in }, openUrl: { _, _, _, _ in }, openInstantPage: { _, _ in },  openRequiredPermissionDialog: { _, _, _ in }, longTap: { _, _ in }, getHiddenMedia: { return [:] })
         return ListMessageItem(presentationData: ChatPresentationData(presentationData: interaction.context.sharedContext.currentPresentationData.with({$0})), context: interaction.context, chatLocation: .peer(id: PeerId(0)), interaction: itemInteraction, message: message, selection: .none, displayHeader: true, displayFileInfo: false, displayBackground: true, style: .plain)
     }
 }

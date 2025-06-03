@@ -49,12 +49,17 @@ swift_library(
         "-warnings-as-errors",
     ],
     deps = [
+        "//third-party/recaptcha:RecaptchaEnterprise",
         "//Teleport/TPNews:TPNews",
         "//Teleport/TPSettings:TPSettings",
         "//Teleport/DWallpaper:DWallpaper",
         "//Teleport/DAnalytics:DAnalytics",
-        "//Teleport/DClient:DClient",
+
+        "//Teleport/DChat:DChat",
+
+        "//Teleport/DClient:DNetwork",
         "//Teleport/DWall:DWall",
+        "//Teleport/DChildMode:DChildMode",
         "@FirebaseSDK//:FirebaseCore",
         "@FirebaseSDK//:FirebaseCrashlytics",
 
@@ -78,6 +83,7 @@ swift_library(
         "//submodules/MediaPlayer:UniversalMediaPlayer",
         "//submodules/TelegramVoip:TelegramVoip",
         "//submodules/DeviceAccess:DeviceAccess",
+        "//submodules/Utils/DeviceModel",
         "//submodules/WatchCommon/Host:WatchCommon",
         "//submodules/BuildConfig:BuildConfig",
         "//submodules/BuildConfigExtra:BuildConfigExtra",
@@ -473,10 +479,20 @@ swift_library(
         "//submodules/TelegramUI/Components/MiniAppListScreen",
         "//submodules/TelegramUI/Components/Stars/StarsIntroScreen",
         "//submodules/TelegramUI/Components/Gifts/GiftOptionsScreen",
+        "//submodules/TelegramUI/Components/Gifts/GiftStoreScreen",
         "//submodules/TelegramUI/Components/ContentReportScreen",
         "//submodules/TelegramUI/Components/PeerInfo/AffiliateProgramSetupScreen",
         "//submodules/TelegramUI/Components/Stars/StarsBalanceOverlayComponent",
-        "//third-party/recaptcha:RecaptchaEnterprise",
+        "//submodules/TelegramUI/Components/Settings/AccountFreezeInfoScreen",
+        "//submodules/TelegramUI/Components/JoinSubjectScreen",
+        "//submodules/TelegramUI/Components/Chat/QuickShareScreen",
+        "//submodules/TelegramUI/Components/ButtonComponent",
+        "//submodules/Components/BlurredBackgroundComponent",
+        "//submodules/TelegramUI/Components/CheckComponent",
+        "//submodules/TelegramUI/Components/MarqueeComponent",
+        "//submodules/TelegramUI/Components/PeerInfo/PostSuggestionsSettingsScreen",
+
+        "//submodules/TelegramUI/Components/ContentHiddenOverlayNode",
     ] + select({
         "@build_bazel_rules_apple//apple:ios_arm64": appcenter_targets,
         "//build-system:ios_sim_arm64": [],

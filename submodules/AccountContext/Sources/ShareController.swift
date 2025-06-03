@@ -7,6 +7,8 @@ import TelegramUIPreferences
 import AnimationCache
 import MultiAnimationRenderer
 
+import DChildMode
+
 public enum StorySharingSubject {
     case messages([Message])
     case gift(StarGift.UniqueGift)
@@ -21,7 +23,8 @@ public protocol ShareControllerAccountContext: AnyObject {
     var animationRenderer: MultiAnimationRenderer { get }
     var contentSettings: ContentSettings { get }
     var appConfiguration: AppConfiguration { get }
-    
+    var childManager: DChildModeManager? { get }
+
     func resolveInlineStickers(fileIds: [Int64]) -> Signal<[Int64: TelegramMediaFile], NoError>
 }
 

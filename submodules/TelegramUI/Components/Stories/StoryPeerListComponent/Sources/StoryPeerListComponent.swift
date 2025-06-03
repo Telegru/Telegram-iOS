@@ -60,6 +60,7 @@ public final class StoryPeerListComponent: Component {
     public let contextPeerAction: (ContextExtractedContentContainingNode, ContextGesture, EnginePeer) -> Void
     public let openStatusSetup: (UIView) -> Void
     public let lockAction: () -> Void
+    public let composeAction: (CGFloat) -> Void
     
     public init(
         externalState: ExternalState,
@@ -81,7 +82,8 @@ public final class StoryPeerListComponent: Component {
         peerAction: @escaping (EnginePeer?) -> Void,
         contextPeerAction: @escaping (ContextExtractedContentContainingNode, ContextGesture, EnginePeer) -> Void,
         openStatusSetup: @escaping (UIView) -> Void,
-        lockAction: @escaping () -> Void
+        lockAction: @escaping () -> Void,
+        composeAction: @escaping (CGFloat) -> Void
     ) {
         self.externalState = externalState
         self.context = context
@@ -103,6 +105,7 @@ public final class StoryPeerListComponent: Component {
         self.contextPeerAction = contextPeerAction
         self.openStatusSetup = openStatusSetup
         self.lockAction = lockAction
+        self.composeAction = composeAction
     }
     
     public static func ==(lhs: StoryPeerListComponent, rhs: StoryPeerListComponent) -> Bool {
@@ -162,7 +165,6 @@ public final class StoryPeerListComponent: Component {
     
     private final class VisibleItem {
         let view = ComponentView<Empty>()
-        var hasBlur: Bool = false
         
         init() {
         }
@@ -366,10 +368,8 @@ public final class StoryPeerListComponent: Component {
             }
         }
         
-        public var hasVisibleItems: Bool {
-            !sortedItems.isEmpty
-        }
-
+        private var willComposeOnRelease = false
+        
         public override init(frame: CGRect) {
             self.collapsedButton = HighlightableButton()
             
@@ -571,14 +571,62 @@ public final class StoryPeerListComponent: Component {
         public func scrollViewDidScroll(_ scrollView: UIScrollView) {
             if !self.ignoreScrolling {
                 self.updateScrolling(transition: .immediate)
+                
+                let willComposeOnRelease = scrollView.contentOffset.x <= -70.0
+                if self.willComposeOnRelease != willComposeOnRelease {
+                    self.willComposeOnRelease = willComposeOnRelease
+                    
+                    if willComposeOnRelease {
+                        HapticFeedback().tap()
+                    } else {
+                        HapticFeedback().impact(.veryLight)
+                    }
+                }
+                
+                if scrollView.isScrollEnabled && scrollView.isTracking, scrollView.contentOffset.x <= -85.0 {
+                    scrollView.isScrollEnabled = false
+                    scrollView.panGestureRecognizer.isEnabled = false
+                    scrollView.panGestureRecognizer.isEnabled = true
+                    scrollView.contentOffset = CGPoint(x: -85.0, y: 0.0)
+                    
+                    self.willComposeOnRelease = false
+                    Queue.mainQueue().after(0.5) {
+                        scrollView.isScrollEnabled = true
+                        scrollView.contentOffset = .zero
+                    }
+                    if let component = self.component {
+                        HapticFeedback().tap()
+                        component.composeAction(abs(scrollView.contentOffset.x))
+                    }
+                }
             }
         }
-                
+        
+        public func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+            if !self.ignoreScrolling {
+                if scrollView.isScrollEnabled && scrollView.contentOffset.x <= -70.0 {
+                    scrollView.isScrollEnabled = false
+                    scrollView.panGestureRecognizer.isEnabled = false
+                    scrollView.panGestureRecognizer.isEnabled = true
+                    scrollView.contentOffset = CGPoint(x: max(-85.0, scrollView.contentOffset.x), y: 0.0)
+                    
+                    self.willComposeOnRelease = false
+                    Queue.mainQueue().after(0.5) {
+                        scrollView.isScrollEnabled = true
+                        scrollView.contentOffset = .zero
+                    }
+                    if let component = self.component {
+                        HapticFeedback().tap()
+                        component.composeAction(abs(scrollView.contentOffset.x))
+                    }
+                }
+            }
+        }
+        
         private func updateScrolling(transition: ComponentTransition) {
             guard let component = self.component, let itemLayout = self.itemLayout else {
                 return
             }
-            
             let titleIconSpacing: CGFloat = 4.0
             let titleIndicatorSpacing: CGFloat = 8.0
             
@@ -802,19 +850,19 @@ public final class StoryPeerListComponent: Component {
             }
             
             /*let blurRadius: CGFloat = collapsedState.sideAlphaFraction * 0.0 + (1.0 - collapsedState.sideAlphaFraction) * 14.0
-            if blurRadius == 0.0 {
-                self.sharedBlurEffect = nil
-            } else {
-                if let current = self.sharedBlurEffect, (current.value(forKey: "inputRadius") as? NSNumber)?.doubleValue == blurRadius {
-                } else {
-                    if let sharedBlurEffect = CALayer.blur() {
-                        sharedBlurEffect.setValue(blurRadius as NSNumber, forKey: "inputRadius")
-                        self.sharedBlurEffect = sharedBlurEffect
-                    } else {
-                        self.sharedBlurEffect = nil
-                    }
-                }
-            }*/
+             if blurRadius == 0.0 {
+             self.sharedBlurEffect = nil
+             } else {
+             if let current = self.sharedBlurEffect, (current.value(forKey: "inputRadius") as? NSNumber)?.doubleValue == blurRadius {
+             } else {
+             if let sharedBlurEffect = CALayer.blur() {
+             sharedBlurEffect.setValue(blurRadius as NSNumber, forKey: "inputRadius")
+             self.sharedBlurEffect = sharedBlurEffect
+             } else {
+             self.sharedBlurEffect = nil
+             }
+             }
+             }*/
             
             var targetCollapsedContentWidth: CGFloat = 0.0
             if collapsedItemCount > 0 {
@@ -859,7 +907,7 @@ public final class StoryPeerListComponent: Component {
             let overscrollStage1 = min(0.5, totalOverscrollFraction)
             let overscrollStage2 = max(0.0, totalOverscrollFraction - 0.5)
             
-            //let realTimeOverscrollFraction: CGFloat = max(0.0, (1.0 - component.collapseFraction) - 1.0)
+                //let realTimeOverscrollFraction: CGFloat = max(0.0, (1.0 - component.collapseFraction) - 1.0)
             let realTimeOverscrollFraction = totalOverscrollFraction
             
             var overscrollFocusIndex: Int?
@@ -880,7 +928,7 @@ public final class StoryPeerListComponent: Component {
                 self.overscrollHiddenChatItemsAllowed = false
             }
             
-            //print("overscrollStage2: \(overscrollStage2)")
+                //print("overscrollStage2: \(overscrollStage2)")
             if let overscrollFocusIndex, overscrollStage2 >= 1.19 {
                 self.overscrollSelectedId = self.sortedItems[overscrollFocusIndex].peer.id
             } else {
@@ -1095,6 +1143,11 @@ public final class StoryPeerListComponent: Component {
                 totalCount = itemSet.storyCount
                 unseenCount = itemSet.unseenCount
                 
+                var composeContentOffset: CGFloat?
+                if peer.id == component.context.account.peerId && collapsedState.sideAlphaFraction == 1.0 && self.scrollView.contentOffset.x < 0.0 {
+                    composeContentOffset = self.scrollView.contentOffset.x * -1.0
+                }
+                
                 let _ = visibleItem.view.update(
                     transition: itemTransition,
                     component: AnyComponent(StoryPeerListItemComponent(
@@ -1113,6 +1166,7 @@ public final class StoryPeerListComponent: Component {
                         expandEffectFraction: collapsedState.expandEffectFraction,
                         leftNeighborDistance: leftNeighborDistance,
                         rightNeighborDistance: rightNeighborDistance,
+                        composeContentOffset: composeContentOffset,
                         action: component.peerAction,
                         contextGesture: component.contextPeerAction
                     )),
@@ -1251,6 +1305,7 @@ public final class StoryPeerListComponent: Component {
                         expandEffectFraction: collapsedState.expandEffectFraction,
                         leftNeighborDistance: leftNeighborDistance,
                         rightNeighborDistance: rightNeighborDistance,
+                        composeContentOffset: nil,
                         action: component.peerAction,
                         contextGesture: component.contextPeerAction
                     )),
@@ -1490,7 +1545,7 @@ public final class StoryPeerListComponent: Component {
             guard let result else {
                 return nil
             }
-
+            
             if self.collapsedButton.isUserInteractionEnabled {
                 if result !== self.collapsedButton {
                     return nil
@@ -1634,7 +1689,7 @@ public final class StoryPeerListComponent: Component {
                 var boundingRect = attributedText.boundingRect(with: CGSize(width: max(0.0, component.maxTitleX - component.minTitleX - 30.0), height: 100.0), options: .usesLineFragmentOrigin, context: nil)
                 boundingRect.size.width = ceil(boundingRect.size.width)
                 boundingRect.size.height = ceil(boundingRect.size.height)
-
+                
                 let renderer = UIGraphicsImageRenderer(bounds: CGRect(origin: CGPoint(), size: boundingRect.size))
                 let image = renderer.image { context in
                     UIGraphicsPushContext(context.cgContext)

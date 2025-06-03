@@ -37,6 +37,7 @@ import ChatMessageItemView
 import ChatMessageBubbleItemNode
 import AdsInfoScreen
 import AdsReportScreen
+import TPUI
  
 
 import TPUI
@@ -481,7 +482,65 @@ func updatedChatEditInterfaceMessageState(context: AccountContext, state: ChatPr
     )
 }
 
-func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState: ChatPresentationInterfaceState, context: AccountContext, messages: [Message], controllerInteraction: ChatControllerInteraction?, selectAll: Bool, interfaceInteraction: ChatPanelInterfaceInteraction?, readStats: MessageReadStats? = nil, messageNode: ChatMessageItemView? = nil) -> Signal<ContextController.Items, NoError> {
+func contextMenuForChatPresentationInterfaceState(
+    chatPresentationInterfaceState: ChatPresentationInterfaceState,
+    context: AccountContext,
+    messages: [Message],
+    controllerInteraction: ChatControllerInteraction?,
+    selectAll: Bool,
+    interfaceInteraction: ChatPanelInterfaceInteraction?,
+    readStats: MessageReadStats? = nil,
+    messageNode: ChatMessageItemView? = nil
+) -> Signal<ContextController.Items, NoError> {
+    
+    let authorBlockingSignal: Signal<(Bool, Bool), NoError>
+    if let firstMessage = messages.first,
+       let author = firstMessage.author,
+       author.id.namespace == Namespaces.Peer.CloudUser {
+        
+            
+        let isBlockedSignal = context.engine.data.get(TelegramEngine.EngineData.Item.Peer.IsBlocked(id: author.id))
+        |> take(1)
+        |> map { maybeIsBlocked -> Bool in
+            var isBlocked = false
+            if case let .known(value) = maybeIsBlocked {
+                isBlocked = value
+            }
+            return isBlocked
+        }
+        
+        let requiresPremiumSignal = context.engine.peers.isPremiumRequiredToContact([EnginePeer(author).id])
+        |> take(1)
+        |> map { result -> Bool in
+            if let requirement = result[EnginePeer(author).id],
+               case .premium = requirement {
+                return true
+            }
+            return false
+        }
+        
+        authorBlockingSignal = combineLatest(isBlockedSignal, requiresPremiumSignal)
+    } else {
+        authorBlockingSignal = .single((false, false))
+    }
+    
+    return authorBlockingSignal
+    |> mapToSignal { isBlocked, requiresPremium -> Signal<ContextController.Items, NoError> in
+        return contextMenuForChatPresentationInterfaceState(
+            chatPresentationInterfaceState: chatPresentationInterfaceState,
+            context: context,
+            messages: messages,
+            controllerInteraction: controllerInteraction,
+            selectAll: selectAll,
+            interfaceInteraction: interfaceInteraction,
+            messageNode: messageNode,
+            authorIsBlocked: isBlocked,
+            authorRequiresPremium: requiresPremium
+        )
+    }
+}
+    
+func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState: ChatPresentationInterfaceState, context: AccountContext, messages: [Message], controllerInteraction: ChatControllerInteraction?, selectAll: Bool, interfaceInteraction: ChatPanelInterfaceInteraction?, readStats: MessageReadStats? = nil, messageNode: ChatMessageItemView? = nil, authorIsBlocked: Bool, authorRequiresPremium: Bool) -> Signal<ContextController.Items, NoError> {
     guard let interfaceInteraction = interfaceInteraction, let controllerInteraction = controllerInteraction else {
         return .single(ContextController.Items(content: .list([])))
     }
@@ -571,13 +630,12 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
             }, iconSource: nil, action: { _, f in
                 f(.default)
                 
-                let _ = (context.engine.messages.reportAdMessage(peerId: message.id.peerId, opaqueId: adAttribute.opaqueId, option: nil)
+                let _ = (context.engine.messages.reportAdMessage(opaqueId: adAttribute.opaqueId, option: nil)
                 |> deliverOnMainQueue).start(next: { result in
                     if case let .options(title, options) = result {
                         controllerInteraction.navigationController()?.pushViewController(
                             AdsReportScreen(
                                 context: context,
-                                peerId: message.id.peerId,
                                 opaqueId: adAttribute.opaqueId,
                                 title: title,
                                 options: options,
@@ -1147,7 +1205,7 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
             let sendGiftTitle: String
             var isIncoming = message.effectivelyIncoming(context.account.peerId)
             for media in message.media {
-                if let action = media as? TelegramMediaAction, case let .starGiftUnique(_, isUpgrade, _, _, _, _, _, _, _, _) = action.action {
+                if let action = media as? TelegramMediaAction, case let .starGiftUnique(_, isUpgrade, _, _, _, _, _, _, _, _, _, _, _) = action.action {
                     if isUpgrade && message.author?.id == context.account.peerId {
                         isIncoming = true
                     }
@@ -1183,6 +1241,27 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
                         completed()
                     })
                 })
+            })))
+        }
+        
+        let dahlSettings = context.currentDahlSettings.with { $0 }
+        let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        let canReplyPrivately: Bool = {
+            if message.peers[message.id.peerId] is TelegramGroup {
+                return dahlSettings.messageMenuSettings.replyPrivately
+            } else if let channel = message.peers[message.id.peerId] as? TelegramChannel,
+                      case .group = channel.info {
+                return dahlSettings.messageMenuSettings.replyPrivately
+            }
+            return false
+        }()
+    
+        if !isPinnedMessages, !isReplyThreadHead, data.canReply, canReplyPrivately, (!authorRequiresPremium || isPremium), !authorIsBlocked {
+            actions.append(.action(ContextMenuActionItem(text: "DahlSettings.MessageMenu.ReplyPrivately".tp_loc(lang: presentationData.strings.baseLanguageCode), icon: { theme in
+                return generateTintedImage(image: TPIconManager.shared.icon(.contextMenuReplyPrivately), color: theme.actionSheet.primaryTextColor)
+            }, action: { _, f in
+                interfaceInteraction.replyPrivately(message)
+                f(.dismissWithoutContent)
             })))
         }
         
@@ -1735,7 +1814,8 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
             })))
         }
 
-        let showReply = context.currentDahlSettings.with { $0 }.messageMenuSettings.reply
+        let showReply = dahlSettings.messageMenuSettings.reply
+        let lang = chatPresentationInterfaceState.strings.baseLanguageCode
 
         if data.messageActions.options.contains(.forward) && showReply {
             if !isCopyProtected {
@@ -1748,11 +1828,21 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
             }
         }
         
+        if data.messageActions.options.contains(.forward) && context.currentDahlSettings.with({ $0 }).messageMenuSettings.forwardWithoutName {
+            if !isCopyProtected {
+                actions.append(.action(ContextMenuActionItem(
+                    text: "DahlSettings.MessageMenu.ForwardWithoutName".tp_loc(lang: lang),
+                    icon: { theme in
+                    return generateTintedImage(image: TPIconManager.shared.icon(.contextMenuForwardWithoutName), color: theme.actionSheet.primaryTextColor)
+                }, action: { _, f in
+                    interfaceInteraction.forwardMessagesWithoutName(selectAll || isImage ? messages : [message])
+                    f(.dismissWithoutContent)
+                })))
+			}
+		}
         if case let .customChatContents(customChatContents) = chatPresentationInterfaceState.subject {
             switch customChatContents.kind {
             case .wall:
-                let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-
                 actions.append(.action(ContextMenuActionItem(text: "Wall.Conversation.ContextMenuExcludeChannel".tp_loc(lang: presentationData.strings.baseLanguageCode), icon: { theme in
                     return generateTintedImage(image: TPIconManager.shared.icon(.contextMenuExclude), color: theme.actionSheet.primaryTextColor)
                 }, action: { c, f in
@@ -1880,6 +1970,19 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
                     context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(EnginePeer(peer)), subject: .message(id: .id(messages[0].id), highlight: ChatControllerSubject.MessageHighlight(quote: nil), timecode: nil, setupReply: false), useExisting: true))
                 })
             })))
+        }
+        
+        if data.messageActions.options.contains(.forward) && !isCopyProtected {
+            let showSaved = context.currentDahlSettings.with { $0 }.messageMenuSettings.saved
+            if showSaved {
+                let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+                actions.append(.action(ContextMenuActionItem(text: "DahlSettings.MessageMenu.Saved".tp_loc(lang: presentationData.strings.baseLanguageCode), icon: { theme in
+                    return generateTintedImage(image: TPIconManager.shared.icon(.contextMenuSaved), color: theme.actionSheet.primaryTextColor)
+                }, action: { _, f in
+                    interfaceInteraction.forwardMessagesToSaved([message])
+                    f(.default)
+                })))
+            }
         }
 
         if !isReplyThreadHead, (!data.messageActions.options.intersection([.deleteLocally, .deleteGlobally]).isEmpty || clearCacheAsDelete) {
@@ -2188,6 +2291,39 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
                 }
             case .businessLinkSetup:
                 actions.removeAll()
+            case .postSuggestions:
+                //TODO:release
+                actions.removeAll()
+                
+                actions.append(.action(ContextMenuActionItem(text: chatPresentationInterfaceState.strings.Conversation_MessageDialogEdit, icon: { theme in
+                    return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Edit"), color: theme.actionSheet.primaryTextColor)
+                }, action: { c, f in
+                    interfaceInteraction.setupEditMessage(messages[0].id, { transition in
+                        f(.custom(transition))
+                    })
+                })))
+                actions.append(.action(ContextMenuActionItem(text: chatPresentationInterfaceState.strings.ScheduledMessages_EditTime, icon: { theme in
+                    return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Schedule"), color: theme.actionSheet.primaryTextColor)
+                }, action: { _, f in
+                    controllerInteraction.editScheduledMessagesTime(messages.map { $0.id })
+                    f(.dismissWithoutContent)
+                })))
+                actions.append(.action(ContextMenuActionItem(text: "Edit Price", icon: { theme in
+                    return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Tag"), color: theme.actionSheet.primaryTextColor)
+                }, action: { _, f in
+                    f(.dismissWithoutContent)
+                })))
+                actions.append(.action(ContextMenuActionItem(text: "Delete", textColor: .destructive, icon: { theme in
+                    return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Delete"), color: theme.actionSheet.destructiveActionTextColor)
+                }, action: { controller, f in
+                    interfaceInteraction.deleteMessages(messages, controller, f)
+                })))
+                actions.append(.separator)
+                let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+                let action: ((ContextControllerProtocol?, @escaping (ContextMenuActionResult) -> Void) -> Void)? = nil
+                actions.append(.action(ContextMenuActionItem(text: "Deleting suggested post will auto-refund your order.", textColor: .primary, textLayout: .multiline, textFont: .custom(font: Font.regular(floor(presentationData.listsFontSize.baseDisplaySize * 0.8)), height: nil, verticalOffset: nil), badge: nil, icon: { theme in
+                    return nil
+                }, iconSource: nil, action: action)))
             }
         }
         

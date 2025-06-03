@@ -161,6 +161,7 @@ public final class SecretMediaPreviewController: ViewController {
         return self.displayNode as! SecretMediaPreviewControllerNode
     }
     
+    private var whitelist: [EnginePeer.Id]? 
     private var messageView: MessageView?
     private var currentNodeMessageId: MessageId?
     private var currentNodeMessageIsVideo = false
@@ -526,7 +527,7 @@ public final class SecretMediaPreviewController: ViewController {
                 }
                                 
                 let entry = GalleryEntry(entry: MessageHistoryEntry(message: message, isRead: false, location: nil, monthLocation: nil, attributes: MutableMessageHistoryEntryAttributes(authorIsContact: false)))
-                guard let item = galleryItemForEntry(context: self.context, presentationData: self.presentationData, entry: entry, streamVideos: false, hideControls: true, isSecret: true, playbackRate: { nil }, peerIsCopyProtected: true, tempFilePath: tempFilePath, playbackCompleted: { [weak self] in
+                guard let item = galleryItemForEntry(context: self.context, presentationData: self.presentationData, entry: entry, streamVideos: false, hideControls: true, isSecret: true,  blurred: false, playbackRate: { nil }, peerIsCopyProtected: true, tempFilePath: tempFilePath, playbackCompleted: { [weak self] in
                     if let self {
                         if self.currentNodeMessageIsViewOnce || (duration < 30.0 && !self.currentMessageIsDismissed) {
                             if let node = self.controllerNode.pager.centralItemNode() as? UniversalVideoGalleryItemNode {
@@ -536,7 +537,7 @@ public final class SecretMediaPreviewController: ViewController {
                             self.dismiss(forceAway: false)
                         }
                     }
-                }, present: { _, _ in }) else {
+                }, present: { _, _ in }, dismissAction: { }, showConentAction: { _ in }) else {
                     self._ready.set(.single(true))
                     return
                 }

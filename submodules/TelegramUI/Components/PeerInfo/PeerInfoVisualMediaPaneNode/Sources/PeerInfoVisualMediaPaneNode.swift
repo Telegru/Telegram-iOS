@@ -542,7 +542,8 @@ private final class ItemView: UIView, SparseItemGridView {
             selection: isSelected.flatMap { isSelected in
                 return .selectable(selected: isSelected)
             } ?? .none,
-            displayHeader: false
+            displayHeader: false,
+            blurred: false
         )
         self.messageItem = messageItem
 
@@ -744,7 +745,8 @@ private final class SparseItemGridBindingImpl: SparseItemGridBinding, ListShimme
                 interaction: self.listItemInteraction,
                 message: fakeMessage,
                 selection: .none,
-                displayHeader: false
+                displayHeader: false,
+                blurred: false
             )
 
             var itemNode: ListViewItemNode?
@@ -1197,7 +1199,7 @@ public final class PeerInfoVisualMediaPaneNode: ASDisplayNode, PeerInfoPaneNode,
             openMessage: { message, mode in
                 return chatControllerInteraction.openMessage(message, OpenMessageParams(mode: mode))
             },
-            openMessageContextMenu: { message, bool, node, rect, gesture in
+            openMessageContextMenu: { message, bool, node, rect, gesture, _ in
                 chatControllerInteraction.openMessageContextMenu(message, bool, node, rect, gesture, nil)
             },
             toggleMessagesSelection: { messageId, selected in
@@ -1208,6 +1210,9 @@ public final class PeerInfoVisualMediaPaneNode: ASDisplayNode, PeerInfoPaneNode,
             },
             openInstantPage: { message, data in
                 chatControllerInteraction.openInstantPage(message, data)
+            },
+            openRequiredPermissionDialog: { _, _, _ in
+                
             },
             longTap: { action, message in
                 chatControllerInteraction.longTap(action, ChatControllerInteraction.LongTapParams(message: message))
@@ -2173,7 +2178,8 @@ public final class PeerInfoVisualMediaPaneNode: ASDisplayNode, PeerInfoPaneNode,
                     interaction: self.itemGridBinding.listItemInteraction,
                     message: fakeMessage,
                     selection: .none,
-                    displayHeader: false
+                    displayHeader: false,
+                    blurred: false
                 )
 
                 var itemNode: ListViewItemNode?

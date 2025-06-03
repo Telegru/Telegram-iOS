@@ -183,6 +183,7 @@ final class PeerSelectionLoadingView: UIView {
                     actionIcon: .none,
                     index: nil,
                     header: nil,
+                    blurred: false,
                     action: { _ in },
                     disabledAction: nil,
                     setPeerIdWithRevealedOptions: nil,

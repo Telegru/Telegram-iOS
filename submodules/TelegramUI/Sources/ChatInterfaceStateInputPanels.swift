@@ -10,7 +10,13 @@ import ChatChannelSubscriberInputPanelNode
 import ChatMessageSelectionInputPanelNode
 
 func inputPanelForChatPresentationIntefaceState(_ chatPresentationInterfaceState: ChatPresentationInterfaceState, context: AccountContext, currentPanel: ChatInputPanelNode?, currentSecondaryPanel: ChatInputPanelNode?, textInputPanelNode: ChatTextInputPanelNode?, interfaceInteraction: ChatPanelInterfaceInteraction?) -> (primary: ChatInputPanelNode?, secondary: ChatInputPanelNode?) {
-    if let renderedPeer = chatPresentationInterfaceState.renderedPeer, renderedPeer.peer?.restrictionText(platform: "ios", contentSettings: context.currentContentSettings.with { $0 }) != nil {
+    var isPostSuggestions = false
+    if case let .customChatContents(customChatContents) = chatPresentationInterfaceState.subject, case .postSuggestions = customChatContents.kind {
+        isPostSuggestions = true
+    }
+    
+    if isPostSuggestions {
+    } else if let renderedPeer = chatPresentationInterfaceState.renderedPeer, renderedPeer.peer?.restrictionText(platform: "ios", contentSettings: context.currentContentSettings.with { $0 }) != nil {
         return (nil, nil)
     }
     if chatPresentationInterfaceState.isNotAccessible {
@@ -19,6 +25,27 @@ func inputPanelForChatPresentationIntefaceState(_ chatPresentationInterfaceState
     
     if case .messageOptions = chatPresentationInterfaceState.subject {
         return (nil, nil)
+    }
+    
+    if context.isFrozen {
+        var isActuallyFrozen = true
+        let accountFreezeConfiguration = AccountFreezeConfiguration.with(appConfiguration: context.currentAppConfiguration.with { $0 })
+        if let freezeAppealUrl = accountFreezeConfiguration.freezeAppealUrl {
+            let components = freezeAppealUrl.components(separatedBy: "/")
+            if let username = components.last, let peer = chatPresentationInterfaceState.renderedPeer?.peer, peer.addressName == username {
+                isActuallyFrozen = false
+            }
+        }
+        if isActuallyFrozen {
+            if let currentPanel = (currentPanel as? ChatRestrictedInputPanelNode) ?? (currentSecondaryPanel as? ChatRestrictedInputPanelNode) {
+                return (currentPanel, nil)
+            } else {
+                let panel = ChatRestrictedInputPanelNode()
+                panel.context = context
+                panel.interfaceInteraction = interfaceInteraction
+                return (panel, nil)
+            }
+        }
     }
     
     if let _ = chatPresentationInterfaceState.search {
@@ -115,7 +142,8 @@ func inputPanelForChatPresentationIntefaceState(_ chatPresentationInterfaceState
         }
     }
     
-    if chatPresentationInterfaceState.peerIsBlocked, let peer = chatPresentationInterfaceState.renderedPeer?.peer as? TelegramUser, peer.botInfo == nil {
+    if isPostSuggestions {
+    } else if chatPresentationInterfaceState.peerIsBlocked, let peer = chatPresentationInterfaceState.renderedPeer?.peer as? TelegramUser, peer.botInfo == nil {
         if let currentPanel = (currentPanel as? ChatUnblockInputPanelNode) ?? (currentSecondaryPanel as? ChatUnblockInputPanelNode) {
             currentPanel.interfaceInteraction = interfaceInteraction
             currentPanel.updateThemeAndStrings(theme: chatPresentationInterfaceState.theme, strings: chatPresentationInterfaceState.strings)
@@ -130,7 +158,9 @@ func inputPanelForChatPresentationIntefaceState(_ chatPresentationInterfaceState
     
     var displayInputTextPanel = false
     
-    if let peer = chatPresentationInterfaceState.renderedPeer?.peer {
+    if isPostSuggestions {
+        displayInputTextPanel = true
+    } else if let peer = chatPresentationInterfaceState.renderedPeer?.peer {
         if peer.id.isRepliesOrVerificationCodes {
             if let currentPanel = (currentPanel as? ChatChannelSubscriberInputPanelNode) ?? (currentSecondaryPanel as? ChatChannelSubscriberInputPanelNode) {
                 return (currentPanel, nil)
@@ -409,6 +439,8 @@ func inputPanelForChatPresentationIntefaceState(_ chatPresentationInterfaceState
         case .hashTagSearch, .wall:
             displayInputTextPanel = false
         case .quickReplyMessageInput, .businessLinkSetup:
+            displayInputTextPanel = true
+        case .postSuggestions:
             displayInputTextPanel = true
         }
         

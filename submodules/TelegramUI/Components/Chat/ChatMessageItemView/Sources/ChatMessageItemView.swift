@@ -112,7 +112,7 @@ public final class ChatMessageAccessibilityData {
             if let chatPeer = message.peers[item.message.id.peerId] {
                 let authorName = message.author.flatMap(EnginePeer.init)?.displayTitle(strings: item.presentationData.strings, displayOrder: item.presentationData.nameDisplayOrder)
                 
-                let (_, _, messageText, _, _) = chatListItemStrings(strings: item.presentationData.strings, nameDisplayOrder: item.presentationData.nameDisplayOrder, dateTimeFormat: item.presentationData.dateTimeFormat, contentSettings: item.context.currentContentSettings.with { $0 }, messages: [EngineMessage(message)], chatPeer: EngineRenderedPeer(peer: EnginePeer(chatPeer)), accountPeerId: item.context.account.peerId)
+                let (_, _, messageText, _, _) = chatListItemStrings(strings: item.presentationData.strings, nameDisplayOrder: item.presentationData.nameDisplayOrder, dateTimeFormat: item.presentationData.dateTimeFormat, contentSettings: item.context.currentContentSettings.with { $0 }, messages: [EngineMessage(message)], chatPeer: EngineRenderedPeer(peer: EnginePeer(chatPeer)), accountPeerId: item.context.account.peerId, blurred: false)
                 
                 var text = messageText
                 
@@ -590,6 +590,7 @@ public final class ChatMessageAccessibilityData {
                 }
                 else if let media = media as? TelegramMediaAction {
                     if case .phoneCall = media.action {
+                    } else if case .conferenceCall = media.action {
                     } else {
                         canReply = false
                     }
@@ -938,13 +939,13 @@ open class ChatMessageItemView: ListViewItemNode, ChatMessageItemNodeProtocol {
         }
         self.playedEffectAnimation = true
         
-        if let effectAnimation = effect.effectAnimation {
+        if let effectAnimation = effect.effectAnimation?._parse() {
             self.playEffectAnimation(resource: effectAnimation.resource)
             if self.fetchEffectDisposable == nil {
                 self.fetchEffectDisposable = freeMediaFileResourceInteractiveFetched(account: item.context.account, userLocation: .other, fileReference: .standalone(media: effectAnimation), resource: effectAnimation.resource).startStrict()
             }
         } else {
-            let effectSticker = effect.effectSticker
+            let effectSticker = effect.effectSticker._parse()
             if let effectFile = effectSticker.videoThumbnails.first {
                 self.playEffectAnimation(resource: effectFile.resource)
                 if self.fetchEffectDisposable == nil {

@@ -10,6 +10,8 @@ swift_library(
         "-warnings-as-errors",
     ],
     deps = [
+        "//Teleport/DChildMode:DChildMode",
+
         "//submodules/TelegramAudio:TelegramAudio",
         "//submodules/AsyncDisplayKit:AsyncDisplayKit",
         "//submodules/TemporaryCachedPeerDataManager:TemporaryCachedPeerDataManager",

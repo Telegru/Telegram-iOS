@@ -44,6 +44,7 @@ public enum PresentationResourceKey: Int32 {
     case itemListDisclosureLocked
     case itemListCheckIcon
     case itemListSecondaryCheckIcon
+    case itemListDisabledCheckIcon
     case itemListPlusIcon
     case itemListRoundPlusIcon
     case itemListAccentDeleteIcon
@@ -128,6 +129,8 @@ public enum PresentationResourceKey: Int32 {
     
     case chatListGeneralTopicIcon
     case chatListGeneralTopicSmallIcon
+    
+    case searchAdIcon
 
     case chatTitleLockIcon
     case chatTitleMuteIcon
@@ -336,6 +339,8 @@ public enum PresentationResourceKey: Int32 {
     case peerStatusLockedImage
     case expandDownArrowImage
     case expandSmallDownArrowImage
+    
+    case callListCallIcon
 }
 
 public enum ChatExpiredStoryIndicatorType: Hashable {
@@ -362,7 +367,8 @@ public enum PresentationResourceParameterKey: Hashable {
     case chatListBadgeBackgroundInactiveMention(CGFloat)
     case chatListBadgeBackgroundPinned(CGFloat)
     case badgeBackgroundBorder(CGFloat)
-    
+    case chatListBadgeBackgroundLocked(CGFloat)
+
     case chatBubbleMediaCorner(incoming: Bool, mainRadius: CGFloat, inset: CGFloat)
     
     case chatPrincipalThemeEssentialGraphics(hasWallpaper: Bool, bubbleCorners: PresentationChatBubbleCorners)

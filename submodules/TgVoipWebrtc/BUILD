@@ -163,7 +163,7 @@ objc_library(
         "PublicHeaders",
     ],
     deps = [
-        "//third-party/webrtc:webrtc_lib",
+        "//third-party/webrtc:webrtc",
         "//submodules/MtProtoKit:MtProtoKit",
         "//third-party/boringssl:crypto",
         "//third-party/boringssl:ssl",
@@ -172,6 +172,7 @@ objc_library(
         "//submodules/ffmpeg:ffmpeg",
         "//third-party/rnnoise:rnnoise",
         "//third-party/libyuv:libyuv",
+        "//third-party/td:TdBinding",
     ] + (["//third-party/libx264:libx264"] if enable_x264 else []),
     sdk_frameworks = [
         "Foundation",

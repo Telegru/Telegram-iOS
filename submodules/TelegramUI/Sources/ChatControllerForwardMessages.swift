@@ -363,7 +363,15 @@ extension ChatControllerImpl {
                 }
                 
                 if case .peer(peerId) = strongSelf.chatLocation, strongSelf.parentController == nil, !isPinnedMessages {
-                    strongSelf.updateChatPresentationInterfaceState(animated: false, interactive: true, { $0.updatedInterfaceState({ $0.withUpdatedForwardMessageIds(messages.map { $0.id }).withUpdatedForwardOptionsState(ChatInterfaceForwardOptionsState(hideNames: !hasNotOwnMessages, hideCaptions: false, unhideNamesOnCaptionChange: false)).withoutSelectionState() }).updatedSearch(nil) })
+                    strongSelf.updateChatPresentationInterfaceState(animated: false, interactive: true, { $0.updatedInterfaceState({
+                        let currentState = $0.withUpdatedForwardMessageIds(messages.map { $0.id })
+                        if var options = options, strongSelf.context.currentDahlSettings.with({ $0 }).messageMenuSettings.forwardWithoutName {
+                            options.hideNames = options.hideNames || !hasNotOwnMessages
+                            return currentState.withUpdatedForwardMessageIds(messages.map { $0.id }).withUpdatedForwardOptionsState(options).withoutSelectionState()
+                        } else {
+                            return currentState.withUpdatedForwardMessageIds(messages.map { $0.id }).withUpdatedForwardOptionsState(ChatInterfaceForwardOptionsState(hideNames: !hasNotOwnMessages, hideCaptions: false, unhideNamesOnCaptionChange: false)).withoutSelectionState()
+                        }
+                    }).updatedSearch(nil) })
                     strongSelf.updateItemNodesSearchTextHighlightStates()
                     strongSelf.searchResultsController = nil
                     strongController.dismiss()
@@ -456,7 +464,12 @@ extension ChatControllerImpl {
                     }
 
                     let _ = (ChatInterfaceState.update(engine: strongSelf.context.engine, peerId: peerId, threadId: threadId, { currentState in
-                        return currentState.withUpdatedForwardMessageIds(messages.map { $0.id }).withUpdatedForwardOptionsState(ChatInterfaceForwardOptionsState(hideNames: !hasNotOwnMessages, hideCaptions: false, unhideNamesOnCaptionChange: false))
+                        if var options = options, strongSelf.context.currentDahlSettings.with({ $0 }).messageMenuSettings.forwardWithoutName {
+                            options.hideNames = options.hideNames || !hasNotOwnMessages
+                            return currentState.withUpdatedForwardMessageIds(messages.map { $0.id }).withUpdatedForwardOptionsState(options)
+                        } else {
+                            return currentState.withUpdatedForwardMessageIds(messages.map { $0.id }).withUpdatedForwardOptionsState(ChatInterfaceForwardOptionsState(hideNames: !hasNotOwnMessages, hideCaptions: false, unhideNamesOnCaptionChange: false))
+                        }
                     })
                     |> deliverOnMainQueue).startStandalone(completed: {
                         if let strongSelf = self {
@@ -502,6 +515,97 @@ extension ChatControllerImpl {
             }
             self.chatDisplayNode.dismissInput()
             self.effectiveNavigationController?.pushViewController(controller)
+        })
+    }
+    
+    func saveMessages(_ messageIds: [MessageId]) {
+        let _ = (self.context.engine.data.get(EngineDataMap(
+            messageIds.map(TelegramEngine.EngineData.Item.Messages.Message.init)
+        ))
+        |> deliverOnMainQueue).startStandalone(next: { [weak self] messages in
+            guard let strongSelf = self else {
+                return
+            }
+
+            let sortedMessages = messages.values.compactMap { $0?._asMessage() }.sorted { lhs, rhs in
+                return lhs.id < rhs.id
+            }
+
+            if sortedMessages.isEmpty {
+                return
+            }
+
+            var correlationIds: [Int64] = []
+            let forwardMessages = sortedMessages.map { message -> EnqueueMessage in
+                let correlationId = Int64.random(in: Int64.min ... Int64.max)
+                correlationIds.append(correlationId)
+                return .forward(
+                    source: message.id,
+                    threadId: nil,
+                    grouping: .auto,
+                    attributes: [],
+                    correlationId: correlationId
+                )
+            }
+            let _ = (enqueueMessages(account: strongSelf.context.account, peerId: strongSelf.context.account.peerId, messages: forwardMessages)
+                     |> deliverOnMainQueue).startStandalone(next: { [weak self] messageIds in
+                if let strongSelf = self {
+
+                    Queue.mainQueue().after(0.88) {
+                        strongSelf.chatDisplayNode.hapticFeedback.success()
+                    }
+                    let reactionItems: Signal<[ReactionItem], NoError>
+                    if sortedMessages.count > 0 {
+                        reactionItems = tagMessageReactions(context: strongSelf.context, subPeerId: nil)
+                    } else {
+                        reactionItems = .single([])
+                    }
+                    let _ = (reactionItems
+                             |> deliverOnMainQueue).startStandalone(next: { [weak strongSelf] reactionItems in
+                        guard let strongSelf = strongSelf else { return }
+                        let presentationData = strongSelf.context.sharedContext.currentPresentationData.with { $0 }
+                        strongSelf.present(UndoOverlayController(
+                            presentationData: presentationData,
+                            content: .forward(
+                                savedMessages: true,
+                                text: sortedMessages.count == 1
+                                ? presentationData.strings.Conversation_ForwardTooltip_SavedMessages_One
+                                : presentationData.strings.Conversation_ForwardTooltip_SavedMessages_Many
+                            ),
+                            elevatedLayout: false,
+                            position: .top,
+                            animateInAsReplacement: true,
+                            action: { [weak strongSelf] value in
+                                if case .info = value, let strongSelf = strongSelf {
+                                    let _ = (strongSelf.context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: strongSelf.context.account.peerId))
+                                             |> deliverOnMainQueue).startStandalone(next: { peer in
+                                        guard let peer = peer,
+                                              let navigationController = strongSelf.navigationController as? NavigationController else {
+                                            return
+                                        }
+                                        strongSelf.context.sharedContext.navigateToChatController(
+                                            NavigateToChatControllerParams(
+                                                navigationController: navigationController,
+                                                context: strongSelf.context,
+                                                chatLocation: .peer(peer),
+                                                keepStack: .always,
+                                                purposefulAction: {},
+                                                peekData: nil,
+                                                forceOpenChat: true
+                                            )
+                                        )
+                                    })
+                                    return true
+                                }
+                                return false
+                            },
+                            additionalView: sortedMessages.count > 0
+                            ? chatShareToSavedMessagesAdditionalView(strongSelf, reactionItems: reactionItems, correlationIds: correlationIds)
+                            : nil
+                        ), in: .current)
+                    })
+                }
+            })
         })
     }
 }

@@ -18,16 +18,16 @@ private let mediaBadgeBackgroundColor = UIColor(white: 0.0, alpha: 0.6)
 private let mediaBadgeTextColor = UIColor.white
 
 private final class VisualMediaItemInteraction {
-    let openMessage: (Message) -> Void
-    let openMessageContextActions: (Message, ASDisplayNode, CGRect, ContextGesture?) -> Void
+    let openMessage: (Message, Bool) -> Void
+    let openMessageContextActions: (Message, ASDisplayNode, CGRect, ContextGesture?, Bool) -> Void
     let toggleSelection: (MessageId, Bool) -> Void
     
     var hiddenMedia: [MessageId: [Media]] = [:]
     var selectedMessageIds: Set<MessageId>?
     
     init(
-        openMessage: @escaping (Message) -> Void,
-        openMessageContextActions: @escaping (Message, ASDisplayNode, CGRect, ContextGesture?) -> Void,
+        openMessage: @escaping (Message, Bool) -> Void,
+        openMessageContextActions: @escaping (Message, ASDisplayNode, CGRect, ContextGesture?, Bool) -> Void,
         toggleSelection: @escaping (MessageId, Bool) -> Void
     ) {
         self.openMessage = openMessage
@@ -83,7 +83,7 @@ private final class VisualMediaItemNode: ASDisplayNode {
                 return
             }
             if let message = item.0.message {
-                strongSelf.interaction.openMessageContextActions(message, strongSelf.containerNode, strongSelf.containerNode.bounds, gesture)
+                strongSelf.interaction.openMessageContextActions(message, strongSelf.containerNode, strongSelf.containerNode.bounds, gesture, item.0.blurred)
             }
         }
     }
@@ -129,12 +129,12 @@ private final class VisualMediaItemNode: ASDisplayNode {
                         if let media = media {
                             if let file = media as? TelegramMediaFile {
                                 if isMediaStreamable(message: message, media: file) {
-                                    self.interaction.openMessage(message)
+                                    self.interaction.openMessage(message, self.item?.0.blurred == true)
                                 } else {
                                     self.progressPressed()
                                 }
                             } else {
-                                self.interaction.openMessage(message)
+                                self.interaction.openMessage(message, self.item?.0.blurred == true)
                             }
                         }
                     }
@@ -164,7 +164,7 @@ private final class VisualMediaItemNode: ASDisplayNode {
             case .Fetching:
                 messageMediaFileCancelInteractiveFetch(context: self.context, messageId: message.id, file: file)
             case .Local:
-                self.interaction.openMessage(message)
+                self.interaction.openMessage(message, self.item?.0.blurred == true)
             case .Remote, .Paused:
                 self.fetchDisposable.set(messageMediaFileInteractiveFetched(context: self.context, message: message, file: file, userInitiated: true).startStrict())
             }
@@ -201,7 +201,7 @@ private final class VisualMediaItemNode: ASDisplayNode {
             if let image = media as? TelegramMediaImage, let largestSize = largestImageRepresentation(image.representations)?.dimensions {
                 mediaDimensions = largestSize.cgSize
                
-                self.imageNode.setSignal(mediaGridMessagePhoto(account: context.account, userLocation: .peer(message.id.peerId), photoReference: .message(message: MessageReference(message), media: image), fullRepresentationSize: CGSize(width: 300.0, height: 300.0), synchronousLoad: synchronousLoad), attemptSynchronously: synchronousLoad, dispatchOnDisplayLink: true)
+                self.imageNode.setSignal(mediaGridMessagePhoto(account: context.account, userLocation: .peer(message.id.peerId), photoReference: .message(message: MessageReference(message), media: image), fullRepresentationSize: CGSize(width: 300.0, height: 300.0), blurred: item.blurred, synchronousLoad: synchronousLoad), attemptSynchronously: synchronousLoad, dispatchOnDisplayLink: true)
                 
                 self.fetchStatusDisposable.set(nil)
                 self.statusNode.transitionToState(.none, completion: { [weak self] in
@@ -211,8 +211,7 @@ private final class VisualMediaItemNode: ASDisplayNode {
                 self.resourceStatus = nil
             } else if let file = media as? TelegramMediaFile, file.isVideo {
                 mediaDimensions = file.dimensions?.cgSize
-                self.imageNode.setSignal(mediaGridMessageVideo(postbox: context.account.postbox, userLocation: .peer(message.id.peerId), videoReference: .message(message: MessageReference(message), media: file), synchronousLoad: synchronousLoad, autoFetchFullSizeThumbnail: true), attemptSynchronously: synchronousLoad)
-                
+                self.imageNode.setSignal(mediaGridMessageVideo(postbox: context.account.postbox, userLocation: .peer(message.id.peerId), videoReference: .message(message: MessageReference(message), media: file), synchronousLoad: synchronousLoad, autoFetchFullSizeThumbnail: true, blurred: item.blurred), attemptSynchronously: synchronousLoad)
                 self.mediaBadgeNode.isHidden = file.isAnimated
                 
                 self.resourceStatus = nil
@@ -262,7 +261,7 @@ private final class VisualMediaItemNode: ASDisplayNode {
                             var badgeContent: ChatMessageInteractiveMediaBadgeContent?
                             var mediaDownloadState: ChatMessageInteractiveMediaDownloadState?
                             
-                            if isStreamable {
+                            if isStreamable, !item.blurred {
                                 switch status {
                                 case let .Fetching(_, progress):
                                     let progressString = String(format: "%d%%", Int(progress * 100.0))
@@ -405,8 +404,9 @@ private final class VisualMediaItem {
     let message: Message?
     let dimensions: CGSize
     let aspectRatio: CGFloat
-    
-    init(message: Message, index: UInt32?) {
+    let blurred: Bool
+
+    init(message: Message, index: UInt32?, blurred: Bool) {
         self.index = index
         self.message = message
         
@@ -420,6 +420,7 @@ private final class VisualMediaItem {
                 }
             }
         }
+        self.blurred = blurred
         self.aspectRatio = aspectRatio
         self.dimensions = dimensions
     }
@@ -635,7 +636,7 @@ final class ChatListSearchMediaNode: ASDisplayNode, ASScrollViewDelegate {
     public var beganInteractiveDragging: (() -> Void)?
     public var loadMore: (() -> Void)?
     
-    init(context: AccountContext, contentType: ContentType, openMessage: @escaping (Message, ChatControllerInteractionOpenMessageMode) -> Void, messageContextAction: @escaping (Message, ASDisplayNode?, CGRect?, UIGestureRecognizer?) -> Void, toggleMessageSelection: @escaping (MessageId, Bool) -> Void) {
+    init(context: AccountContext, contentType: ContentType, openMessage: @escaping (Message, ChatControllerInteractionOpenMessageMode) -> Void, openPeerRequest: @escaping (EnginePeer.Id) -> Void, messageContextAction: @escaping (Message, ASDisplayNode?, CGRect?, UIGestureRecognizer?, Bool) -> Void, toggleMessageSelection: @escaping (MessageId, Bool) -> Void) {
         self.context = context
         self.contentType = contentType
         
@@ -646,11 +647,15 @@ final class ChatListSearchMediaNode: ASDisplayNode, ASScrollViewDelegate {
         super.init()
         
         self._itemInteraction = VisualMediaItemInteraction(
-            openMessage: { message in
-                let _ = openMessage(message, .default)
+            openMessage: { message, blurred in
+                if blurred {
+                    let _ = openPeerRequest(message.id.peerId)
+                } else {
+                    let _ = openMessage(message, .default)
+                }
             },
-            openMessageContextActions: { message, sourceNode, sourceRect, gesture in
-                messageContextAction(message, sourceNode, sourceRect, gesture)
+            openMessageContextActions: { message, sourceNode, sourceRect, gesture, blurred in
+                messageContextAction(message, sourceNode, sourceRect, gesture, blurred)
             },
             toggleSelection: { id, value in
                 toggleMessageSelection(id, value)
@@ -700,10 +705,10 @@ final class ChatListSearchMediaNode: ASDisplayNode, ASScrollViewDelegate {
             self.mediaItems.removeAll()
             
             var index: UInt32 = 0
-            if let entries = entries {   
+            if let entries = entries {
                 for entry in entries {
-                    if case let .message(message, _, _, _, _, _, _, _, _, _, _, _, _, _, _) = entry {
-                        self.mediaItems.append(VisualMediaItem(message: message._asMessage(), index: nil))
+                    if case let .message(message, _, _, _, _, _, _, _, _, _, _, _, _, _, _, blurred) = entry {
+                        self.mediaItems.append(VisualMediaItem(message: message._asMessage(), index: nil, blurred: blurred))
                     }
                     index += 1
                 }

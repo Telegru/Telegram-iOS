@@ -39,6 +39,7 @@ private func presentLiveLocationController(context: AccountContext, peerId: Peer
             }, openUrl: { _ in
             }, openPeer: { peer, navigation in
             }, callPeer: { _, _ in
+            }, openConferenceCall: { _ in
             }, enqueueMessage: { message in
                 let _ = enqueueMessages(account: context.account, peerId: peerId, messages: [message]).start()
             }, sendSticker: nil, sendEmoji: nil, setupTemporaryHiddenMedia: { _, _, _ in
@@ -286,10 +287,7 @@ open class TelegramBaseController: ViewController, KeyShortcutResponder {
                         }
                     }
                     |> distinctUntilChanged(isEqual: { lhs, rhs in
-                        if lhs.0 != rhs.0 {
-                            return false
-                        }
-                        return true
+                        return lhs.0 == rhs.0
                     })
                     |> mapToSignal { activeCall, peer -> Signal<GroupCallPanelData?, NoError> in
                         guard let activeCall = activeCall else {
@@ -456,7 +454,7 @@ open class TelegramBaseController: ViewController, KeyShortcutResponder {
             } else {
                 let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
                 groupCallAccessoryPanel = GroupCallNavigationAccessoryPanel(context: self.context, presentationData: presentationData, tapAction: { [weak self] in
-                    guard let strongSelf = self else {
+                    guard let strongSelf = self, let groupCallPanelData = strongSelf.groupCallPanelData else {
                         return
                     }
                     strongSelf.joinGroupCall(
@@ -469,7 +467,7 @@ open class TelegramBaseController: ViewController, KeyShortcutResponder {
                         return
                     }
                     if groupCallPanelData.info.scheduleTimestamp != nil && !groupCallPanelData.info.subscribedToScheduled {
-                        let _ = self.context.engine.calls.toggleScheduledGroupCallSubscription(peerId: groupCallPanelData.peerId, callId: groupCallPanelData.info.id, accessHash: groupCallPanelData.info.accessHash, subscribe: true).startStandalone()
+                        let _ = self.context.engine.calls.toggleScheduledGroupCallSubscription(peerId: groupCallPanelData.peerId, reference: .id(id: groupCallPanelData.info.id, accessHash: groupCallPanelData.info.accessHash), subscribe: true).startStandalone()
                         
                         let controller = UndoOverlayController(
                             presentationData: presentationData,
@@ -1066,5 +1064,43 @@ open class TelegramBaseController: ViewController, KeyShortcutResponder {
                 }
             })
         }, activeCall: activeCall)
+    }
+    
+    open func joinConferenceCall(message: EngineMessage) {
+        var action: TelegramMediaAction?
+        for media in message.media {
+            if let media = media as? TelegramMediaAction {
+                action = media
+                break
+            }
+        }
+        guard case let .conferenceCall(conferenceCall) = action?.action else {
+            return
+        }
+        
+        if let currentGroupCallController = self.context.sharedContext.currentGroupCallController as? VoiceChatController, case let .group(groupCall) = currentGroupCallController.call, let currentCallId = groupCall.callId, currentCallId == conferenceCall.callId {
+            self.context.sharedContext.navigateToCurrentCall()
+            return
+        }
+        
+        let signal = self.context.engine.peers.joinCallInvitationInformation(messageId: message.id)
+        let _ = (signal
+        |> deliverOnMainQueue).startStandalone(next: { [weak self] resolvedCallLink in
+            guard let self else {
+                return
+            }
+            self.context.joinConferenceCall(call: resolvedCallLink, isVideo: conferenceCall.flags.contains(.isVideo))
+        }, error: { [weak self] error in
+            guard let self else {
+                return
+            }
+            switch error {
+            case .doesNotExist:
+                self.context.sharedContext.openCreateGroupCallUI(context: self.context, peerIds: conferenceCall.otherParticipants, parentController: self)
+            default:
+                let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
+                self.present(textAlertController(context: self.context, title: nil, text: presentationData.strings.Login_UnknownError, actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+            }
+        })
     }
 }

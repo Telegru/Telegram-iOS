@@ -1818,6 +1818,8 @@ public final class ChatEntityKeyboardInputNode: ChatInputNode {
             case .businessLinkSetup:
                 stickerContent = nil
                 gifContent = nil
+            case .postSuggestions:
+                break
             }
         }
         
@@ -2561,8 +2563,7 @@ public final class EntityInputView: UIInputView, AttachmentTextInputPanelInputVi
             isGeneralThreadClosed: nil,
             replyMessage: nil,
             accountPeerColor: nil,
-            businessIntro: nil,
-            starGiftsAvailable: false
+            businessIntro: nil
         )
 
         let _ = inputNode.updateLayout(

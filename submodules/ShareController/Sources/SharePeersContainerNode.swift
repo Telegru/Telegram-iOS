@@ -164,12 +164,12 @@ final class SharePeersContainerNode: ASDisplayNode, ShareContentContainerNode {
         self.peersValue.set(.single(peers))
         
         let canShareStory = controllerInteraction.shareStory != nil
+        let whitelist: Signal<(Bool, [EnginePeer.Id]), NoError> = (context.childManager?.whitelist() ?? .single((false, [])))
         
-        let items: Signal<[SharePeerEntry], NoError> = combineLatest(self.peersValue.get(), self.foundPeers.get(), self.tick.get(), self.themePromise.get())
-        |> map { [weak controllerInteraction] initialPeers, foundPeers, _, theme -> [SharePeerEntry] in
+        let items: Signal<[SharePeerEntry], NoError> = combineLatest(self.peersValue.get(), self.foundPeers.get(), self.tick.get(), self.themePromise.get(), whitelist)
+        |> map { [weak controllerInteraction] initialPeers, foundPeers, _, theme, whitelist -> [SharePeerEntry] in
             var entries: [SharePeerEntry] = []
             var index: Int32 = 0
-            
             if canShareStory {
                 entries.append(SharePeerEntry(index: index, item: .story(isMessage: fromPublicChannel), theme: theme, strings: strings))
                 index += 1
@@ -181,7 +181,7 @@ final class SharePeersContainerNode: ASDisplayNode, ShareContentContainerNode {
             index += 1
             
             for (peer, requiresPremiumForMessaging) in foundPeers.reversed() {
-                if !existingPeerIds.contains(peer.peerId) {
+                if !existingPeerIds.contains(peer.peerId) && (!whitelist.0 || whitelist.1.contains(peer.peerId)) {
                     entries.append(SharePeerEntry(index: index, item: .peer(peer: peer, presence: nil, topicId: nil, threadData: nil, requiresPremiumForMessaging: requiresPremiumForMessaging, requiresStars: nil), theme: theme, strings: strings))
                     existingPeerIds.insert(peer.peerId)
                     index += 1
@@ -189,7 +189,7 @@ final class SharePeersContainerNode: ASDisplayNode, ShareContentContainerNode {
             }
             
             for (peer, presence, requiresPremiumForMessaging, requiresStars) in initialPeers {
-                if !existingPeerIds.contains(peer.peerId) {
+                if !existingPeerIds.contains(peer.peerId) && (!whitelist.0 || whitelist.1.contains(peer.peerId)) {
                     let thread = controllerInteraction?.selectedTopics[peer.peerId]
                     entries.append(SharePeerEntry(index: index, item: .peer(peer: peer, presence: presence, topicId: thread?.0, threadData: thread?.1, requiresPremiumForMessaging: requiresPremiumForMessaging, requiresStars: requiresStars), theme: theme, strings: strings))
                     existingPeerIds.insert(peer.peerId)

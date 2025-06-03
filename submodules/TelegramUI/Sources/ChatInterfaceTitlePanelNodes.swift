@@ -68,6 +68,8 @@ func titlePanelForChatPresentationInterfaceState(_ chatPresentationInterfaceStat
                 panel.interfaceInteraction = interfaceInteraction
                 return panel
             }
+        case .postSuggestions:
+            break
         }
     default:
         break

@@ -92,6 +92,8 @@ public enum ChatListNotice: Equatable {
     case premiumGrace
     case starsSubscriptionLowBalance(amount: StarsAmount, peers: [EnginePeer])
     case setupPhoto(EnginePeer)
+    case accountFreeze
+    case link(id: String, url: String, title: ServerSuggestionInfo.Item.Text, subtitle: ServerSuggestionInfo.Item.Text)
 }
 
 enum ChatListNodeEntry: Comparable, Identifiable {
@@ -122,7 +124,8 @@ enum ChatListNodeEntry: Comparable, Identifiable {
         var storyState: ChatListNodeState.StoryState?
         var requiresPremiumForMessaging: Bool
         var displayAsTopicList: Bool
-        
+        var blurred: Bool
+
         init(
             index: EngineChatList.Item.Index,
             presentationData: ChatListPresentationData,
@@ -149,7 +152,8 @@ enum ChatListNodeEntry: Comparable, Identifiable {
             revealed: Bool,
             storyState: ChatListNodeState.StoryState?,
             requiresPremiumForMessaging: Bool,
-            displayAsTopicList: Bool
+            displayAsTopicList: Bool,
+            blurred: Bool
         ) {
             self.index = index
             self.presentationData = presentationData
@@ -177,6 +181,7 @@ enum ChatListNodeEntry: Comparable, Identifiable {
             self.storyState = storyState
             self.requiresPremiumForMessaging = requiresPremiumForMessaging
             self.displayAsTopicList = displayAsTopicList
+            self.blurred = blurred
         }
         
         static func ==(lhs: PeerEntryData, rhs: PeerEntryData) -> Bool {
@@ -296,6 +301,9 @@ enum ChatListNodeEntry: Comparable, Identifiable {
                 return false
             }
             if lhs.displayAsTopicList != rhs.displayAsTopicList {
+                return false
+            }
+            if lhs.blurred != rhs.blurred {
                 return false
             }
             return true
@@ -593,7 +601,7 @@ struct ChatListContactPeer {
     }
 }
 
-func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, savedMessagesPeer: EnginePeer?, foundPeers: [(EnginePeer, EnginePeer?)], hideArchivedFolderByDefault: Bool, displayArchiveIntro: Bool, notice: ChatListNotice?, mode: ChatListNodeMode, chatListLocation: ChatListControllerLocation, contacts: [ChatListContactPeer], accountPeerId: EnginePeer.Id, isMainTab: Bool) -> (entries: [ChatListNodeEntry], loading: Bool) {
+func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, savedMessagesPeer: EnginePeer?, foundPeers: [(EnginePeer, EnginePeer?)], hideArchivedFolderByDefault: Bool, displayArchiveIntro: Bool, notice: ChatListNotice?, mode: ChatListNodeMode, chatListLocation: ChatListControllerLocation, contacts: [ChatListContactPeer], accountPeerId: EnginePeer.Id, isMainTab: Bool, whitelist: [EnginePeer.Id]?) -> (entries: [ChatListNodeEntry], loading: Bool) {
     var groupItems = view.groupItems
     if isMainTab && state.archiveStoryState != nil && groupItems.isEmpty {
         groupItems.append(EngineChatList.GroupItem(
@@ -695,6 +703,14 @@ func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, 
         }
         
         var isSelected = false
+        let blurred: Bool
+        
+        if let peerId, let whitelist {
+            blurred = !whitelist.contains(peerId)
+        } else {
+            blurred = false
+        }
+
         if let threadId, threadId != 0 {
             isSelected = state.selectedThreadIds.contains(threadId)
         } else if let peerId {
@@ -737,7 +753,8 @@ func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, 
                 )
             },
             requiresPremiumForMessaging: entry.isPremiumRequiredToMessage,
-            displayAsTopicList: entry.displayAsTopicList
+            displayAsTopicList: entry.displayAsTopicList,
+            blurred: blurred
         ))
         
         if let threadInfo, threadInfo.isHidden {
@@ -790,7 +807,8 @@ func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, 
                         revealed: false,
                         storyState: nil,
                         requiresPremiumForMessaging: false,
-                        displayAsTopicList: false
+                        displayAsTopicList: false,
+                        blurred: false
                     )))
                     if foundPinningIndex != 0 {
                         foundPinningIndex -= 1
@@ -824,7 +842,8 @@ func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, 
                 revealed: false,
                 storyState: nil,
                 requiresPremiumForMessaging: false,
-                displayAsTopicList: false
+                displayAsTopicList: false,
+                blurred: false
             )))
         } else {
             if !filteredAdditionalItemEntries.isEmpty {
@@ -844,7 +863,8 @@ func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, 
                     
                     let peerId = index.messageIndex.id.peerId
                     let isSelected = state.selectedPeerIds.contains(peerId)
-                    
+                    let blurred = whitelist?.contains(peerId) == false
+
                     var threadId: Int64 = 0
                     switch item.item.index {
                     case let .forum(_, _, threadIdValue, _, _):
@@ -878,7 +898,8 @@ func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, 
                         revealed: state.hiddenItemShouldBeTemporaryRevealed || state.editing,
                         storyState: nil,
                         requiresPremiumForMessaging: false,
-                        displayAsTopicList: false
+                        displayAsTopicList: false,
+                        blurred: blurred
                     )))
                     if pinningIndex != 0 {
                         pinningIndex -= 1

@@ -89,7 +89,8 @@ private struct ChatListSearchRecentPeersEntry: Comparable, Identifiable {
         mode: HorizontalPeerItemMode,
         peerSelected: @escaping (EnginePeer) -> Void,
         peerContextAction: @escaping (EnginePeer, ASDisplayNode, ContextGesture?, CGPoint?) -> Void,
-        isPeerSelected: @escaping (EnginePeer.Id) -> Bool
+        isPeerSelected: @escaping (EnginePeer.Id) -> Bool,
+        isPeerBlurred: @escaping (EnginePeer.Id) -> Bool
     ) -> ListViewItem {
         return HorizontalPeerItem(
             theme: self.theme,
@@ -111,6 +112,7 @@ private struct ChatListSearchRecentPeersEntry: Comparable, Identifiable {
                 peerContextAction(peer, node, gesture, location)
             },
             isPeerSelected: isPeerSelected,
+            isPeerBlurred: isPeerBlurred,
             customWidth: self.itemCustomWidth
         )
     }
@@ -137,6 +139,7 @@ private func preparedRecentPeersTransition(
     peerSelected: @escaping (EnginePeer) -> Void,
     peerContextAction: @escaping (EnginePeer, ASDisplayNode, ContextGesture?, CGPoint?) -> Void,
     isPeerSelected: @escaping (EnginePeer.Id) -> Bool,
+    isPeerBlurred: @escaping (EnginePeer.Id) -> Bool,
     share: Bool = false,
     from fromEntries: [ChatListSearchRecentPeersEntry],
     to toEntries: [ChatListSearchRecentPeersEntry],
@@ -158,7 +161,8 @@ private func preparedRecentPeersTransition(
         mode: mode,
         peerSelected: peerSelected,
         peerContextAction: peerContextAction,
-        isPeerSelected: isPeerSelected
+        isPeerSelected: isPeerSelected,
+        isPeerBlurred: isPeerBlurred
     ), directionHint: .Down) }
     let updates = updateIndices.map { ListViewUpdateItem(index: $0.0, previousIndex: $0.2, item: $0.1.item(
         accountPeerId: accountPeerId,
@@ -172,7 +176,8 @@ private func preparedRecentPeersTransition(
         mode: mode,
         peerSelected: peerSelected,
         peerContextAction: peerContextAction,
-        isPeerSelected: isPeerSelected
+        isPeerSelected: isPeerSelected,
+        isPeerBlurred: isPeerBlurred
     ), directionHint: nil) }
     
     return ChatListSearchRecentNodeTransition(deletions: deletions, insertions: insertions, updates: updates, firstTime: firstTime, animated: animated)
@@ -185,7 +190,8 @@ public final class ChatListSearchRecentPeersNode: ASDisplayNode {
     private let mode: HorizontalPeerItemMode
     private let listView: ListView
     private let share: Bool
-    
+    private let isPeerBlurred: (EnginePeer.Id) -> Bool
+
     private let peerSelected: (EnginePeer) -> Void
     private let peerContextAction: (EnginePeer, ASDisplayNode, ContextGesture?, CGPoint?) -> Void
     private let isPeerSelected: (EnginePeer.Id) -> Bool
@@ -214,6 +220,7 @@ public final class ChatListSearchRecentPeersNode: ASDisplayNode {
         theme: PresentationTheme,
         mode: HorizontalPeerItemMode,
         strings: PresentationStrings,
+        isPeerBlurred: @escaping (EnginePeer.Id) -> Bool,
         peerSelected: @escaping (EnginePeer) -> Void, peerContextAction: @escaping (EnginePeer, ASDisplayNode, ContextGesture?, CGPoint?) -> Void, isPeerSelected: @escaping (EnginePeer.Id) -> Bool, share: Bool = false)
     {
         self.theme = theme
@@ -224,7 +231,7 @@ public final class ChatListSearchRecentPeersNode: ASDisplayNode {
         self.peerSelected = peerSelected
         self.peerContextAction = peerContextAction
         self.isPeerSelected = isPeerSelected
-        
+        self.isPeerBlurred = isPeerBlurred
         self.listView = ListView()
         self.listView.preloadPages = false
         self.listView.transform = CATransform3DMakeRotation(-CGFloat.pi / 2.0, 0.0, 0.0, 1.0)
@@ -335,6 +342,7 @@ public final class ChatListSearchRecentPeersNode: ASDisplayNode {
                     peerSelected: peerSelected,
                     peerContextAction: peerContextAction,
                     isPeerSelected: isPeerSelected,
+                    isPeerBlurred: isPeerBlurred,
                     from: previous.swap(entries),
                     to: entries,
                     firstTime: !animated,

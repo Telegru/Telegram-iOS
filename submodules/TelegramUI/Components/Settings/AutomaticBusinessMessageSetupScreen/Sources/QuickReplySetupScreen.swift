@@ -233,7 +233,11 @@ final class QuickReplySetupScreenComponent: Component {
                     },
                     openPhotoSetup: {
                     },
-                    openAdInfo: { _ in
+                    openAdInfo: { _, _ in
+                    },
+                    openAccountFreezeInfo: {
+                    },
+                    openUrl: { _ in
                     }
                 )
                 
@@ -293,7 +297,9 @@ final class QuickReplySetupScreenComponent: Component {
                     enableContextActions: true,
                     hiddenOffset: false,
                     interaction: chatListNodeInteraction,
-                    chatListItemTextLineCount: 2
+                    chatListItemTextLineCount: 2,
+                    showSeparator: true,
+                    blurred: false
                 )
             }
         }

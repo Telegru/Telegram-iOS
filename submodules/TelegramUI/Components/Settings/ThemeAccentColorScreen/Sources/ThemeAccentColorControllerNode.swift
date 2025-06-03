@@ -875,7 +875,9 @@ final class ThemeAccentColorControllerNode: ASDisplayNode, ASScrollViewDelegate 
         }, editPeer: { _ in
         }, openWebApp: { _ in
         }, openPhotoSetup: {
-        }, openAdInfo: { _ in
+        }, openAdInfo: { _, _ in
+        }, openAccountFreezeInfo: {
+        }, openUrl: { _ in
         })
         let chatListPresentationData = ChatListPresentationData(theme: self.presentationData.theme, fontSize: self.presentationData.listsFontSize, strings: self.presentationData.strings, dateTimeFormat: self.presentationData.dateTimeFormat, nameSortOrder: self.presentationData.nameSortOrder, nameDisplayOrder: self.presentationData.nameDisplayOrder, disableAnimations: true)
 
@@ -955,7 +957,9 @@ final class ThemeAccentColorControllerNode: ASDisplayNode, ASScrollViewDelegate 
                 enableContextActions: false,
                 hiddenOffset: false,
                 interaction: interaction,
-                chatListItemTextLineCount: 2
+                chatListItemTextLineCount: 2,
+                showSeparator: true,
+                blurred: false
             )
         }
 

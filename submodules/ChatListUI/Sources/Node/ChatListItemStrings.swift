@@ -77,7 +77,7 @@ private func paidContentGroupType(paidContent: TelegramMediaPaidContent) -> Mess
     return currentType
 }
 
-public func chatListItemStrings(strings: PresentationStrings, nameDisplayOrder: PresentationPersonNameOrder, dateTimeFormat: PresentationDateTimeFormat, contentSettings: ContentSettings, messages: [EngineMessage], chatPeer: EngineRenderedPeer, accountPeerId: EnginePeer.Id, enableMediaEmoji: Bool = true, isPeerGroup: Bool = false) -> (peer: EnginePeer?, hideAuthor: Bool, messageText: String, spoilers: [NSRange]?, customEmojiRanges: [(NSRange, ChatTextInputTextCustomEmojiAttribute)]?) {
+public func chatListItemStrings(strings: PresentationStrings, nameDisplayOrder: PresentationPersonNameOrder, dateTimeFormat: PresentationDateTimeFormat, contentSettings: ContentSettings, messages: [EngineMessage], chatPeer: EngineRenderedPeer, accountPeerId: EnginePeer.Id, enableMediaEmoji: Bool = true, isPeerGroup: Bool = false, blurred: Bool) -> (peer: EnginePeer?, hideAuthor: Bool, messageText: String, spoilers: [NSRange]?, customEmojiRanges: [(NSRange, ChatTextInputTextCustomEmojiAttribute)]?) {
     let peer: EnginePeer?
     
     let message = messages.last
@@ -298,6 +298,23 @@ public func chatListItemStrings(strings: PresentationStrings, nameDisplayOrder: 
                         messageText = invoice.title
                     case let action as TelegramMediaAction:
                         switch action.action {
+                            case let .conferenceCall(conferenceCall):
+                                let incoming = message.flags.contains(.Incoming)
+                                
+                                let missedTimeout: Int32 = 30
+                                let currentTime = Int32(Date().timeIntervalSince1970)
+                                
+                                if conferenceCall.flags.contains(.isMissed) {
+                                    messageText = strings.Chat_CallMessage_DeclinedGroupCall
+                                } else if conferenceCall.duration == nil && message.timestamp < currentTime - missedTimeout {
+                                    messageText = strings.Chat_CallMessage_MissedGroupCall
+                                } else {
+                                    if incoming {
+                                        messageText = strings.Chat_CallMessage_IncomingGroupCall
+                                    } else {
+                                        messageText = strings.Chat_CallMessage_OutgoingGroupCall
+                                    }
+                                }
                             case let .phoneCall(_, discardReason, _, isVideo):
                                 hideAuthor = !isPeerGroup
                                 let incoming = message.flags.contains(.Incoming)
@@ -435,6 +452,18 @@ public func chatListItemStrings(strings: PresentationStrings, nameDisplayOrder: 
                         }
                 }
             }
+        }
+    }
+    
+    if blurred {
+        let messageText = messageText
+        let fullRange = NSRange(location: 0, length: (messageText as NSString).length)
+        
+        if var existingSpoilers = spoilers {
+            existingSpoilers.append(fullRange)
+            return (peer, hideAuthor, messageText, existingSpoilers, customEmojiRanges)
+        } else {
+            return (peer, hideAuthor, messageText, [fullRange], customEmojiRanges)
         }
     }
     

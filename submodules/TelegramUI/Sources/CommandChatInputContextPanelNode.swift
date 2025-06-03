@@ -182,7 +182,11 @@ private struct CommandChatInputContextPanelEntry: Comparable, Identifiable {
                     },
                     openPhotoSetup: {
                     },
-                    openAdInfo: { _ in
+                    openAdInfo: { _, _ in
+                    },
+                    openAccountFreezeInfo: {
+                    },
+                    openUrl: { _ in
                     }
                 )
                 
@@ -248,7 +252,9 @@ private struct CommandChatInputContextPanelEntry: Comparable, Identifiable {
                     enableContextActions: false,
                     hiddenOffset: false,
                     interaction: chatListNodeInteraction,
-                    chatListItemTextLineCount: 2
+                    chatListItemTextLineCount: 2,
+                    showSeparator: true,
+                    blurred: false
                 )
             }
         }

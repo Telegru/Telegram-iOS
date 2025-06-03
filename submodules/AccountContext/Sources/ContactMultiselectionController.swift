@@ -86,7 +86,7 @@ public enum ContactMultiselectionControllerMode {
         }
     }
     
-    case groupCreation
+    case groupCreation(isCall: Bool)
     case peerSelection(searchChatList: Bool, searchGroups: Bool, searchChannels: Bool)
     case channelCreation
     case chatSelection(ChatSelection)
@@ -118,8 +118,26 @@ public final class ContactMultiselectionControllerParams {
     public let reachedLimit: ((Int32) -> Void)?
     public let openProfile: ((EnginePeer) -> Void)?
     public let sendMessage: ((EnginePeer) -> Void)?
+    public let initialSelectedPeers: [EnginePeer]
     
-    public init(context: AccountContext, updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)? = nil, title: String? = nil, mode: ContactMultiselectionControllerMode, options: Signal<[ContactListAdditionalOption], NoError> = .single([]), filters: [ContactListFilter] = [.excludeSelf], onlyWriteable: Bool = false, isGroupInvitation: Bool = false, isPeerEnabled: ((EnginePeer) -> Bool)? = nil, attemptDisabledItemSelection: ((EnginePeer, ChatListDisabledPeerReason) -> Void)? = nil, alwaysEnabled: Bool = false, limit: Int32? = nil, reachedLimit: ((Int32) -> Void)? = nil, openProfile: ((EnginePeer) -> Void)? = nil, sendMessage: ((EnginePeer) -> Void)? = nil) {
+    public init(
+        context: AccountContext,
+        updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)? = nil,
+        title: String? = nil,
+        mode: ContactMultiselectionControllerMode,
+        options: Signal<[ContactListAdditionalOption], NoError> = .single([]),
+        filters: [ContactListFilter] = [.excludeSelf],
+        onlyWriteable: Bool = false,
+        isGroupInvitation: Bool = false,
+        isPeerEnabled: ((EnginePeer) -> Bool)? = nil,
+        attemptDisabledItemSelection: ((EnginePeer, ChatListDisabledPeerReason) -> Void)? = nil,
+        alwaysEnabled: Bool = false,
+        limit: Int32? = nil,
+        reachedLimit: ((Int32) -> Void)? = nil,
+        openProfile: ((EnginePeer) -> Void)? = nil,
+        sendMessage: ((EnginePeer) -> Void)? = nil,
+        initialSelectedPeers: [EnginePeer] = []
+    ) {
         self.context = context
         self.updatedPresentationData = updatedPresentationData
         self.title = title
@@ -135,6 +153,7 @@ public final class ContactMultiselectionControllerParams {
         self.reachedLimit = reachedLimit
         self.openProfile = openProfile
         self.sendMessage = sendMessage
+        self.initialSelectedPeers = initialSelectedPeers
     }
 }
 
@@ -147,4 +166,5 @@ public protocol ContactMultiselectionController: ViewController {
     var result: Signal<ContactMultiselectionResult, NoError> { get }
     var displayProgress: Bool { get set }
     var dismissed: (() -> Void)? { get set }
+    var isCallVideoOptionSelected: Bool { get }
 }

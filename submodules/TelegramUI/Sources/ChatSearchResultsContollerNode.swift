@@ -121,7 +121,9 @@ private enum ChatListSearchEntry: Comparable, Identifiable {
                     enableContextActions: false,
                     hiddenOffset: false,
                     interaction: interaction,
-                    chatListItemTextLineCount: 2
+                    chatListItemTextLineCount: 2,
+                    showSeparator: true,
+                    blurred: false
                 )
         }
     }
@@ -296,7 +298,9 @@ class ChatSearchResultsControllerNode: ViewControllerTracingNode, ASScrollViewDe
         }, editPeer: { _ in
         }, openWebApp: { _ in
         }, openPhotoSetup: {
-        }, openAdInfo: { _ in
+        }, openAdInfo: { _, _ in
+        }, openAccountFreezeInfo: {
+        }, openUrl: { _ in
         })
         interaction.searchTextHighightState = searchQuery
         self.interaction = interaction

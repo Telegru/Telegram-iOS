@@ -20,6 +20,9 @@ import LegacyMediaPickerUI
 
 extension PeerInfoScreenImpl {
     func openAvatarForEditing(mode: PeerInfoAvatarEditingMode = .generic, fromGallery: Bool = false, completion: @escaping (UIImage?) -> Void = { _ in }, completedWithUploadingImage: @escaping (UIImage, Signal<PeerInfoAvatarUploadStatus, NoError>) -> UIView? = { _, _ in nil }) {
+        guard !self.presentAccountFrozenInfoIfNeeded() else {
+            return
+        }
         guard let data = self.controllerNode.data, let peer = data.peer, mode != .generic || canEditPeerInfo(context: self.context, peer: peer, chatLocation: self.chatLocation, threadData: data.threadData) else {
             return
         }
@@ -198,7 +201,10 @@ extension PeerInfoScreenImpl {
                             commit()
                         }
                     },
-                    completion: { [weak self] result, commit in
+                    completion: { [weak self] results, commit in
+                        guard let result = results.first else {
+                            return
+                        }
                         switch result.media {
                         case let .image(image, _):
                             resultImage = image
@@ -214,7 +220,7 @@ extension PeerInfoScreenImpl {
                             break
                         }
                         dismissImpl?()
-                    } as (MediaEditorScreenImpl.Result, @escaping (@escaping () -> Void) -> Void) -> Void
+                    } as ([MediaEditorScreenImpl.Result], @escaping (@escaping () -> Void) -> Void) -> Void
                 )
                 editorController.cancelled = { _ in
                     cancelled()
@@ -341,7 +347,7 @@ extension PeerInfoScreenImpl {
         
         let resource = LocalFileMediaResource(fileId: Int64.random(in: Int64.min ... Int64.max))
         self.context.account.postbox.mediaBox.storeResourceData(resource.id, data: data)
-        let representation = TelegramMediaImageRepresentation(dimensions: PixelDimensions(width: 640, height: 640), resource: resource, progressiveSizes: [], immediateThumbnailData: nil, hasVideo: false, isPersonal: mode == .custom ? true : false)
+        let representation = TelegramMediaImageRepresentation(dimensions: PixelDimensions(width: 640, height: 640), resource: resource, progressiveSizes: [], immediateThumbnailData: nil, hasVideo: false, isPersonal: mode == .custom)
         
         if [.suggest, .fallback].contains(mode) {
         } else {

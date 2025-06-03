@@ -12,7 +12,7 @@ import AccountContext
 import UrlEscaping
 import ShareController
 import BuildConfig
-import DClient
+import DNetwork
 
 private final class ProxySettingsControllerArguments {
     let toggleEnabled: (Bool) -> Void

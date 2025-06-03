@@ -9,7 +9,7 @@ import AccountContext
 
 public struct EditableTokenListToken {
     public enum Subject {
-        case peer(EnginePeer)
+        case peer(EnginePeer, Bool)
         case category(UIImage?)
     }
     
@@ -161,9 +161,9 @@ private final class TokenNode: ASDisplayNode {
         self.addSubnode(self.removeIconNode)
         
         switch token.subject {
-        case let .peer(peer):
+        case let .peer(peer, blurred):
             self.addSubnode(self.avatarNode)
-            self.avatarNode.setPeer(context: context, theme: presentationTheme, peer: peer)
+            self.avatarNode.setPeer(context: context, theme: presentationTheme, peer: peer, blurred: blurred, displayLetters: !blurred)
         case let .category(image):
             self.addSubnode(self.categoryAvatarNode)
             self.categoryAvatarNode.image = image

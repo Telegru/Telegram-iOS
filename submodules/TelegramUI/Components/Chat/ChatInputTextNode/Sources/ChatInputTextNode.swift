@@ -1020,10 +1020,18 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
             return super.attributedText
         } set(value) {
             if self.attributedText != value {
+                let oldText = self.attributedText
                 let selectedRange = self.selectedRange
                 let preserveSelectedRange = selectedRange.location != self.textStorage.length
                 
+                let isAttributesChanged = super.attributedText?.isOnlyAttributesChanged(from: value ?? NSAttributedString()) == true
+                if isAttributesChanged {
+                    self.isDisabledScrollToVisibleRect = true
+                }
                 super.attributedText = value ?? NSAttributedString()
+                if isAttributesChanged {
+                    self.isDisabledScrollToVisibleRect = false
+                }
                 
                 if preserveSelectedRange {
                     self.isPreservingSelection = true
@@ -1032,9 +1040,19 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
                 }
                 
                 self.updateTextContainerInset()
+
+                if oldText?.string != value?.string {
+                    if self._undoManager.undoCount == 1 {
+                        self._undoManager.registerUndoOperation(type: .initial)
+                    }
+                } else {
+                    self._undoManager.registerUndoOperation(type: .attributeChange)
+                }
             }
         }
     }
+    
+    private var isDisabledScrollToVisibleRect = false
     
     fileprivate var isPreservingSelection: Bool = false
     fileprivate var isPreservingText: Bool = false
@@ -1077,6 +1095,11 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
     
     private var selectionChangedForEditedText: Bool = false
     
+    public override var undoManager: UndoManager? {
+        _undoManager
+    }
+    private let _undoManager: ChatInputTextUndoManager
+    
     override public var textInputMode: UITextInputMode? {
         if !self.didInitializePrimaryInputLanguage {
             self.didInitializePrimaryInputLanguage = true
@@ -1097,6 +1120,9 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
         }
     }
     
+    private var textObservingToken: NSKeyValueObservation?
+    private var isProgrammaticChange: Bool = false
+    
     public init(disableTiling: Bool) {
         let useModernImpl = !"".isEmpty
         
@@ -1108,8 +1134,12 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
             self.measureInternal = ChatInputTextLegacyInternal()
         }
         
+        self._undoManager = ChatInputTextUndoManager()
+        
         super.init(frame: CGRect(), textContainer: self.displayInternal.textContainer, disableTiling: disableTiling)
         
+        self._undoManager.textView = self
+        self._undoManager.registerUndoOperation(type: .initial)
         self.delegate = self
         
         if #available(iOS 18.0, *) {
@@ -1199,6 +1229,7 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
     }
     
     override public func scrollRectToVisible(_ rect: CGRect, animated: Bool) {
+        guard !isDisabledScrollToVisibleRect else { return }
         var rect = rect
         if rect.maxY > self.contentSize.height - 8.0 {
             rect = CGRect(origin: CGPoint(x: rect.minX, y: self.contentSize.height - 1.0), size: CGSize(width: rect.width, height: 1.0))
@@ -1228,6 +1259,8 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
         self.customDelegate?.chatInputTextNodeDidUpdateText()
         
         self.updateTextContainerInset()
+        
+        self._undoManager.registerUndoOperation(type: .textChange)
     }
 
     @objc public func textViewDidChangeSelection(_ textView: UITextView) {
@@ -1251,6 +1284,20 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
     }
     
     @objc public func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+        
+        let operationType: ChatInputTextUndoManager.UndoOperation.OperationType
+        if text.isEmpty {
+            operationType = .delete
+        } else if text.count > 1 {
+            operationType = .paste
+        } else {
+            operationType = .textChange
+        }
+        
+        if !self.isPreservingText {
+            self._undoManager.registerUndoOperation(type: operationType, text: text)
+        }
+        
         guard let customDelegate = self.customDelegate else {
             return true
         }
@@ -1539,5 +1586,32 @@ private final class QuoteBackgroundView: UIView {
             animation: .None
         )
         self.backgroundView.frame = CGRect(origin: CGPoint(), size: size)
+    }
+}
+
+private extension NSAttributedString {
+    
+    func isOnlyAttributesChanged(from other: NSAttributedString) -> Bool {
+        guard other.string == self.string else { return false }
+        let selfAttributes = appliedAttributes().sorted { $0.0.location < $1.0.location && $0.0.length < $1.0.length }
+        let otherAttributes = other.appliedAttributes().sorted { $0.0.location < $1.0.location && $0.0.length < $1.0.length }
+        return !selfAttributes.isEqual(otherAttributes)
+    }
+    
+    private func appliedAttributes() -> [(NSRange, NSAttributedString.Key)] {
+        var appliedAttributes: [(NSRange, NSAttributedString.Key)] = []
+        let nsRange = NSRange(location: 0, length: length)
+        enumerateAttributes(in: nsRange, options: .longestEffectiveRangeNotRequired) { attributes, range, stop in
+            for (key, _) in attributes {
+                appliedAttributes.append((range, key))
+            }
+        }
+        return appliedAttributes
+    }
+}
+
+extension Array where Element == (NSRange, NSAttributedString.Key) {
+    func isEqual(_ other: [(NSRange, NSAttributedString.Key)]) -> Bool {
+        return self.map { $0.0 } == other.map { $0.0 } && self.map { $0.1 } == other.map { $0.1 }
     }
 }

@@ -132,6 +132,10 @@ extension ChatControllerImpl {
         case .cancelMessageSelection:
             self.updateChatPresentationInterfaceState(animated: true, interactive: true, { $0.updatedInterfaceState { $0.withoutSelectionState() } })
         case .clearHistory:
+            guard !self.presentAccountFrozenInfoIfNeeded() else {
+                return
+            }
+            
             if case let .peer(peerId) = self.chatLocation {
                 let beginClear: (InteractiveHistoryClearingType) -> Void = { [weak self] type in
                     self?.beginClearHistory(type: type)
@@ -383,40 +387,60 @@ extension ChatControllerImpl {
             let _ = self.presentVoiceMessageDiscardAlert(action: {
                 switch self.chatLocationInfoData {
                 case let .peer(peerView):
-                    self.navigationActionDisposable.set((peerView.get()
-                    |> take(1)
-                    |> deliverOnMainQueue).startStrict(next: { [weak self] peerView in
-                        if let strongSelf = self, let peer = peerView.peers[peerView.peerId], peer.restrictionText(platform: "ios", contentSettings: strongSelf.context.currentContentSettings.with { $0 }) == nil && !strongSelf.presentationInterfaceState.isNotAccessible {
-                                                        
-                            if peer.id == strongSelf.context.account.peerId {
-                                if let peer = strongSelf.presentationInterfaceState.renderedPeer?.chatMainPeer, let infoController = strongSelf.context.sharedContext.makePeerInfoController(context: strongSelf.context, updatedPresentationData: strongSelf.updatedPresentationData, peer: peer, mode: .generic, avatarInitiallyExpanded: false, fromChat: true, requestsContext: nil) {
-                                    strongSelf.effectiveNavigationController?.pushViewController(infoController)
-                                }
-                            } else {
-                                var expandAvatar = expandAvatar
-                                if peer.smallProfileImage == nil {
-                                    expandAvatar = false
-                                }
-                                if let validLayout = strongSelf.validLayout, validLayout.deviceMetrics.type == .tablet {
-                                    expandAvatar = false
-                                }
-                                let  mode: PeerInfoControllerMode
-                                switch section {
-                                case .groupsInCommon:
-                                    mode = .groupsInCommon
-                                case .recommendedChannels:
-                                    mode = .recommendedChannels
-                                default:
-                                    mode = .generic
-                                }
-                                if let infoController = strongSelf.context.sharedContext.makePeerInfoController(context: strongSelf.context, updatedPresentationData: strongSelf.updatedPresentationData, peer: peer, mode: mode, avatarInitiallyExpanded: expandAvatar, fromChat: true, requestsContext: strongSelf.inviteRequestsContext) {
-                                    strongSelf.effectiveNavigationController?.pushViewController(infoController)
-                                }
+                    let peerSignal = peerView.get()
+                        |> take(1)
+                    
+                    let combined = peerSignal
+                        |> mapToSignal { peerView -> Signal<(PeerView, Bool), NoError> in
+                            let allowedSignal = (self.context.childModeManager?.isPeerAllowed(peerView.peerId) ?? .single(true))
+                                |> take(1)
+                            return combineLatest(.single(peerView), allowedSignal)
+                        }
+                    
+                    self.navigationActionDisposable.set((combined
+                        |> deliverOnMainQueue).startStrict(next: { [weak self] peerView, isAllowed in
+                            guard let strongSelf = self, let peer = peerView.peers[peerView.peerId] else { return }
+                            guard peer.restrictionText(platform: "ios", contentSettings: strongSelf.context.currentContentSettings.with { $0 }) == nil,
+                                  !strongSelf.presentationInterfaceState.isNotAccessible else {
+                                return
                             }
                             
-                            strongSelf.dismissPreviewing?()
+                            var avatarExpanded = expandAvatar
+                            if !isAllowed {
+                                avatarExpanded = false
+                            }
+                            if peer.smallProfileImage == nil {
+                                avatarExpanded = false
+                            }
+                            if let layout = strongSelf.validLayout, layout.deviceMetrics.type == .tablet {
+                                avatarExpanded = false
+                            }
+                            
+                            let mode: PeerInfoControllerMode
+                            switch section {
+                            case .groupsInCommon:
+                                mode = .groupsInCommon
+                            case .recommendedChannels:
+                                mode = .recommendedChannels
+                            default:
+                                mode = .generic
+                            }
+                            
+                            if let infoController = strongSelf.context.sharedContext.makePeerInfoController(
+                                context: strongSelf.context,
+                                updatedPresentationData: strongSelf.updatedPresentationData,
+                                peer: peer,
+                                mode: mode,
+                                avatarInitiallyExpanded: avatarExpanded,
+                                fromChat: true,
+                                requestsContext: strongSelf.inviteRequestsContext
+                            ) {
+                                strongSelf.effectiveNavigationController?.pushViewController(infoController)
+                            }
+                            
+                            let _ = strongSelf.dismissPreviewing?(false)
                         }
-                    }))
+                    ))
                 case .replyThread:
                     if let peer = self.presentationInterfaceState.renderedPeer?.peer, case let .replyThread(replyThreadMessage) = self.chatLocation, replyThreadMessage.peerId == self.context.account.peerId {
                         if let infoController = self.context.sharedContext.makePeerInfoController(context: self.context, updatedPresentationData: self.updatedPresentationData, peer: peer, mode: .forumTopic(thread: replyThreadMessage), avatarInitiallyExpanded: false, fromChat: true, requestsContext: nil) {

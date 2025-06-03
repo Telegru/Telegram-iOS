@@ -82,6 +82,7 @@ final class GiftSetupScreenComponent: Component {
         
         private let navigationTitle = ComponentView<Empty>()
         private let remainingCount = ComponentView<Empty>()
+        private let resaleSection = ComponentView<Empty>()
         private let introContent = ComponentView<Empty>()
         private let introSection = ComponentView<Empty>()
         private let starsSection = ComponentView<Empty>()
@@ -371,7 +372,7 @@ final class GiftSetupScreenComponent: Component {
                 } else {
                     fatalError()
                 }
-            case let .starGift(starGift):
+            case let .starGift(starGift, _):
                 finalPrice = starGift.price
                 if self.includeUpgrade, let upgradeStars = starGift.upgradeStars  {
                     finalPrice += upgradeStars
@@ -390,8 +391,13 @@ final class GiftSetupScreenComponent: Component {
                 let completion = component.completion
                 
                 let signal = BotCheckoutController.InputData.fetch(context: component.context, source: source)
-                |> `catch` { _ -> Signal<BotCheckoutController.InputData, SendBotPaymentFormError> in
-                    return .fail(.generic)
+                |> `catch` { error -> Signal<BotCheckoutController.InputData, SendBotPaymentFormError> in
+                    switch error {
+                    case .disallowedStarGifts:
+                        return .fail(.disallowedStarGift)
+                    default:
+                        return .fail(.generic)
+                    }
                 }
                 |> mapToSignal { inputData -> Signal<SendBotPaymentResult, SendBotPaymentFormError> in
                     return component.context.engine.payments.sendStarsPaymentForm(formId: inputData.form.id, source: source)
@@ -403,7 +409,7 @@ final class GiftSetupScreenComponent: Component {
                         return
                     }
 
-                    if peerId.namespace == Namespaces.Peer.CloudChannel, case let .starGift(starGift) = component.subject {
+                    if peerId.namespace == Namespaces.Peer.CloudChannel, case let .starGift(starGift, _) = component.subject {
                         var controllers = navigationController.viewControllers
                         controllers = controllers.filter { !($0 is GiftSetupScreen) && !($0 is GiftOptionsScreenProtocol) }
                         navigationController.setViewControllers(controllers, animated: true)
@@ -460,17 +466,18 @@ final class GiftSetupScreenComponent: Component {
                     self.inProgress = false
                     self.state?.updated()
                     
-                    let presentationData = component.context.sharedContext.currentPresentationData.with { $0 }
                     var errorText: String?
                     switch error {
                     case .starGiftOutOfStock:
                         errorText = presentationData.strings.Gift_Send_ErrorOutOfStock
+                    case .disallowedStarGift:
+                        errorText = presentationData.strings.Gift_Send_ErrorDisallowed(self.peerMap[peerId]?.compactDisplayTitle ?? "").string
                     default:
                         errorText = presentationData.strings.Gift_Send_ErrorUnknown
                     }
                     
                     if let errorText = errorText {
-                        let alertController = textAlertController(context: component.context, title: nil, text: errorText, actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})])
+                        let alertController = textAlertController(context: component.context, title: nil, text: errorText, actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})], parseMarkdown: true)
                         controller.present(alertController, in: .window(.root))
                     }
                 })
@@ -497,17 +504,8 @@ final class GiftSetupScreenComponent: Component {
                             self.state?.updated()
                             
                             starsContext.add(balance: StarsAmount(value: stars, nanos: 0))
-                            
-                            let _ = (starsContext.state
-                            |> take(until: { value in
-                                if let value {
-                                    if !value.flags.contains(.isPendingBalance) {
-                                        return SignalTakeAction(passthrough: true, complete: true)
-                                    }
-                                }
-                                return SignalTakeAction(passthrough: false, complete: false)
-                            })
-                            |> deliverOnMainQueue).start(next: { _ in
+                            let _ = (starsContext.onUpdate
+                            |> deliverOnMainQueue).start(next: {
                                 proceed()
                             })
                         }
@@ -559,6 +557,10 @@ final class GiftSetupScreenComponent: Component {
             if self.component == nil {
                 if isSelfGift {
                     self.hideName = true
+                }
+                
+                if case let .starGift(gift, true) = component.subject, gift.upgradeStars != nil {
+                    self.includeUpgrade = true
                 }
                 
                 let _ = (component.context.engine.data.get(
@@ -690,7 +692,7 @@ final class GiftSetupScreenComponent: Component {
                     self.options = options
                 })
                 
-                if case let .starGift(gift) = component.subject {
+                if case let .starGift(gift, _) = component.subject {
                     if let _ = gift.upgradeStars {
                         self.previewPromise.set(
                             component.context.engine.payments.starGiftUpgradePreview(giftId: gift.id)
@@ -748,7 +750,7 @@ final class GiftSetupScreenComponent: Component {
             contentHeight += environment.navigationHeight
             contentHeight += 26.0
             
-            if case let .starGift(starGift) = component.subject, let availability = starGift.availability {
+            if case let .starGift(starGift, _) = component.subject, let availability = starGift.availability {
                 let remains: Int32 = availability.remains
                 let total: Int32 = availability.total
                 let position = CGFloat(remains) / CGFloat(total)
@@ -784,6 +786,62 @@ final class GiftSetupScreenComponent: Component {
                 contentHeight += remainingCountSize.height
                 contentHeight -= 77.0
                 contentHeight += sectionSpacing
+            }
+            
+            if case let .starGift(starGift, forceUnique) = component.subject, let availability = starGift.availability, availability.resale > 0 {
+                if let forceUnique, !forceUnique {
+                } else {
+                    let resaleSectionSize = self.resaleSection.update(
+                        transition: transition,
+                        component: AnyComponent(ListSectionComponent(
+                            theme: environment.theme,
+                            header: nil,
+                            footer: nil,
+                            items: [
+                                AnyComponentWithIdentity(id: 0, component: AnyComponent(ListActionItemComponent(
+                                    theme: environment.theme,
+                                    title: AnyComponent(VStack([
+                                        AnyComponentWithIdentity(id: AnyHashable(0), component: AnyComponent(
+                                            MultilineTextComponent(
+                                                text: .plain(NSAttributedString(string: environment.strings.Gift_Send_AvailableForResale, font: Font.regular(presentationData.listsFontSize.baseDisplaySize), textColor: environment.theme.list.itemPrimaryTextColor))
+                                            )
+                                        )),
+                                    ], alignment: .left, spacing: 2.0)),
+                                    accessory: .custom(ListActionItemComponent.CustomAccessory(component: AnyComponentWithIdentity(id: 0, component: AnyComponent(MultilineTextComponent(
+                                        text: .plain(NSAttributedString(
+                                            string: presentationStringsFormattedNumber(Int32(availability.resale), environment.dateTimeFormat.groupingSeparator),
+                                            font: Font.regular(presentationData.listsFontSize.baseDisplaySize),
+                                            textColor: environment.theme.list.itemSecondaryTextColor
+                                        )),
+                                        maximumNumberOfLines: 0
+                                    ))), insets: UIEdgeInsets(top: 0.0, left: 0.0, bottom: 0.0, right: 16.0))),
+                                    action: { [weak self] _ in
+                                        guard let self, let component = self.component, let controller = environment.controller() else {
+                                            return
+                                        }
+                                        let storeController = component.context.sharedContext.makeGiftStoreController(
+                                            context: component.context,
+                                            peerId: component.peerId,
+                                            gift: starGift
+                                        )
+                                        controller.push(storeController)
+                                    }
+                                )))
+                            ]
+                        )),
+                        environment: {},
+                        containerSize: CGSize(width: availableSize.width - sideInset * 2.0, height: 10000.0)
+                    )
+                    let resaleSectionFrame = CGRect(origin: CGPoint(x: sideInset, y: contentHeight), size: resaleSectionSize)
+                    if let resaleSectionView = self.resaleSection.view {
+                        if resaleSectionView.superview == nil {
+                            self.scrollView.addSubview(resaleSectionView)
+                        }
+                        transition.setFrame(view: resaleSectionView, frame: resaleSectionFrame)
+                    }
+                    contentHeight += resaleSectionSize.height
+                    contentHeight += sectionSpacing
+                }
             }
             
             let giftConfiguration = GiftConfiguration.with(appConfiguration: component.context.currentAppConfiguration.with { $0 })
@@ -915,7 +973,7 @@ final class GiftSetupScreenComponent: Component {
                         let (currency, amount) = product.storeProduct?.priceCurrencyAndAmount ?? ("USD", 1)
                         subject = .premium(months: product.months, amount: amount, currency: currency)
                     }
-                case let .starGift(gift):
+                case let .starGift(gift, _):
                     subject = .starGift(gift: gift)
                     upgradeStars = gift.upgradeStars
                 }
@@ -1067,13 +1125,17 @@ final class GiftSetupScreenComponent: Component {
                     contentHeight += starsSectionSize.height
                     contentHeight += sectionSpacing
                 }
-            case let .starGift(gift):
+            case let .starGift(gift, forceUnique):
                 if let upgradeStars = gift.upgradeStars, component.peerId != component.context.account.peerId {
                     let upgradeFooterRawString: String
                     if isChannelGift {
                         upgradeFooterRawString = environment.strings.Gift_SendChannel_Upgrade_Info(peerName).string
                     } else {
-                        upgradeFooterRawString = environment.strings.Gift_Send_Upgrade_Info(peerName).string
+                        if forceUnique == true {
+                            upgradeFooterRawString = environment.strings.Gift_Send_Upgrade_ForcedInfo(peerName).string
+                        } else {
+                            upgradeFooterRawString = environment.strings.Gift_Send_Upgrade_Info(peerName).string
+                        }
                     }
                     let parsedString = parseMarkdownIntoAttributedString(upgradeFooterRawString, attributes: footerAttributes)
                     
@@ -1142,8 +1204,8 @@ final class GiftSetupScreenComponent: Component {
                                             )
                                         )),
                                     ], alignment: .left, spacing: 2.0)),
-                                    accessory: .toggle(ListActionItemComponent.Toggle(style: .regular, isOn: self.includeUpgrade, action: { [weak self] _ in
-                                        guard let self else {
+                                    accessory: .toggle(ListActionItemComponent.Toggle(style: .regular, isOn: self.includeUpgrade, isEnabled: forceUnique != true, action: { [weak self] _ in
+                                        guard let self, forceUnique != true else {
                                             return
                                         }
                                         self.includeUpgrade = !self.includeUpgrade
@@ -1268,8 +1330,10 @@ final class GiftSetupScreenComponent: Component {
                 } else {
                     let amountString = product.price
                     buttonString = "\(environment.strings.Gift_Send_Send) \(amountString)"
+                    // DAHL: Отключаем для Даля возможность купить за реальные деньги
+                    buttonIsEnabled = false
                 }
-            case let .starGift(starGift):
+            case let .starGift(starGift, _):
                 var finalPrice: Int64 = starGift.price
                 if self.includeUpgrade, let upgradePrice = starGift.upgradeStars {
                     finalPrice += upgradePrice
@@ -1601,8 +1665,7 @@ final class GiftSetupScreenComponent: Component {
                     isGeneralThreadClosed: nil,
                     replyMessage: nil,
                     accountPeerColor: nil,
-                    businessIntro: nil,
-                    starGiftsAvailable: false
+                    businessIntro: nil
                 )
                 
                 self.inputMediaNodeBackground.backgroundColor = presentationData.theme.rootController.navigationBar.opaqueBackgroundColor.cgColor
@@ -1690,7 +1753,7 @@ final class GiftSetupScreenComponent: Component {
 public final class GiftSetupScreen: ViewControllerComponentContainer {
     public enum Subject: Equatable {
         case premium(PremiumGiftProduct)
-        case starGift(StarGift.Gift)
+        case starGift(StarGift.Gift, Bool?)
     }
     
     private let context: AccountContext
@@ -1711,6 +1774,8 @@ public final class GiftSetupScreen: ViewControllerComponentContainer {
         ), navigationBarAppearance: .default, theme: .default, updatedPresentationData: nil)
         
         self.title = ""
+        
+        self.navigationItem.backBarButtonItem = UIBarButtonItem(title: self.context.sharedContext.currentPresentationData.with { $0 }.strings.Common_Back, style: .plain, target: nil, action: nil)
         
         self.scrollToTop = { [weak self] in
             guard let self, let componentView = self.node.hostView.componentView as? GiftSetupScreenComponent.View else {

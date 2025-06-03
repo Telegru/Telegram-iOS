@@ -18,6 +18,8 @@ import TelegramStringFormatting
 import WallpaperResources
 import UrlEscaping
 
+import TPStrings
+
 private let iconFont = Font.with(size: 30.0, design: .round, weight: .bold)
 
 private let iconTextBackgroundImage = generateStretchableFilledCircleImage(radius: 6.0, color: UIColor(rgb: 0xFF9500))
@@ -47,7 +49,8 @@ public final class ListMessageSnippetItemNode: ListMessageNode {
     private let iconTextBackgroundNode: ASImageNode
     private let iconTextNode: TextNode
     private let iconImageNode: TransformImageNode
-    
+    private let lockIconNode: ASImageNode
+
     private var currentIconImageRepresentation: TelegramMediaImageRepresentation?
     private var currentMedia: Media?
     public var currentPrimaryUrl: String?
@@ -127,6 +130,11 @@ public final class ListMessageSnippetItemNode: ListMessageNode {
         
         self.authorNode = ListMessageFileItemNode.DescriptionNode()
         self.authorNode.isUserInteractionEnabled = false
+        self.lockIconNode = ASImageNode()
+        self.lockIconNode.isLayerBacked = true
+        self.lockIconNode.displaysAsynchronously = false
+        self.lockIconNode.displayWithoutProcessing = true
+        self.lockIconNode.isHidden = true
         
         super.init()
         
@@ -145,13 +153,14 @@ public final class ListMessageSnippetItemNode: ListMessageNode {
         self.offsetContainerNode.addSubnode(self.instantViewIconNode)
         self.offsetContainerNode.addSubnode(self.iconImageNode)
         self.offsetContainerNode.addSubnode(self.authorNode)
-        
+        self.offsetContainerNode.addSubnode(self.lockIconNode)
+
         self.containerNode.activated = { [weak self] gesture, _ in
             guard let strongSelf = self, let item = strongSelf.item, let message = item.message else {
                 return
             }
             
-            item.interaction.openMessageContextMenu(message, false, strongSelf.contextSourceNode, strongSelf.contextSourceNode.bounds, gesture)
+            item.interaction.openMessageContextMenu(message, false, strongSelf.contextSourceNode, strongSelf.contextSourceNode.bounds, gesture, item.blurred)
         }
         
         self.contextSourceNode.willUpdateIsExtractedToContextPreview = { [weak self] isExtracted, transition in
@@ -235,7 +244,7 @@ public final class ListMessageSnippetItemNode: ListMessageNode {
         let iconTextMakeLayout = TextNode.asyncLayout(self.iconTextNode)
         let iconImageLayout = self.iconImageNode.asyncLayout()
         let authorNodeMakeLayout = self.authorNode.asyncLayout()
-    
+        
         let currentIconImageRepresentation = self.currentIconImageRepresentation
         
         let currentItem = self.appliedItem
@@ -306,7 +315,11 @@ public final class ListMessageSnippetItemNode: ListMessageNode {
                                 iconText = NSAttributedString(string: host[..<host.index(after: host.startIndex)].uppercased(), font: iconFont, textColor: UIColor.white)
                             }
                             
-                            title = NSAttributedString(string: content.title ?? content.websiteName ?? hostName, font: titleFont, textColor: item.presentationData.theme.theme.list.itemPrimaryTextColor)
+                            if item.blurred {
+                                title = NSAttributedString(string: "ChildMode.LinkHidden".tp_loc(lang: item.presentationData.strings.baseLanguageCode), font: titleFont, textColor: item.presentationData.theme.theme.list.itemPrimaryTextColor)
+                            } else {
+                                title = NSAttributedString(string: content.title ?? content.websiteName ?? hostName, font: titleFont, textColor: item.presentationData.theme.theme.list.itemPrimaryTextColor)
+                            }
                             
                             if let image = content.image {
                                 if let representation = imageRepresentationLargerThan(image.representations, size: PixelDimensions(width: 80, height: 80)) {
@@ -348,12 +361,21 @@ public final class ListMessageSnippetItemNode: ListMessageNode {
                             }
                             address = address.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
                             
-                            let plainUrlString = NSAttributedString(string: address.replacingOccurrences(of: "https://", with: "").replacingOccurrences(of: "tonsite://", with: ""), font: descriptionFont, textColor: item.presentationData.theme.theme.list.itemAccentColor)
+                            let plainUrlString: NSAttributedString
+                            if item.blurred {
+                                plainUrlString = NSAttributedString(string: content.title ?? content.websiteName ?? hostName, font: descriptionFont, textColor: item.presentationData.theme.theme.list.itemSecondaryTextColor)
+                            } else {
+                                plainUrlString = NSAttributedString(string: address.replacingOccurrences(of: "https://", with: "").replacingOccurrences(of: "tonsite://", with: ""), font: descriptionFont, textColor: item.presentationData.theme.theme.list.itemAccentColor)
+                            }
+                            
                             let urlString = NSMutableAttributedString()
                             urlString.append(plainUrlString)
-                            urlString.addAttribute(NSAttributedString.Key(rawValue: TelegramTextAttributes.URL), value: content.url, range: NSMakeRange(0, urlString.length))
-                            linkText = urlString
                             
+                            if !item.blurred {
+                                urlString.addAttribute(NSAttributedString.Key(rawValue: TelegramTextAttributes.URL), value: content.url, range: NSMakeRange(0, urlString.length))
+                            }
+                            
+                            linkText = urlString
                             descriptionText = mutableDescriptionText
                         }
                         
@@ -439,6 +461,10 @@ public final class ListMessageSnippetItemNode: ListMessageNode {
                                             
                                             title = NSAttributedString(string: host, font: titleFont, textColor: item.presentationData.theme.theme.list.itemPrimaryTextColor)
                                         }
+                                        
+                                        if item.blurred {
+                                            title = NSAttributedString(string: "ChildMode.LinkHidden".tp_loc(lang: item.presentationData.strings.baseLanguageCode), font: titleFont, textColor: item.presentationData.theme.theme.list.itemPrimaryTextColor)
+                                        }
                                         let mutableDescriptionText = NSMutableAttributedString()
                                         
                                         let (messageTextUrl, _) = parseUrl(url: message.text, wasConcealed: false)
@@ -468,14 +494,20 @@ public final class ListMessageSnippetItemNode: ListMessageNode {
                                         urlString = address
                                         
                                         let urlAttributedString = NSMutableAttributedString()
-                                        urlAttributedString.append(NSAttributedString(string: urlString.replacingOccurrences(of: "https://", with: "").replacingOccurrences(of: "tonsite://", with: ""), font: descriptionFont, textColor: item.presentationData.theme.theme.list.itemAccentColor))
-                                        if item.presentationData.theme.theme.list.itemAccentColor.isEqual(item.presentationData.theme.theme.list.itemPrimaryTextColor) {
-                                            urlAttributedString.addAttribute(NSAttributedString.Key.underlineStyle, value: NSUnderlineStyle.single.rawValue as NSNumber, range: NSMakeRange(0, urlAttributedString.length))
+                                        
+                                        if item.blurred {
+                                            urlAttributedString.append(NSAttributedString(string: host, font: descriptionFont, textColor: item.presentationData.theme.theme.list.itemSecondaryTextColor))
+                                        } else {
+                                            urlAttributedString.append(NSAttributedString(string: urlString.replacingOccurrences(of: "https://", with: "").replacingOccurrences(of: "tonsite://", with: ""), font: descriptionFont, textColor: item.presentationData.theme.theme.list.itemAccentColor))
+                                            
+                                            if item.presentationData.theme.theme.list.itemAccentColor.isEqual(item.presentationData.theme.theme.list.itemPrimaryTextColor) {
+                                                urlAttributedString.addAttribute(NSAttributedString.Key.underlineStyle, value: NSUnderlineStyle.single.rawValue as NSNumber, range: NSMakeRange(0, urlAttributedString.length))
+                                            }
+                                            
+                                            urlAttributedString.addAttribute(NSAttributedString.Key(rawValue: TelegramTextAttributes.URL), value: urlString, range: NSMakeRange(0, urlAttributedString.length))
                                         }
-                                        urlAttributedString.addAttribute(NSAttributedString.Key(rawValue: TelegramTextAttributes.URL), value: urlString, range: NSMakeRange(0, urlAttributedString.length))
-                                        linkText = urlAttributedString
-
                                         descriptionText = mutableDescriptionText
+                                        linkText = urlAttributedString
                                     }
                                     break loop
                                 case let .TextUrl(url):
@@ -511,7 +543,11 @@ public final class ListMessageSnippetItemNode: ListMessageNode {
                                     let host: String? = concealed ? urlString : parsedUrl?.host
                                     if let url = parsedUrl, let host = host {
                                         primaryUrl = urlString
-                                        title = NSAttributedString(string: (tempTitleString as String).capitalized, font: titleFont, textColor: item.presentationData.theme.theme.list.itemPrimaryTextColor)
+                                        if item.blurred {
+                                            title = NSAttributedString(string: "ChildMode.LinkHidden".tp_loc(lang: item.presentationData.strings.baseLanguageCode), font: titleFont, textColor: item.presentationData.theme.theme.list.itemPrimaryTextColor)
+                                        } else {
+                                            title = NSAttributedString(string: (tempTitleString as String).capitalized, font: titleFont, textColor: item.presentationData.theme.theme.list.itemPrimaryTextColor)
+                                        }
                                         if url.path.hasPrefix("/addstickers/") {
                                             iconText = NSAttributedString(string: "S", font: iconFont, textColor: UIColor.white)
                                         } else if url.path.hasPrefix("/addemoji/") {
@@ -543,14 +579,20 @@ public final class ListMessageSnippetItemNode: ListMessageNode {
                                         urlString = address
                                         
                                         let urlAttributedString = NSMutableAttributedString()
-                                        urlAttributedString.append(NSAttributedString(string: urlString.replacingOccurrences(of: "https://", with: "").replacingOccurrences(of: "tonsite://", with: ""), font: descriptionFont, textColor: item.presentationData.theme.theme.list.itemAccentColor))
-                                        if item.presentationData.theme.theme.list.itemAccentColor.isEqual(item.presentationData.theme.theme.list.itemPrimaryTextColor) {
-                                            urlAttributedString.addAttribute(NSAttributedString.Key.underlineStyle, value: NSUnderlineStyle.single.rawValue as NSNumber, range: NSMakeRange(0, urlAttributedString.length))
-                                        }
-                                        urlAttributedString.addAttribute(NSAttributedString.Key(rawValue: TelegramTextAttributes.URL), value: urlString, range: NSMakeRange(0, urlAttributedString.length))
-                                        linkText = urlAttributedString
                                         
+                                        if item.blurred {
+                                            urlAttributedString.append(NSAttributedString(string: (tempTitleString as String).capitalized, font: descriptionFont, textColor: item.presentationData.theme.theme.list.itemSecondaryTextColor))
+                                        } else {
+                                            urlAttributedString.append(NSAttributedString(string: urlString.replacingOccurrences(of: "https://", with: "").replacingOccurrences(of: "tonsite://", with: ""), font: descriptionFont, textColor: item.presentationData.theme.theme.list.itemAccentColor))
+                                            
+                                            if item.presentationData.theme.theme.list.itemAccentColor.isEqual(item.presentationData.theme.theme.list.itemPrimaryTextColor) {
+                                                urlAttributedString.addAttribute(NSAttributedString.Key.underlineStyle, value: NSUnderlineStyle.single.rawValue as NSNumber, range: NSMakeRange(0, urlAttributedString.length))
+                                            }
+                                            
+                                            urlAttributedString.addAttribute(NSAttributedString.Key(rawValue: TelegramTextAttributes.URL), value: urlString, range: NSMakeRange(0, urlAttributedString.length))
+                                        }
                                         descriptionText = mutableDescriptionText
+                                        linkText = urlAttributedString
                                     }
                                     break loop
                                 default:
@@ -559,6 +601,10 @@ public final class ListMessageSnippetItemNode: ListMessageNode {
                         }
                     }
                 }
+            }
+            
+            if item.blurred {
+                iconText = NSAttributedString(string: " ")
             }
             
             var forumThreadTitle: (title: NSAttributedString, showIcon: Bool, iconId: Int64?, iconColor: Int32)? = nil
@@ -575,6 +621,9 @@ public final class ListMessageSnippetItemNode: ListMessageNode {
                 if fullAuthorString.count > 1, let globalAuthorTitle = fullAuthorString.last {
                     forumThreadTitle = (NSAttributedString(string: globalAuthorTitle, font: descriptionFont, textColor: item.presentationData.theme.theme.list.itemSecondaryTextColor), false, nil, 0)
                 }
+            }
+            if item.blurred {
+                authorString = " "
             }
             
             var chatListSearchResult: CachedChatListSearchResult?
@@ -635,6 +684,9 @@ public final class ListMessageSnippetItemNode: ListMessageNode {
             let (iconTextLayout, iconTextApply) = iconTextMakeLayout(TextNodeLayoutArguments(attributedString: iconText, backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: 38.0, height: CGFloat.infinity), alignment: .natural, cutout: nil, insets: UIEdgeInsets()))
             
             var iconImageApply: (() -> Void)?
+            
+
+            
             if let iconImageReferenceAndRepresentation = iconImageReferenceAndRepresentation {
                 let iconSize = CGSize(width: 40.0, height: 40.0)
                 let imageCorners = ImageCorners(radius: 6.0)
@@ -642,14 +694,22 @@ public final class ListMessageSnippetItemNode: ListMessageNode {
                 iconImageApply = iconImageLayout(arguments)
             }
             
+            var lockIconImage: UIImage?
+
+            if item.blurred {
+                lockIconImage = PresentationResourcesChat.badgeBackgroundLocked(item.presentationData.theme.theme, diameter: 12.0)
+            } else {
+                lockIconImage = nil
+            }
+            
             if currentIconImageRepresentation != iconImageReferenceAndRepresentation?.1 {
                 if let previewWallpaper = previewWallpaper, let fileReference = previewWallpaperFileReference {
                     updateIconImageSignal = wallpaperThumbnail(account: item.context.account, accountManager: item.context.sharedContext.accountManager, fileReference: fileReference, wallpaper: previewWallpaper, synchronousLoad: false)
                 } else if let iconImageReferenceAndRepresentation = iconImageReferenceAndRepresentation {
                     if let imageReference = iconImageReferenceAndRepresentation.0.concrete(TelegramMediaImage.self) {
-                        updateIconImageSignal = chatWebpageSnippetPhoto(account: item.context.account, userLocation: (item.message?.id.peerId).flatMap(MediaResourceUserLocation.peer) ?? .other, photoReference: imageReference)
+                        updateIconImageSignal = chatWebpageSnippetPhoto(account: item.context.account, userLocation: (item.message?.id.peerId).flatMap(MediaResourceUserLocation.peer) ?? .other, photoReference: imageReference, blurred: item.blurred)
                     } else if let fileReference = iconImageReferenceAndRepresentation.0.concrete(TelegramMediaFile.self) {
-                        updateIconImageSignal = chatWebpageSnippetFile(account: item.context.account, userLocation: (item.message?.id.peerId).flatMap(MediaResourceUserLocation.peer) ?? .other, mediaReference: fileReference.abstract, representation: iconImageReferenceAndRepresentation.1)
+                        updateIconImageSignal = chatWebpageSnippetFile(account: item.context.account, userLocation: (item.message?.id.peerId).flatMap(MediaResourceUserLocation.peer) ?? .other, mediaReference: fileReference.abstract, representation: iconImageReferenceAndRepresentation.1, blurred: item.blurred)
                     }
                 } else {
                     updateIconImageSignal = .complete()
@@ -662,6 +722,10 @@ public final class ListMessageSnippetItemNode: ListMessageNode {
             var contentHeight = 9.0 + titleNodeLayout.size.height + 10.0 + descriptionNodeLayout.size.height + linkNodeLayout.size.height
             if !authorString.isEmpty {
                 contentHeight += authorNodeLayout.height - 4.0
+            }
+            
+            if item.blurred {
+                contentHeight -= 10.0
             }
             
             var insets = UIEdgeInsets()
@@ -799,6 +863,23 @@ public final class ListMessageSnippetItemNode: ListMessageNode {
                     
                     strongSelf.iconTextBackgroundNode.isHidden = iconText == nil
                     strongSelf.iconTextNode.isHidden = iconText == nil
+                    
+                    if let lockIconImage = lockIconImage  {
+                       
+                        let lockIconSize = CGSize(width: 12.0, height: 12.0)
+                        let lockIconX = params.width - params.rightInset - lockIconSize.width - 12.0
+                        let lockIconY = (contentHeight / 2.0) + 8.0
+                        
+                        let lockIconFrame = CGRect(
+                            origin: CGPoint(x: lockIconX, y: lockIconY),
+                            size: lockIconSize
+                        )
+                        strongSelf.lockIconNode.image = lockIconImage
+                        transition.updateFrame(node: strongSelf.lockIconNode, frame: lockIconFrame)
+                        strongSelf.lockIconNode.isHidden = false
+                    } else {
+                        strongSelf.lockIconNode.isHidden = true
+                    }
                 }
             })
         }
@@ -853,7 +934,11 @@ public final class ListMessageSnippetItemNode: ListMessageNode {
     
     func activateMedia() {
         if let item = self.item, let message = item.message, let currentPrimaryUrl = self.currentPrimaryUrl {
-            if let webpage = self.currentMedia as? TelegramMediaWebpage, case let .Loaded(content) = webpage.content {
+            if item.blurred {
+                if let peerId = item.message?.id.peerId {
+                    item.interaction.openRequiredPermissionDialog(peerId, true, message)
+                }
+            } else if let webpage = self.currentMedia as? TelegramMediaWebpage, case let .Loaded(content) = webpage.content {
                 if content.instantPage != nil {
                     if websiteType(of: content.websiteName) == .instagram {
                         if !item.interaction.openMessage(message, .default) {
@@ -916,7 +1001,7 @@ public final class ListMessageSnippetItemNode: ListMessageNode {
                 if let (gesture, location) = recognizer.lastRecognizedGestureAndLocation {
                     switch gesture {
                         case .tap, .longTap:
-                            if let item = self.item, let message = item.message, let url = self.urlAtPoint(location) {
+                            if let item = self.item, let message = item.message, let url = self.urlAtPoint(location), !item.blurred {
                                 if case .longTap = gesture {
                                     item.interaction.longTap(ChatControllerInteractionLongTapAction.url(url), message)
                                 } else if url == self.currentPrimaryUrl {

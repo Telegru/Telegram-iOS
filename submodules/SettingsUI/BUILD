@@ -129,7 +129,7 @@ swift_library(
         
         "//submodules/BuildConfig:BuildConfig",
         "//Teleport/DWallpaper:DWallpaper",
-        "//Teleport/DClient:DClient",
+        "//Teleport/DClient:DNetwork",
     ],
     visibility = [
         "//visibility:public",

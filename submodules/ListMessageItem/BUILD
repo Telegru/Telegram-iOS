@@ -37,6 +37,8 @@ swift_library(
         "//submodules/WallpaperResources:WallpaperResources",
         "//submodules/Postbox:Postbox",
         "//submodules/ShimmerEffect:ShimmerEffect",
+        
+        "//Teleport/TPStrings:TPStrings"
     ],
     visibility = [
         "//visibility:public",

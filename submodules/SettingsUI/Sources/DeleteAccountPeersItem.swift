@@ -61,6 +61,7 @@ private struct PeersEntry: Comparable, Identifiable {
             action: { _ in },
             contextAction: nil,
             isPeerSelected: { _ in return false },
+            isPeerBlurred: { _ in return false },
             customWidth: nil
         )
     }

@@ -70,7 +70,7 @@ public class ChatPresentationContext {
     public weak var backgroundNode: WallpaperBackgroundNode?
     public let animationCache: AnimationCache
     public let animationRenderer: MultiAnimationRenderer
-
+    
     public init(context: AccountContext, backgroundNode: WallpaperBackgroundNode?) {
         self.backgroundNode = backgroundNode
         
@@ -173,6 +173,9 @@ public final class ChatControllerInteraction: ChatControllerInteractionProtocol 
     public let openPeerMention: (String, Promise<Bool>?) -> Void
     public let openMessageContextMenu: (Message, Bool, ASDisplayNode, CGRect, UIGestureRecognizer?, CGPoint?) -> Void
     public let updateMessageReaction: (Message, ChatControllerInteractionReaction, Bool, ContextExtractedContentContainingView?) -> Void
+    public let editMessage: (Message) -> Bool
+    public let forwardMessage: (Message, @escaping (Bool) -> Void) -> Void
+    public let forwardMessageToSaved: (Message, @escaping (Bool) -> Void) -> Void
     public let openMessageReactionContextMenu: (Message, ContextExtractedContentContainingView, ContextGesture?, MessageReaction.Reaction) -> Void
     public let activateMessagePinch: (PinchSourceContainerNode) -> Void
     public let openMessageContextActions: (Message, ASDisplayNode, CGRect, ContextGesture?) -> Void
@@ -208,6 +211,7 @@ public final class ChatControllerInteraction: ChatControllerInteractionProtocol 
     public let chatControllerNode: () -> ASDisplayNode?
     public let presentGlobalOverlayController: (ViewController, Any?) -> Void
     public let callPeer: (PeerId, Bool) -> Void
+    public let openConferenceCall: (Message) -> Void
     public let longTap: (ChatControllerInteractionLongTapAction, LongTapParams?) -> Void
     public let openCheckoutOrReceipt: (MessageId, OpenMessageParams?) -> Void
     public let openSearch: () -> Void
@@ -279,6 +283,7 @@ public final class ChatControllerInteraction: ChatControllerInteractionProtocol 
     public let attemptedNavigationToPrivateQuote: (Peer?) -> Void
     public let forceUpdateWarpContents: () -> Void
     public let playShakeAnimation:  () -> Void
+    public let displayQuickShare: (MessageId, ASDisplayNode, ContextGesture) -> Void
     
     public var canPlayMedia: Bool = false
     public var hiddenMedia: [MessageId: [Media]] = [:]
@@ -303,7 +308,7 @@ public final class ChatControllerInteraction: ChatControllerInteractionProtocol 
     public var chatIsRotated: Bool = true
     public var canReadHistory: Bool = false
     public var disableMessageMerge: Bool = false
-
+    
     private var isOpeningMediaValue: Bool = false
     public var isOpeningMedia: Bool {
         return self.isOpeningMediaValue
@@ -334,6 +339,11 @@ public final class ChatControllerInteraction: ChatControllerInteractionProtocol 
         openMessageContextMenu: @escaping (Message, Bool, ASDisplayNode, CGRect, UIGestureRecognizer?, CGPoint?) -> Void,
         openMessageReactionContextMenu: @escaping (Message, ContextExtractedContentContainingView, ContextGesture?, MessageReaction.Reaction) -> Void,
         updateMessageReaction: @escaping (Message, ChatControllerInteractionReaction, Bool, ContextExtractedContentContainingView?) -> Void,
+        // DAHL
+        editMessage: @escaping (Message) -> Bool,
+        forwardMessage: @escaping (Message, @escaping (Bool) -> Void) -> Void,
+        forwardMessageToSaved: @escaping (Message, @escaping (Bool) -> Void) -> Void,
+        // DAHL
         activateMessagePinch: @escaping (PinchSourceContainerNode) -> Void,
         openMessageContextActions: @escaping (Message, ASDisplayNode, CGRect, ContextGesture?) -> Void,
         navigateToMessage: @escaping (MessageId, MessageId, NavigateToMessageParams) -> Void,
@@ -368,6 +378,7 @@ public final class ChatControllerInteraction: ChatControllerInteractionProtocol 
         chatControllerNode: @escaping () -> ASDisplayNode?,
         presentGlobalOverlayController: @escaping (ViewController, Any?) -> Void,
         callPeer: @escaping (PeerId, Bool) -> Void,
+        openConferenceCall: @escaping (Message) -> Void,
         longTap: @escaping (ChatControllerInteractionLongTapAction, LongTapParams?) -> Void,
         openCheckoutOrReceipt: @escaping (MessageId, OpenMessageParams?) -> Void,
         openSearch: @escaping () -> Void,
@@ -438,6 +449,7 @@ public final class ChatControllerInteraction: ChatControllerInteractionProtocol 
         attemptedNavigationToPrivateQuote: @escaping (Peer?) -> Void,
         forceUpdateWarpContents: @escaping () -> Void,
         playShakeAnimation: @escaping () -> Void,
+        displayQuickShare: @escaping (MessageId, ASDisplayNode, ContextGesture) -> Void,
         automaticMediaDownloadSettings: MediaAutoDownloadSettings,
         pollActionState: ChatInterfacePollActionState,
         stickerSettings: ChatInterfaceStickerSettings,
@@ -449,6 +461,9 @@ public final class ChatControllerInteraction: ChatControllerInteractionProtocol 
         self.openMessageContextMenu = openMessageContextMenu
         self.openMessageReactionContextMenu = openMessageReactionContextMenu
         self.updateMessageReaction = updateMessageReaction
+        self.editMessage = editMessage
+        self.forwardMessage = forwardMessage
+        self.forwardMessageToSaved = forwardMessageToSaved
         self.activateMessagePinch = activateMessagePinch
         self.openMessageContextActions = openMessageContextActions
         self.navigateToMessage = navigateToMessage
@@ -483,6 +498,7 @@ public final class ChatControllerInteraction: ChatControllerInteractionProtocol 
         self.chatControllerNode = chatControllerNode
         self.presentGlobalOverlayController = presentGlobalOverlayController
         self.callPeer = callPeer
+        self.openConferenceCall = openConferenceCall
         self.longTap = longTap
         self.openCheckoutOrReceipt = openCheckoutOrReceipt
         self.openSearch = openSearch
@@ -554,12 +570,13 @@ public final class ChatControllerInteraction: ChatControllerInteractionProtocol 
         self.attemptedNavigationToPrivateQuote = attemptedNavigationToPrivateQuote
         self.forceUpdateWarpContents = forceUpdateWarpContents
         self.playShakeAnimation = playShakeAnimation
+        self.displayQuickShare = displayQuickShare
         
         self.automaticMediaDownloadSettings = automaticMediaDownloadSettings
         
         self.pollActionState = pollActionState
         self.stickerSettings = stickerSettings
-
+        
         self.presentationContext = presentationContext
     }
     

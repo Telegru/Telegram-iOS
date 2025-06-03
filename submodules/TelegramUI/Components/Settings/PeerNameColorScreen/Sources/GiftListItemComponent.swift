@@ -125,7 +125,7 @@ final class GiftListItemComponent: Component {
                                         theme: component.theme,
                                         strings: component.context.sharedContext.currentPresentationData.with { $0 }.strings,
                                         peer: nil,
-                                        subject: .uniqueGift(gift: gift),
+                                        subject: .uniqueGift(gift: gift, price: nil),
                                         ribbon: nil,
                                         isHidden: false,
                                         isSelected: gift.id == component.selectedId,
@@ -143,7 +143,7 @@ final class GiftListItemComponent: Component {
                             )
                         ),
                         environment: {},
-                        containerSize: itemFrame.size
+                        containerSize: itemFrame.insetBy(dx: -2.0, dy: -2.0).size
                     )
                     if let itemView = visibleItem.view {
                         if itemView.superview == nil {
@@ -154,7 +154,7 @@ final class GiftListItemComponent: Component {
                                 itemView.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.25)
                             }
                         }
-                        itemTransition.setFrame(view: itemView, frame: itemFrame)
+                        itemTransition.setFrame(view: itemView, frame: itemFrame.insetBy(dx: -2.0, dy: -2.0))
                     }
                 }
                 itemFrame.origin.x += itemFrame.width + spacing

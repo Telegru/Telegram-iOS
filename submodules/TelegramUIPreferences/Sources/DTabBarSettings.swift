@@ -62,4 +62,15 @@ extension DTabBarSettings {
             showTabTitles: true
         )
     }
+    
+    public static var childMode: DTabBarSettings {
+        DTabBarSettings(
+            currentTabs: [
+                .calls,
+                .chats,
+                .contacts
+            ],
+            showTabTitles: true
+        )
+    }
 }

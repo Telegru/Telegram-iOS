@@ -166,13 +166,10 @@ final class CallControllerNodeV2: ViewControllerTracingNode, CallControllerNodeP
             }
             self.conferenceAddParticipant?()
         }
-        
-        var isConferencePossible = false
-        if self.call.context.sharedContext.immediateExperimentalUISettings.conferenceDebug {
-            isConferencePossible = true
-        }
-        if let data = self.call.context.currentAppConfiguration.with({ $0 }).data, let value = data["ios_enable_conference"] as? Double {
-            isConferencePossible = value != 0.0
+
+        var enableVideoSharpening = false
+        if let data = call.context.currentAppConfiguration.with({ $0 }).data, let value = data["ios_call_video_sharpening"] as? Double {
+            enableVideoSharpening = value != 0.0
         }
         
         self.callScreenState = PrivateCallScreen.State(
@@ -188,11 +185,12 @@ final class CallControllerNodeV2: ViewControllerTracingNode, CallControllerNodeP
             remoteVideo: nil,
             isRemoteBatteryLow: false,
             isEnergySavingEnabled: !self.sharedContext.energyUsageSettings.fullTranslucency,
-            isConferencePossible: isConferencePossible
+            isConferencePossible: false,
+            enableVideoSharpening: enableVideoSharpening
         )
         
         self.isMicrophoneMutedDisposable = (call.isMuted
-        |> deliverOnMainQueue).startStrict(next: { [weak self] isMuted in
+                                            |> deliverOnMainQueue).startStrict(next: { [weak self] isMuted in
             guard let self, var callScreenState = self.callScreenState else {
                 return
             }
@@ -205,7 +203,7 @@ final class CallControllerNodeV2: ViewControllerTracingNode, CallControllerNodeP
         })
         
         self.audioLevelDisposable = (call.audioLevel
-        |> deliverOnMainQueue).start(next: { [weak self] audioLevel in
+                                     |> deliverOnMainQueue).start(next: { [weak self] audioLevel in
             guard let self else {
                 return
             }
@@ -231,8 +229,8 @@ final class CallControllerNodeV2: ViewControllerTracingNode, CallControllerNodeP
         })
         
         self.applicationInForegroundDisposable = (self.sharedContext.applicationBindings.applicationInForeground
-        |> filter { $0 }
-        |> deliverOnMainQueue).startStrict(next: { [weak self] _ in
+                                                  |> filter { $0 }
+                                                  |> deliverOnMainQueue).startStrict(next: { [weak self] _ in
             guard let self else {
                 return
             }
@@ -342,12 +340,12 @@ final class CallControllerNodeV2: ViewControllerTracingNode, CallControllerNodeP
                             return
                         }
                         /*switch callState.videoState {
-                        case .inactive:
-                            self.isRequestingVideo = true
-                            self.updateButtonsMode()
-                        default:
-                            break
-                        }*/
+                         case .inactive:
+                         self.isRequestingVideo = true
+                         self.updateButtonsMode()
+                         default:
+                         break
+                         }*/
                         self.call.requestVideo()
                     }
                     
@@ -552,6 +550,8 @@ final class CallControllerNodeV2: ViewControllerTracingNode, CallControllerNodeP
                 callScreenState.isRemoteAudioMuted = false
             }
             
+            callScreenState.isConferencePossible = callState.supportsConferenceCalls
+            
             if self.callScreenState != callScreenState {
                 self.callScreenState = callScreenState
                 self.update(transition: .animated(duration: 0.35, curve: .spring))
@@ -627,7 +627,7 @@ final class CallControllerNodeV2: ViewControllerTracingNode, CallControllerNodeP
             let size = CGSize(width: 128.0, height: 128.0)
             if let representation = peer.largeProfileImage, let signal = peerAvatarImage(account: self.call.context.account, peerReference: PeerReference(peer._asPeer()), authorOfMessage: nil, representation: representation, displayDimensions: size, synchronousLoad: self.callScreenState?.avatarImage == nil) {
                 self.peerAvatarDisposable = (signal
-                |> deliverOnMainQueue).startStrict(next: { [weak self] imageVersions in
+                                             |> deliverOnMainQueue).startStrict(next: { [weak self] imageVersions in
                     guard let self else {
                         return
                     }
@@ -655,7 +655,7 @@ final class CallControllerNodeV2: ViewControllerTracingNode, CallControllerNodeP
             self.update(transition: .immediate)
         }
     }
-
+    
     func animateIn() {
         self.panGestureState = nil
         self.update(transition: .immediate)
@@ -803,7 +803,7 @@ private func copyI420BufferToNV12Buffer(buffer: OngoingGroupCallContext.VideoFra
     guard CVPixelBufferGetHeightOfPlane(pixelBuffer, 0) == buffer.height else {
         return false
     }
-
+    
     let cvRet = CVPixelBufferLockBaseAddress(pixelBuffer, [])
     if cvRet != kCVReturnSuccess {
         return false
@@ -811,17 +811,17 @@ private func copyI420BufferToNV12Buffer(buffer: OngoingGroupCallContext.VideoFra
     defer {
         CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
     }
-
+    
     guard let dstY = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0) else {
         return false
     }
     let dstStrideY = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0)
-
+    
     guard let dstUV = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 1) else {
         return false
     }
     let dstStrideUV = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1)
-
+    
     buffer.y.withUnsafeBytes { srcYBuffer in
         guard let srcY = srcYBuffer.baseAddress else {
             return
@@ -851,7 +851,7 @@ private func copyI420BufferToNV12Buffer(buffer: OngoingGroupCallContext.VideoFra
             }
         }
     }
-
+    
     return true
 }
 
@@ -937,7 +937,7 @@ final class AdaptedCallVideoSource: VideoSource {
         CVMetalTextureCacheCreate(nil, nil, MetalEngine.shared.device, nil, &self.textureCache)
         
         self.videoFrameDisposable = (videoStreamSignal
-        |> deliverOnMainQueue).start(next: { [weak self] videoFrameData in
+                                     |> deliverOnMainQueue).start(next: { [weak self] videoFrameData in
             guard let self, let textureCache = self.textureCache else {
                 return
             }

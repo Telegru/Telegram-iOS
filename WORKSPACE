@@ -1,4 +1,5 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file")
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 
 http_archive(
     name = "bazel_features",
@@ -118,4 +119,42 @@ bazel_skylib_workspace()
 load("@build_bazel_rules_apple//apple:apple.bzl", "provisioning_profile_repository")
 provisioning_profile_repository(
     name = "local_provisioning_profiles",
+)
+
+local_repository(
+    name = "build_configuration",
+    path = "build-input/configuration-repository",
+)
+
+git_repository(
+    name = "Alamofire",
+    remote = "https://github.com/Alamofire/Alamofire.git",
+    commit = "513364f870f6bfc468f9d2ff0a95caccc10044c5", #5.10.2
+    build_file_content = """
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
+swift_library(
+    name = "Alamofire",
+    srcs = glob(["Source/**/*.swift"]),
+    module_name = "Alamofire",
+    visibility = ["//visibility:public"],
+)
+    """,
+)
+
+git_repository(
+    name = "Moya",
+    remote = "https://github.com/Moya/Moya.git",
+    commit = "c263811c1f3dbf002be9bd83107f7cdc38992b26", #15.0.3
+    build_file_content = """
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
+swift_library(
+    name = "Moya",
+    srcs = glob(["Sources/Moya/**/*.swift"]),
+    module_name = "Moya",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@Alamofire//:Alamofire",
+    ],
+)
+    """,
 )

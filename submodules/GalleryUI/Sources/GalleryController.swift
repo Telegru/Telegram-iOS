@@ -16,6 +16,7 @@ import OpenInExternalAppUI
 import ScreenCaptureDetection
 import UndoUI
 import TranslateUI
+import ContentHiddenOverlayNode
 
 private func tagsForMessage(_ message: Message) -> MessageTags? {
     for media in message.media {
@@ -192,6 +193,7 @@ public func galleryItemForEntry(
     hideControls: Bool = false,
     fromPlayingVideo: Bool = false,
     isSecret: Bool = false,
+    blurred: Bool,
     landscape: Bool = false,
     timecode: Double? = nil,
     playbackRate: @escaping () -> Double?,
@@ -205,8 +207,10 @@ public func galleryItemForEntry(
     openActionOptions: @escaping (GalleryControllerInteractionTapAction, Message) -> Void = { _, _ in },
     storeMediaPlaybackState: @escaping (MessageId, Double?, Double) -> Void = { _, _, _ in },
     generateStoreAfterDownload: ((Message, TelegramMediaFile) -> (() -> Void)?)? = nil,
-    present: @escaping (ViewController, Any?) -> Void) -> GalleryItem?
-{
+    present: @escaping (ViewController, Any?) -> Void,
+    dismissAction:  @escaping () -> Void,
+    showConentAction:  @escaping (Bool) -> Void
+) -> GalleryItem?{
     let message = entry.entry.message
     let location = entry.location ?? entry.entry.location
     let messageMedia = mediaForMessage(message: message)
@@ -236,9 +240,11 @@ public func galleryItemForEntry(
             peerIsCopyProtected: peerIsCopyProtected,
             isSecret: isSecret,
             displayInfoOnTop: displayInfoOnTop,
+            blurred: blurred,
             performAction: performAction,
             openActionOptions: openActionOptions,
-            present: present
+            present: present,
+            dismissAction: dismissAction
         )
     } else if let file = media as? TelegramMediaFile {
         if file.isVideo {
@@ -308,9 +314,10 @@ public func galleryItemForEntry(
                 contentInfo: .message(message, entry.mediaIndex),
                 caption: caption,
                 displayInfoOnTop: displayInfoOnTop,
-                hideControls: hideControls,
+                hideControls: hideControls || blurred,
                 fromPlayingVideo: fromPlayingVideo,
                 isSecret: isSecret,
+                blurred: blurred,
                 landscape: landscape,
                 timecode: timecode,
                 peerIsCopyProtected: peerIsCopyProtected,
@@ -320,7 +327,8 @@ public func galleryItemForEntry(
                 performAction: performAction,
                 openActionOptions: openActionOptions,
                 storeMediaPlaybackState: storeMediaPlaybackState,
-                present: present
+                present: present,
+                dismissAction: dismissAction
             )
         } else {
             if let fileName = file.fileName, (fileName as NSString).pathExtension.lowercased() == "json" {
@@ -344,9 +352,11 @@ public func galleryItemForEntry(
                         peerIsCopyProtected: peerIsCopyProtected,
                         isSecret: isSecret,
                         displayInfoOnTop: displayInfoOnTop,
+                        blurred: blurred,
                         performAction: performAction,
                         openActionOptions: openActionOptions,
-                        present: present
+                        present: present,
+                        dismissAction: dismissAction
                     )
                 } else {
                     return ChatDocumentGalleryItem(
@@ -416,8 +426,10 @@ public func galleryItemForEntry(
                 caption: NSAttributedString(string: ""),
                 description: description,
                 displayInfoOnTop: displayInfoOnTop,
+                hideControls: blurred,
                 fromPlayingVideo: fromPlayingVideo,
                 isSecret: isSecret,
+                blurred: blurred,
                 landscape: landscape,
                 timecode: timecode,
                 playbackRate: playbackRate,
@@ -425,7 +437,8 @@ public func galleryItemForEntry(
                 performAction: performAction,
                 openActionOptions: openActionOptions,
                 storeMediaPlaybackState: storeMediaPlaybackState,
-                present: present
+                present: present,
+                dismissAction: dismissAction
             )
         }
     }
@@ -581,7 +594,8 @@ public class GalleryController: ViewController, StandalonePresentableController,
     private var presentationData: PresentationData
     private let source: GalleryControllerItemSource
     private let invertItemOrder: Bool
-    
+    private var whitelist: [EnginePeer.Id]?
+
     private let streamVideos: Bool
     
     private let _ready = Promise<Bool>()
@@ -641,6 +655,9 @@ public class GalleryController: ViewController, StandalonePresentableController,
     public var useSimpleAnimation: Bool = false
     
     private var initialOrientation: UIInterfaceOrientation?
+    private let contentHiddenOverlayNode: ContentHiddenOverlayNode
+    private var childModeDisposable: Disposable?
+    private var isContentAccessGranted: Bool = true
     
     public init(context: AccountContext, source: GalleryControllerItemSource, invertItemOrder: Bool = false, streamSingleVideo: Bool = false, fromPlayingVideo: Bool = false, landscape: Bool = false, timecode: Double? = nil, playbackRate: Double? = nil, synchronousLoad: Bool = false, replaceRootController: @escaping (ViewController, Promise<Bool>?) -> Void, baseNavigationController: NavigationController?, actionInteraction: GalleryControllerActionInteraction? = nil, generateStoreAfterDownload: ((Message, TelegramMediaFile) -> (() -> Void)?)? = nil) {
         self.context = context
@@ -674,7 +691,11 @@ public class GalleryController: ViewController, StandalonePresentableController,
         self.openActionOptions = { action, message in
             openActionOptionsImpl?(action, message)
         }
-        
+        self.contentHiddenOverlayNode = ContentHiddenOverlayNode(
+            theme: self.presentationData.theme,
+            strings: self.presentationData.strings,
+            contentType: .content
+        )
         super.init(navigationBarPresentationData: NavigationBarPresentationData(theme: GalleryController.darkNavigationTheme, strings: NavigationBarStrings(presentationStrings: self.presentationData.strings)))
         
         let backItem = UIBarButtonItem(backButtonAppearanceWithTitle: self.presentationData.strings.Common_Back, target: self, action: #selector(self.donePressed))
@@ -713,7 +734,7 @@ public class GalleryController: ViewController, StandalonePresentableController,
                         return .single(message.flatMap { ($0, false) })
                     }
                 }
-                translateToLanguage = chatTranslationState(context: context, peerId: messageId.peerId)
+                translateToLanguage = chatTranslationState(context: context, peerId: messageId.peerId, threadId: threadIdValue)
                 |> map { translationState in
                     if let translationState, translationState.isEnabled {
                         let translateToLanguage = translationState.toLang ?? baseLanguageCode
@@ -731,6 +752,7 @@ public class GalleryController: ViewController, StandalonePresentableController,
                     return messages.first(where: { $0.id == messageId }).flatMap { ($0, false) }
                 }
         }
+
         let messageView = message
         |> filter({ $0 != nil })
         |> mapToSignal { messageAndPeerIsCopyProtected -> Signal<GalleryMessageHistoryView?, NoError> in
@@ -812,11 +834,16 @@ public class GalleryController: ViewController, StandalonePresentableController,
         }
         
         let syncResult = Atomic<(Bool, (() -> Void)?)>(value: (false, nil))
+        
+        let whitelist: Signal<(Bool, [EnginePeer.Id]), NoError> = (context.childModeManager?.whitelist() ?? .single((false, [])))
+            |> take(1)
+        
         self.disposable.set(combineLatest(
             messageView,
             self.context.account.postbox.preferencesView(keys: [PreferencesKeys.appConfiguration]),
-            translateToLanguage
-        ).start(next: { [weak self] view, preferencesView, translateToLanguage in
+            translateToLanguage,
+            whitelist
+        ).start(next: { [weak self] view, preferencesView, translateToLanguage, whitelist in
             let f: () -> Void = {
                 if let strongSelf = self {
                     if let view = view {
@@ -825,6 +852,7 @@ public class GalleryController: ViewController, StandalonePresentableController,
                         let appConfiguration: AppConfiguration = preferencesView.values[PreferencesKeys.appConfiguration]?.get(AppConfiguration.self) ?? .defaultValue
                         let configuration = GalleryConfiguration.with(appConfiguration: appConfiguration)
                         strongSelf.configuration = configuration
+                        strongSelf.whitelist = whitelist.0 ? whitelist.1 : nil 
                         
                         let entries = galleryEntriesForMessageHistoryEntries(view.entries)
                         var centralEntryStableId: GalleryEntryStableId?
@@ -865,6 +893,7 @@ public class GalleryController: ViewController, StandalonePresentableController,
                             strongSelf.hasRightEntries = view.hasLater
                             strongSelf.centralEntryStableId = centralEntryStableId
                         }
+                        
                         if strongSelf.isViewLoaded {
                             var items: [GalleryItem] = []
                             var centralItemIndex: Int?
@@ -873,11 +902,14 @@ public class GalleryController: ViewController, StandalonePresentableController,
                                 if entry.stableId == strongSelf.centralEntryStableId {
                                     isCentral = true
                                 }
-                                if let item = galleryItemForEntry(context: context, presentationData: strongSelf.presentationData, entry: entry, isCentral: isCentral, streamVideos: streamSingleVideo, fromPlayingVideo: isCentral && fromPlayingVideo, landscape: isCentral && landscape, timecode: isCentral ? timecode : nil, playbackRate: { return self?.playbackRate }, displayInfoOnTop: displayInfoOnTop, configuration: configuration, translateToLanguage: translateToLanguage, peerIsCopyProtected: view.peerIsCopyProtected, performAction: strongSelf.performAction, openActionOptions: strongSelf.openActionOptions, storeMediaPlaybackState: strongSelf.actionInteraction?.storeMediaPlaybackState ?? { _, _, _ in }, generateStoreAfterDownload: strongSelf.generateStoreAfterDownload, present: { [weak self] c, a in
+                                
+                                if let item = galleryItemForEntry(context: context, presentationData: strongSelf.presentationData, entry: entry, isCentral: isCentral, streamVideos: streamSingleVideo, fromPlayingVideo: isCentral && fromPlayingVideo, blurred: !strongSelf.isPeerAllowed(peerId: entry.entry.message.id.peerId), landscape: isCentral && landscape, timecode: isCentral ? timecode : nil, playbackRate: { return self?.playbackRate }, displayInfoOnTop: displayInfoOnTop, configuration: configuration, translateToLanguage: translateToLanguage, peerIsCopyProtected: view.peerIsCopyProtected, performAction: strongSelf.performAction, openActionOptions: strongSelf.openActionOptions, storeMediaPlaybackState: strongSelf.actionInteraction?.storeMediaPlaybackState ?? { _, _, _ in }, generateStoreAfterDownload: strongSelf.generateStoreAfterDownload, present: { [weak self] c, a in
                                     if let strongSelf = self {
                                         strongSelf.presentInGlobalOverlay(c, with: a)
                                     }
-                                }) {
+                                }, dismissAction: { [weak self] in
+                                    self?.donePressed()
+                                }, showConentAction: { _ in }) {
                                     if isCentral {
                                         centralItemIndex = items.count
                                     }
@@ -1267,10 +1299,13 @@ public class GalleryController: ViewController, StandalonePresentableController,
             }
         }
         
+        
         self.blocksBackgroundWhenInOverlay = true
         self.acceptsFocusWhenInOverlay = true
         self.isOpaqueWhenInOverlay = true
-        
+        self.galleryNode.addSubnode(self.contentHiddenOverlayNode)
+        self.setupChildModeIfNeeded()
+
         switch source {
         case let .peerMessagesAtId(id, _, _, _):
             if id.peerId.namespace == Namespaces.Peer.SecretChat {
@@ -1295,6 +1330,7 @@ public class GalleryController: ViewController, StandalonePresentableController,
             self.context.sharedContext.applicationBindings.forceOrientation(initialOrientation)
         }
         
+        self.childModeDisposable?.dispose()
         self.accountInUseDisposable.dispose()
         self.disposable.dispose()
         self.centralItemAttributesDisposable.dispose()
@@ -1307,6 +1343,13 @@ public class GalleryController: ViewController, StandalonePresentableController,
     
     @objc private func donePressed() {
         self.dismiss(forceAway: false)
+    }
+    
+    private func isPeerAllowed(peerId: PeerId) -> Bool {
+        if let whitelist {
+            return whitelist.contains(peerId)
+        }
+        return true
     }
     
     func dismiss(forceAway: Bool) {
@@ -1508,11 +1551,13 @@ public class GalleryController: ViewController, StandalonePresentableController,
             if entry.stableId == self.centralEntryStableId {
                 isCentral = true
             }
-            if let item = galleryItemForEntry(context: self.context, presentationData: self.presentationData, entry: entry, streamVideos: self.streamVideos, fromPlayingVideo: isCentral && self.fromPlayingVideo, landscape: isCentral && self.landscape, timecode: isCentral ? self.timecode : nil, playbackRate: { [weak self] in return self?.playbackRate }, displayInfoOnTop: displayInfoOnTop, configuration: self.configuration, peerIsCopyProtected: self.peerIsCopyProtected, performAction: self.performAction, openActionOptions: self.openActionOptions, storeMediaPlaybackState: self.actionInteraction?.storeMediaPlaybackState ?? { _, _, _ in }, generateStoreAfterDownload: self.generateStoreAfterDownload, present: { [weak self] c, a in
+            if let item = galleryItemForEntry(context: self.context, presentationData: self.presentationData, entry: entry, streamVideos: self.streamVideos, fromPlayingVideo: isCentral && self.fromPlayingVideo, blurred: !self.isPeerAllowed(peerId: entry.entry.message.id.peerId), landscape: isCentral && self.landscape, timecode: isCentral ? self.timecode : nil, playbackRate: { [weak self] in return self?.playbackRate }, displayInfoOnTop: displayInfoOnTop, configuration: self.configuration, peerIsCopyProtected: self.peerIsCopyProtected, performAction: self.performAction, openActionOptions: self.openActionOptions, storeMediaPlaybackState: self.actionInteraction?.storeMediaPlaybackState ?? { _, _, _ in }, generateStoreAfterDownload: self.generateStoreAfterDownload, present: { [weak self] c, a in
                 if let strongSelf = self {
                     strongSelf.presentInGlobalOverlay(c, with: a)
                 }
-            }) {
+            }, dismissAction: { [weak self] in
+                self?.donePressed()
+            }, showConentAction: { _ in }) {
                 if isCentral {
                     centralItemIndex = items.count
                 }
@@ -1601,11 +1646,13 @@ public class GalleryController: ViewController, StandalonePresentableController,
                                                 if entry.stableId == strongSelf.centralEntryStableId {
                                                     isCentral = true
                                                 }
-                                                if let item = galleryItemForEntry(context: strongSelf.context, presentationData: strongSelf.presentationData, entry: entry, isCentral: isCentral, streamVideos: false, fromPlayingVideo: isCentral && strongSelf.fromPlayingVideo, landscape: isCentral && strongSelf.landscape, timecode: isCentral ? strongSelf.timecode : nil, playbackRate: { return self?.playbackRate }, displayInfoOnTop: displayInfoOnTop, configuration: strongSelf.configuration, peerIsCopyProtected: view.peerIsCopyProtected, performAction: strongSelf.performAction, openActionOptions: strongSelf.openActionOptions, storeMediaPlaybackState: strongSelf.actionInteraction?.storeMediaPlaybackState ?? { _, _, _ in }, generateStoreAfterDownload: strongSelf.generateStoreAfterDownload, present: { [weak self] c, a in
+                                                if let item = galleryItemForEntry(context: strongSelf.context, presentationData: strongSelf.presentationData, entry: entry, isCentral: isCentral, streamVideos: false, fromPlayingVideo: isCentral && strongSelf.fromPlayingVideo, blurred: !strongSelf.isPeerAllowed(peerId: entry.entry.message.id.peerId), landscape: isCentral && strongSelf.landscape, timecode: isCentral ? strongSelf.timecode : nil, playbackRate: { return self?.playbackRate }, displayInfoOnTop: displayInfoOnTop, configuration: strongSelf.configuration, peerIsCopyProtected: view.peerIsCopyProtected, performAction: strongSelf.performAction, openActionOptions: strongSelf.openActionOptions, storeMediaPlaybackState: strongSelf.actionInteraction?.storeMediaPlaybackState ?? { _, _, _ in }, generateStoreAfterDownload: strongSelf.generateStoreAfterDownload, present: { [weak self] c, a in
                                                     if let strongSelf = self {
                                                         strongSelf.presentInGlobalOverlay(c, with: a)
                                                     }
-                                                }) {
+                                                }, dismissAction: { [weak self] in
+                                                    self?.donePressed()
+                                                }, showConentAction: { _ in }) {
                                                     if isCentral {
                                                         centralItemIndex = items.count
                                                     }
@@ -1654,11 +1701,13 @@ public class GalleryController: ViewController, StandalonePresentableController,
                                                 if entry.stableId == strongSelf.centralEntryStableId {
                                                     isCentral = true
                                                 }
-                                                if let item = galleryItemForEntry(context: strongSelf.context, presentationData: strongSelf.presentationData, entry: entry, isCentral: isCentral, streamVideos: false, fromPlayingVideo: isCentral && strongSelf.fromPlayingVideo, landscape: isCentral && strongSelf.landscape, timecode: isCentral ? strongSelf.timecode : nil, playbackRate: { return self?.playbackRate }, displayInfoOnTop: displayInfoOnTop, configuration: strongSelf.configuration, performAction: strongSelf.performAction, openActionOptions: strongSelf.openActionOptions, storeMediaPlaybackState: strongSelf.actionInteraction?.storeMediaPlaybackState ?? { _, _, _ in }, generateStoreAfterDownload: strongSelf.generateStoreAfterDownload, present: { [weak self] c, a in
+                                                if let item = galleryItemForEntry(context: strongSelf.context, presentationData: strongSelf.presentationData, entry: entry, isCentral: isCentral, streamVideos: false, fromPlayingVideo: isCentral && strongSelf.fromPlayingVideo, blurred: !strongSelf.isPeerAllowed(peerId: entry.entry.message.id.peerId), landscape: isCentral && strongSelf.landscape, timecode: isCentral ? strongSelf.timecode : nil, playbackRate: { return self?.playbackRate }, displayInfoOnTop: displayInfoOnTop, configuration: strongSelf.configuration, performAction: strongSelf.performAction, openActionOptions: strongSelf.openActionOptions, storeMediaPlaybackState: strongSelf.actionInteraction?.storeMediaPlaybackState ?? { _, _, _ in }, generateStoreAfterDownload: strongSelf.generateStoreAfterDownload, present: { [weak self] c, a in
                                                     if let strongSelf = self {
                                                         strongSelf.presentInGlobalOverlay(c, with: a)
                                                     }
-                                                }) {
+                                                }, dismissAction: { [weak self] in
+                                                    self?.donePressed()
+                                                }, showConentAction: { _ in }) {
                                                     if isCentral {
                                                         centralItemIndex = items.count
                                                     }
@@ -1824,6 +1873,16 @@ public class GalleryController: ViewController, StandalonePresentableController,
                 self.containerLayoutUpdated(ContainerViewLayout(size: self.preferredContentSize, metrics: LayoutMetrics(), deviceMetrics: layout.deviceMetrics, intrinsicInsets: UIEdgeInsets(), safeInsets: UIEdgeInsets(), additionalInsets: UIEdgeInsets(), statusBarHeight: nil, inputHeight: nil, inputHeightIsInteractivellyChanging: false, inVoiceOver: false), transition: .immediate)
             }
         }
+        
+        let overlayFrame = CGRect(
+            origin: CGPoint(x: 0.0, y: self.navigationLayout(layout: layout).navigationFrame.maxY),
+            size: CGSize(
+                width: layout.size.width,
+                height: layout.size.height - self.navigationLayout(layout: layout).navigationFrame.maxY
+            )
+        )
+        
+        transition.updateFrame(node: self.contentHiddenOverlayNode, frame: overlayFrame)
     }
 
     func updateSharedPlaybackRate(_ playbackRate: Double?) {
@@ -1927,4 +1986,123 @@ public class GalleryController: ViewController, StandalonePresentableController,
         
         return true
     }
+    
+    private func setupChildModeIfNeeded() {
+        guard let childModeManager = self.context.childModeManager else { return }
+        
+        self.contentHiddenOverlayNode.requestAccessAction = { [weak self] in
+            self?.requestContentAccess()
+        }
+        
+        let peerId: EnginePeer.Id?
+        switch self.source {
+        case let .peerMessagesAtId(messageId, _, _, _):
+            peerId = messageId.peerId
+        case let .standaloneMessage(message, _):
+            peerId = message.id.peerId
+        case let .custom(_, messageId, _):
+            peerId = messageId.peerId
+        }
+        
+        if let peerId = peerId {
+            self.childModeDisposable = (childModeManager.isPeerAllowed(peerId)
+                                        |> deliverOnMainQueue).start(next: { [weak self] granted in
+                self?.updateContentAccessState(accessGranted: granted, animated: true)
+            })
+        } else {
+            self.updateContentAccessState(accessGranted: false, animated: false)
+        }
+    }
+    
+    private func requestContentAccess() {
+        guard let childModeManager = self.context.childModeManager else { return }
+        
+        let peerId: EnginePeer.Id?
+        var title: String?
+        var description: String?
+        
+        switch self.source {
+        case let .peerMessagesAtId(messageId, _, _, _):
+            peerId = messageId.peerId
+            title = "ChildMode.Media.RequestTitle".tp_loc(lang: self.presentationData.strings.baseLanguageCode)
+            description = "ChildMode.Media.RequestDescription".tp_loc(lang: self.presentationData.strings.baseLanguageCode)
+        case let .standaloneMessage(message, _):
+            peerId = message.id.peerId
+            title = "ChildMode.Media.RequestTitle".tp_loc(lang: self.presentationData.strings.baseLanguageCode)
+            description = "ChildMode.Media.RequestDescription".tp_loc(lang: self.presentationData.strings.baseLanguageCode)
+        case let .custom(_, messageId, _):
+            peerId = messageId.peerId
+            title = "ChildMode.Content.RequestTitle".tp_loc(lang: self.presentationData.strings.baseLanguageCode)
+            description = "ChildMode.Content.RequestDescription".tp_loc(lang: self.presentationData.strings.baseLanguageCode)
+        }
+        
+        guard let targetPeerId = peerId else { return }
+        
+        _ = (childModeManager.requestPermission(for: targetPeerId, title: title, description: description)
+             |> deliverOnMainQueue).start(next: { [weak self] _ in
+            
+            guard let self = self else { return }
+            
+            self.dismiss(forceAway: true)
+            
+            Queue.mainQueue().after(0.2) {
+                let content = UndoOverlayContent.universalImage(
+                    image: UIImage(named: "Child Mode/Check") ?? UIImage(),
+                    size: CGSize(width: 24, height: 24),
+                    title: "ChildMode.Request.Sent".tp_loc(lang: self.presentationData.strings.baseLanguageCode),
+                    text: "ChildMode.Content.AvailableAfterConfirmation".tp_loc(lang: self.presentationData.strings.baseLanguageCode),
+                    customUndoText: nil,
+                    timeout: 5.0
+                )
+                
+                if let baseController = self.baseNavigationController?.topViewController {
+                    baseController.present(UndoOverlayController(presentationData: self.presentationData, content: content, elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), animated: true)
+                }
+            }
+        }, error: { [weak self] _ in
+            guard let self = self else { return }
+            
+            self.dismiss(forceAway: true)
+            
+            Queue.mainQueue().after(0.2) {
+                let content = UndoOverlayContent.universalImage(
+                    image: UIImage(named: "Child Mode/Dissmis") ?? UIImage(),
+                    size: CGSize(width: 24, height: 24),
+                    title: "ChildMode.Request.FailedToSend".tp_loc(lang: self.presentationData.strings.baseLanguageCode),
+                    text: "ChildMode.Internet.CheckConnection".tp_loc(lang: self.presentationData.strings.baseLanguageCode),
+                    customUndoText: nil,
+                    timeout: 5.0
+                )
+                
+                if let baseController = self.baseNavigationController?.topViewController {
+                    baseController.present(UndoOverlayController(presentationData: self.presentationData, content: content, elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), animated: true)
+                }
+            }
+        })
+    }
+    
+    private func updateContentAccessState(accessGranted: Bool, animated: Bool) {
+        self.isContentAccessGranted = accessGranted
+                
+        let transition: ContainedViewLayoutTransition = animated
+        ? .animated(duration: 0.3, curve: .easeInOut)
+        : .immediate
+        
+        if accessGranted {
+            transition.updateAlpha(node: contentHiddenOverlayNode, alpha: 0.0) { _ in
+                self.contentHiddenOverlayNode.isHidden = true
+                self.contentHiddenOverlayNode.view.isUserInteractionEnabled = false
+            }
+            
+            self.galleryNode.view.isUserInteractionEnabled = true
+            
+        } else {
+            contentHiddenOverlayNode.isHidden = false
+            contentHiddenOverlayNode.view.isUserInteractionEnabled = true
+            transition.updateAlpha(node: contentHiddenOverlayNode, alpha: 1.0)
+            
+            self.galleryNode.view.isUserInteractionEnabled = false
+        }
+    }
+    
 }

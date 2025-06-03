@@ -80,6 +80,8 @@ func telegramMediaActionFromApiAction(_ action: Api.MessageAction) -> TelegramMe
         switch call {
         case let .inputGroupCall(id, accessHash):
             return TelegramMediaAction(action: .groupPhoneCall(callId: id, accessHash: accessHash, scheduleDate: nil, duration: duration))
+        case .inputGroupCallSlug, .inputGroupCallInviteMessage:
+            return nil
         }
     case let .messageActionInviteToGroupCall(call, userIds):
         switch call {
@@ -87,6 +89,8 @@ func telegramMediaActionFromApiAction(_ action: Api.MessageAction) -> TelegramMe
             return TelegramMediaAction(action: .inviteToGroupPhoneCall(callId: id, accessHash: accessHash, peerIds: userIds.map { userId in
                 PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(userId))
             }))
+        case .inputGroupCallSlug, .inputGroupCallInviteMessage:
+            return nil
         }
     case let .messageActionSetMessagesTTL(_, period, autoSettingFrom):
         return TelegramMediaAction(action: .messageAutoremoveTimeoutUpdated(period: period, autoSettingSource: autoSettingFrom.flatMap { PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value($0)) }))
@@ -94,6 +98,8 @@ func telegramMediaActionFromApiAction(_ action: Api.MessageAction) -> TelegramMe
         switch call {
         case let .inputGroupCall(id, accessHash):
             return TelegramMediaAction(action: .groupPhoneCall(callId: id, accessHash: accessHash, scheduleDate: scheduleDate, duration: nil))
+        case .inputGroupCallSlug, .inputGroupCallInviteMessage:
+            return nil
         }
     case let .messageActionSetChatTheme(emoji):
         return TelegramMediaAction(action: .setChatTheme(emoji: emoji))
@@ -186,27 +192,53 @@ func telegramMediaActionFromApiAction(_ action: Api.MessageAction) -> TelegramMe
             return nil
         }
         return TelegramMediaAction(action: .starGift(gift: gift, convertStars: convertStars, text: text, entities: entities, nameHidden: (flags & (1 << 0)) != 0, savedToProfile: (flags & (1 << 2)) != 0, converted: (flags & (1 << 3)) != 0, upgraded: (flags & (1 << 5)) != 0, canUpgrade: (flags & (1 << 10)) != 0, upgradeStars: upgradeStars, isRefunded: (flags & (1 << 9)) != 0, upgradeMessageId: upgradeMessageId, peerId: peer?.peerId, senderId: fromId?.peerId, savedId: savedId))
-    case let .messageActionStarGiftUnique(flags, apiGift, canExportAt, transferStars, fromId, peer, savedId):
+    case let .messageActionStarGiftUnique(flags, apiGift, canExportAt, transferStars, fromId, peer, savedId, resaleStars, canTransferDate, canResaleDate):
         guard let gift = StarGift(apiStarGift: apiGift) else {
             return nil
         }
-        return TelegramMediaAction(action: .starGiftUnique(gift: gift, isUpgrade: (flags & (1 << 0)) != 0, isTransferred: (flags & (1 << 1)) != 0, savedToProfile: (flags & (1 << 2)) != 0, canExportDate: canExportAt, transferStars: transferStars, isRefunded: (flags & (1 << 5)) != 0, peerId: peer?.peerId, senderId: fromId?.peerId, savedId: savedId))
+        return TelegramMediaAction(action: .starGiftUnique(gift: gift, isUpgrade: (flags & (1 << 0)) != 0, isTransferred: (flags & (1 << 1)) != 0, savedToProfile: (flags & (1 << 2)) != 0, canExportDate: canExportAt, transferStars: transferStars, isRefunded: (flags & (1 << 5)) != 0, peerId: peer?.peerId, senderId: fromId?.peerId, savedId: savedId, resaleStars: resaleStars, canTransferDate: canTransferDate, canResaleDate: canResaleDate))
+    case let .messageActionPaidMessagesRefunded(count, stars):
+        return TelegramMediaAction(action: .paidMessagesRefunded(count: count, stars: stars))
+    case let .messageActionPaidMessagesPrice(stars):
+        return TelegramMediaAction(action: .paidMessagesPriceEdited(stars: stars))
+    case let .messageActionConferenceCall(flags, callId, duration, otherParticipants):
+        let isMissed = (flags & (1 << 0)) != 0
+        let isActive = (flags & (1 << 1)) != 0
+        let isVideo = (flags & (1 << 4)) != 0
+
+        var mappedFlags = TelegramMediaActionType.ConferenceCall.Flags()
+        if isMissed {
+            mappedFlags.insert(.isMissed)
+        }
+        if isActive {
+            mappedFlags.insert(.isActive)
+        }
+        if isVideo {
+            mappedFlags.insert(.isVideo)
+        }
+
+        return TelegramMediaAction(action: .conferenceCall(TelegramMediaActionType.ConferenceCall(
+            callId: callId,
+            duration: duration,
+            flags: mappedFlags,
+            otherParticipants: otherParticipants.flatMap({ return $0.map(\.peerId) }) ?? []
+        )))
     }
 }
 
 extension PhoneCallDiscardReason {
     init(apiReason: Api.PhoneCallDiscardReason) {
         switch apiReason {
-            case .phoneCallDiscardReasonBusy:
-                self = .busy
-            case .phoneCallDiscardReasonDisconnect:
-                self = .disconnect
-            case .phoneCallDiscardReasonHangup:
-                self = .hangup
-            case .phoneCallDiscardReasonMissed:
-                self = .missed
-            case .phoneCallDiscardReasonAllowGroupCall:
-                self = .hangup
+        case .phoneCallDiscardReasonBusy:
+            self = .busy
+        case .phoneCallDiscardReasonDisconnect:
+            self = .disconnect
+        case .phoneCallDiscardReasonHangup:
+            self = .hangup
+        case .phoneCallDiscardReasonMissed:
+            self = .missed
+        case .phoneCallDiscardReasonMigrateConferenceCall:
+            self = .hangup
         }
     }
 }

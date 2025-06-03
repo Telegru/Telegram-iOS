@@ -317,18 +317,22 @@ private final class ChatMessagePaymentAlertContentNode: AlertContentNode, ASGest
     }
 }
 
-private class ChatMessagePaymentAlertController: AlertController {
+public class ChatMessagePaymentAlertController: AlertController {
     private let context: AccountContext?
     private let presentationData: PresentationData
     private weak var parentNavigationController: NavigationController?
-    
+    private let showBalance: Bool
+   
     private let balance = ComponentView<Empty>()
     
-    init(context: AccountContext?, presentationData: PresentationData, contentNode: AlertContentNode, navigationController: NavigationController?) {
+    private var didAppear = false
+    
+    public init(context: AccountContext?, presentationData: PresentationData, contentNode: AlertContentNode, navigationController: NavigationController?, showBalance: Bool = true) {
         self.context = context
         self.presentationData = presentationData
         self.parentNavigationController = navigationController
-    
+        self.showBalance = showBalance
+        
         super.init(theme: AlertControllerTheme(presentationData: presentationData), contentNode: contentNode)
         
         self.willDismiss = { [weak self] in
@@ -350,16 +354,25 @@ private class ChatMessagePaymentAlertController: AlertController {
         }
     }
     
-    override func dismissAnimated() {
+    public override func dismissAnimated() {
         super.dismissAnimated()
         
         self.animateOut()
     }
     
-    override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
+    public override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
         super.containerLayoutUpdated(layout, transition: transition)
         
-        if let context = self.context, let _ = self.parentNavigationController {
+        if !self.didAppear {
+            self.didAppear = true
+            if !layout.metrics.isTablet && layout.size.width > layout.size.height {
+                Queue.mainQueue().after(0.1) {
+                    self.view.window?.endEditing(true)
+                }
+            }
+        }
+        
+        if let context = self.context, let _ = self.parentNavigationController, self.showBalance {
             let insets = layout.insets(options: .statusBar)
             let balanceSize = self.balance.update(
                 transition: .immediate,

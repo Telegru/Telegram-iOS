@@ -12,7 +12,7 @@ import LocalizedPeerData
 import UndoUI
 import TooltipUI
 
-func contactContextMenuItems(context: AccountContext, peerId: EnginePeer.Id, contactsController: ContactsController?, isStories: Bool) -> Signal<[ContextMenuItem], NoError> {
+func contactContextMenuItems(context: AccountContext, peerId: EnginePeer.Id, contactsController: ContactsController?, isStories: Bool, blurred: Bool) -> Signal<[ContextMenuItem], NoError> {
     let strings = context.sharedContext.currentPresentationData.with({ $0 }).strings
     
     return context.engine.data.get(
@@ -117,7 +117,7 @@ func contactContextMenuItems(context: AccountContext, peerId: EnginePeer.Id, con
             })
         })))
         
-        var canStartSecretChat = true
+        var canStartSecretChat = !blurred
         if case let .user(user) = peer, user.flags.contains(.isSupport) {
             canStartSecretChat = false
         }
@@ -204,12 +204,13 @@ func contactContextMenuItems(context: AccountContext, peerId: EnginePeer.Id, con
             })))
         }
         
-        var canCall = true
+        var canCall = !blurred
         if case let .user(user) = peer, (user.flags.contains(.isSupport) || !areVoiceCallsAvailable) {
             canCall = false
         }
+
         var canVideoCall = false
-        if canCall {
+        if canCall, !blurred {
             if areVideoCallsAvailable {
                 canVideoCall = true
             }

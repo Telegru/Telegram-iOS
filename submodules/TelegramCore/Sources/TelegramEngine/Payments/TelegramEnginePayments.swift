@@ -39,11 +39,11 @@ public extension TelegramEngine {
         }
         
         public func sendAppStoreReceipt(receipt: Data, purpose: AppStoreTransactionPurpose) -> Signal<Never, AssignAppStoreTransactionError> {
-            return _internal_sendAppStoreReceipt(account: self.account, receipt: receipt, purpose: purpose)
+            return _internal_sendAppStoreReceipt(postbox: self.account.postbox, network: self.account.network, stateManager: self.account.stateManager, receipt: receipt, purpose: purpose)
         }
         
         public func canPurchasePremium(purpose: AppStoreTransactionPurpose) -> Signal<Bool, NoError> {
-            return _internal_canPurchasePremium(account: self.account, purpose: purpose)
+            return _internal_canPurchasePremium(postbox: self.account.postbox, network: self.account.network, purpose: purpose)
         }
         
         public func checkPremiumGiftCode(slug: String) -> Signal<PremiumGiftCodeInfo?, NoError> {
@@ -125,6 +125,10 @@ public extension TelegramEngine {
             return _internal_transferStarGift(account: self.account, prepaid: prepaid, reference: reference, peerId: peerId)
         }
         
+        public func buyStarGift(slug: String, peerId: EnginePeer.Id) -> Signal<Never, BuyStarGiftError> {
+            return _internal_buyStarGift(account: self.account, slug: slug, peerId: peerId)
+        }
+        
         public func upgradeStarGift(formId: Int64?, reference: StarGiftReference, keepOriginalInfo: Bool) -> Signal<ProfileGiftsContext.State.StarGift, UpgradeStarGiftError> {
             return _internal_upgradeStarGift(account: self.account, formId: formId, reference: reference, keepOriginalInfo: keepOriginalInfo)
         }
@@ -147,6 +151,28 @@ public extension TelegramEngine {
         
         public func toggleStarGiftsNotifications(peerId: EnginePeer.Id, enabled: Bool) -> Signal<Never, NoError> {
             return _internal_toggleStarGiftsNotifications(account: self.account, peerId: peerId, enabled: enabled)
+        }
+        
+        public func updateStarGiftResalePrice(reference: StarGiftReference, price: Int64?) -> Signal<Never, UpdateStarGiftPriceError> {
+            return _internal_updateStarGiftResalePrice(account: self.account, reference: reference, price: price)
+        }
+    }
+}
+
+public extension TelegramEngineUnauthorized {
+    final class Payments {
+        private let account: UnauthorizedAccount
+
+        init(account: UnauthorizedAccount) {
+            self.account = account
+        }
+
+        public func canPurchasePremium(purpose: AppStoreTransactionPurpose) -> Signal<Bool, NoError> {
+            return _internal_canPurchasePremium(postbox: self.account.postbox, network: self.account.network, purpose: purpose)
+        }
+        
+        public func sendAppStoreReceipt(receipt: Data, purpose: AppStoreTransactionPurpose) -> Signal<Never, AssignAppStoreTransactionError> {
+            return _internal_sendAppStoreReceipt(postbox: self.account.postbox, network: self.account.network, stateManager: self.account.stateManager, receipt: receipt, purpose: purpose)
         }
     }
 }

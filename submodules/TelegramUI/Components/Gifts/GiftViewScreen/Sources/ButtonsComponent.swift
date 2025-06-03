@@ -9,6 +9,95 @@ import MoreButtonNode
 import AccountContext
 import TelegramPresentationData
 
+final class PriceButtonComponent: Component {
+    let price: String
+
+    init(
+        price: String
+    ) {
+        self.price = price
+    }
+
+    static func ==(lhs: PriceButtonComponent, rhs: PriceButtonComponent) -> Bool {
+        return lhs.price == rhs.price
+    }
+
+    final class View: UIView {
+        private let backgroundView = UIView()
+        
+        private let icon = UIImageView()
+        private let text = ComponentView<Empty>()
+                
+        private var component: PriceButtonComponent?
+        private weak var state: EmptyComponentState?
+        
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            
+            self.backgroundView.clipsToBounds = true
+            self.addSubview(self.backgroundView)
+            
+            self.icon.image = UIImage(bundleImageName: "Premium/Stars/ButtonStar")?.withRenderingMode(.alwaysTemplate)
+            self.backgroundView.addSubview(self.icon)
+        }
+        
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        func update(component: PriceButtonComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
+            self.component = component
+            self.state = state
+            
+            var backgroundSize = CGSize(width: 42.0, height: 30.0)
+            let textSize = self.text.update(
+                transition: .immediate,
+                component: AnyComponent(MultilineTextComponent(
+                    text: .plain(NSAttributedString(
+                        string: component.price,
+                        font: Font.semibold(11.0),
+                        textColor: UIColor(rgb: 0xffffff)
+                    ))
+                )),
+                environment: {},
+                containerSize: availableSize
+            )
+            let textFrame = CGRect(origin: CGPoint(x: 32.0, y: floorToScreenPixels((backgroundSize.height - textSize.height) / 2.0)), size: textSize)
+            if let textView = self.text.view {
+                if textView.superview == nil {
+                    self.backgroundView.addSubview(textView)
+                }
+                transition.setFrame(view: textView, frame: textFrame)
+            }
+            backgroundSize.width += textSize.width
+            
+            self.backgroundView.layer.cornerRadius = backgroundSize.height / 2.0
+            
+            let backgroundColor: UIColor = UIColor(rgb: 0xffffff, alpha: 0.1)
+            transition.setBackgroundColor(view: self.backgroundView, color: backgroundColor)
+            
+            let backgroundFrame = CGRect(origin: .zero, size: backgroundSize)
+            transition.setFrame(view: self.backgroundView, frame: backgroundFrame)
+            
+            if let iconSize = self.icon.image?.size {
+                let iconFrame = CGRect(origin: CGPoint(x: 12.0, y: floorToScreenPixels((backgroundSize.height - iconSize.height) / 2.0)), size: iconSize)
+                transition.setFrame(view: self.icon, frame: iconFrame)
+            }
+            self.icon.tintColor = UIColor(rgb: 0xffffff)
+            
+            return backgroundSize
+        }
+    }
+
+    func makeView() -> View {
+        return View(frame: CGRect())
+    }
+
+    func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
+        return view.update(component: self, availableSize: availableSize, state: state, environment: environment, transition: transition)
+    }
+}
+
 final class ButtonsComponent: Component {
     let theme: PresentationTheme
     let isOverlay: Bool
@@ -140,4 +229,25 @@ private func generateCloseButtonImage() -> UIImage? {
         context.addLine(to: CGPoint(x: 10.0, y: 20.0))
         context.strokePath()
     })?.withRenderingMode(.alwaysTemplate)
+}
+
+func generateCloseButtonImage(backgroundColor: UIColor, foregroundColor: UIColor) -> UIImage? {
+    return generateImage(CGSize(width: 30.0, height: 30.0), contextGenerator: { size, context in
+        context.clear(CGRect(origin: CGPoint(), size: size))
+        
+        context.setFillColor(backgroundColor.cgColor)
+        context.fillEllipse(in: CGRect(origin: CGPoint(), size: size))
+        
+        context.setLineWidth(2.0)
+        context.setLineCap(.round)
+        context.setStrokeColor(foregroundColor.cgColor)
+        
+        context.move(to: CGPoint(x: 10.0, y: 10.0))
+        context.addLine(to: CGPoint(x: 20.0, y: 20.0))
+        context.strokePath()
+        
+        context.move(to: CGPoint(x: 20.0, y: 10.0))
+        context.addLine(to: CGPoint(x: 10.0, y: 20.0))
+        context.strokePath()
+    })
 }

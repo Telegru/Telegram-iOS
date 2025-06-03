@@ -34,6 +34,8 @@ import BadgeComponent
 import ComponentFlow
 import ComponentDisplayAdapters
 
+import ContentHiddenOverlayNode
+
 public enum UniversalVideoGalleryItemContentInfo {
     case message(Message, Int?)
     case webPage(TelegramMediaWebpage, Media, ((@escaping () -> GalleryTransitionArguments?, NavigationController?, (ViewController, Any?) -> Void) -> Void)?)
@@ -57,6 +59,7 @@ public class UniversalVideoGalleryItem: GalleryItem {
     let hideControls: Bool
     let fromPlayingVideo: Bool
     let isSecret: Bool
+    let blurred: Bool
     let landscape: Bool
     let timecode: Double?
     let peerIsCopyProtected: Bool
@@ -67,8 +70,9 @@ public class UniversalVideoGalleryItem: GalleryItem {
     let openActionOptions: (GalleryControllerInteractionTapAction, Message) -> Void
     let storeMediaPlaybackState: (MessageId, Double?, Double) -> Void
     let present: (ViewController, Any?) -> Void
-
-    public init(context: AccountContext, presentationData: PresentationData, content: UniversalVideoContent, originData: GalleryItemOriginData?, indexData: GalleryItemIndexData?, contentInfo: UniversalVideoGalleryItemContentInfo?, caption: NSAttributedString, description: NSAttributedString? = nil, credit: NSAttributedString? = nil, displayInfoOnTop: Bool = false, hideControls: Bool = false, fromPlayingVideo: Bool = false, isSecret: Bool = false, landscape: Bool = false, timecode: Double? = nil, peerIsCopyProtected: Bool = false, playbackRate: @escaping () -> Double?, configuration: GalleryConfiguration? = nil, playbackCompleted: @escaping () -> Void = {}, performAction: @escaping (GalleryControllerInteractionTapAction) -> Void, openActionOptions: @escaping (GalleryControllerInteractionTapAction, Message) -> Void, storeMediaPlaybackState: @escaping (MessageId, Double?, Double) -> Void, present: @escaping (ViewController, Any?) -> Void) {
+    let dismissAction: (() -> Void)?
+    
+    public init(context: AccountContext, presentationData: PresentationData, content: UniversalVideoContent, originData: GalleryItemOriginData?, indexData: GalleryItemIndexData?, contentInfo: UniversalVideoGalleryItemContentInfo?, caption: NSAttributedString, description: NSAttributedString? = nil, credit: NSAttributedString? = nil, displayInfoOnTop: Bool = false, hideControls: Bool = false, fromPlayingVideo: Bool = false, isSecret: Bool = false, blurred: Bool = false, landscape: Bool = false, timecode: Double? = nil, peerIsCopyProtected: Bool = false, playbackRate: @escaping () -> Double?, configuration: GalleryConfiguration? = nil, playbackCompleted: @escaping () -> Void = {}, performAction: @escaping (GalleryControllerInteractionTapAction) -> Void, openActionOptions: @escaping (GalleryControllerInteractionTapAction, Message) -> Void, storeMediaPlaybackState: @escaping (MessageId, Double?, Double) -> Void, present: @escaping (ViewController, Any?) -> Void, dismissAction: (() -> Void)? = nil) {
         self.context = context
         self.presentationData = presentationData
         self.content = content
@@ -81,6 +85,7 @@ public class UniversalVideoGalleryItem: GalleryItem {
         self.displayInfoOnTop = displayInfoOnTop
         self.hideControls = hideControls
         self.fromPlayingVideo = fromPlayingVideo
+        self.blurred = blurred
         self.isSecret = isSecret
         self.landscape = landscape
         self.timecode = timecode
@@ -92,11 +97,13 @@ public class UniversalVideoGalleryItem: GalleryItem {
         self.openActionOptions = openActionOptions
         self.storeMediaPlaybackState = storeMediaPlaybackState
         self.present = present
+        self.dismissAction = dismissAction
     }
     
     public func node(synchronous: Bool) -> GalleryItemNode {
         let node = UniversalVideoGalleryItemNode(context: self.context, presentationData: self.presentationData, performAction: self.performAction, openActionOptions: self.openActionOptions, present: self.present)
-        
+        node.updateAccessState(accessGranted: !self.blurred, animated: false)
+        node.dismissAction = dismissAction
         if let indexData = self.indexData {
             node._title.set(.single(self.presentationData.strings.Items_NOfM("\(indexData.position + 1)", "\(indexData.totalCount)").string))
         } else if case let .message(message, _) = self.contentInfo, let _ = message.adAttribute {
@@ -1072,6 +1079,10 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
     private var hideControlsDisposable: Disposable?
     private var automaticPictureInPictureDisposable: Disposable?
     
+    private var contentHiddenOverlayNode: ContentHiddenOverlayNode?
+    private var isContentAccessGranted: Bool = true
+    private var childModeDisposable: Disposable?
+    
     var playbackCompleted: (() -> Void)?
     
     private var customUnembedWhenPortrait: ((OverlayMediaItemNode) -> Bool)?
@@ -1085,6 +1096,8 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
     private var activeEdgeRateIndicator: ComponentView<Empty>?
     
     private var isAnimatingOut: Bool = false
+    
+    var dismissAction: (() -> Void)?
     
     init(context: AccountContext, presentationData: PresentationData, performAction: @escaping (GalleryControllerInteractionTapAction) -> Void, openActionOptions: @escaping (GalleryControllerInteractionTapAction, Message) -> Void, present: @escaping (ViewController, Any?) -> Void) {
         self.context = context
@@ -1115,6 +1128,7 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
         super.init()
 
         self.clipsToBounds = true
+        self.setupChildModeOverlay()
         
         self.footerContentNode.shareMediaParameters = { [weak self] in
             guard let self, let playerStatusValue = self.playerStatusValue else {
@@ -1287,6 +1301,7 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
     }
     
     deinit {
+        self.childModeDisposable?.dispose()
         self.statusDisposable.dispose()
         self.moreButtonStateDisposable.dispose()
         self.settingsButtonStateDisposable.dispose()
@@ -1336,6 +1351,10 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
         let statusFrame = CGRect(origin: CGPoint(x: floor((layout.size.width - statusDiameter) / 2.0), y: floor((layout.size.height - statusDiameter) / 2.0)), size: CGSize(width: statusDiameter, height: statusDiameter))
         transition.updateFrame(node: self.statusButtonNode, frame: statusFrame)
         transition.updateFrame(node: self.statusNode, frame: CGRect(origin: CGPoint(), size: statusFrame.size))
+        
+        if let overlayNode = self.contentHiddenOverlayNode {
+            transition.updateFrame(node: overlayNode, frame: CGRect(origin: CGPoint(), size: layout.size))
+        }
         
         if let pictureInPictureNode = self.pictureInPictureNode {
             if let item = self.item {
@@ -1673,6 +1692,11 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
                 self.settingsBarButton.setIsMenuOpen(isMenuOpen: isShowingSettingsMenu)
             }))
 
+            if item.blurred {
+                footerContentNode.content = .info
+                self.item = item
+                return
+            }
             self.statusDisposable.set((combineLatest(queue: .mainQueue(), videoNode.status, mediaFileStatus)
             |> deliverOnMainQueue).start(next: { [weak self] value, fetchStatus in
                 if let strongSelf = self {
@@ -1793,7 +1817,9 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
                         strongSelf.statusButtonNode.isHidden = strongSelf.hideStatusNodeUntilCentrality || strongSelf.statusNodeShouldBeHidden
                     }
                     
-                    if isAnimated || disablePlayerControls {
+                    if item.blurred == true  {
+                       strongSelf.footerContentNode.content = .info
+                    } else if isAnimated || disablePlayerControls {
                         strongSelf.footerContentNode.content = .info
                     } else if isPaused && !strongSelf.ignorePauseStatus && strongSelf.isCentral == true {
                         if hasStarted || strongSelf.didPause {
@@ -1931,7 +1957,7 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
             switch contentInfo {
                 case let .message(message, _):
                     isAd = message.adAttribute != nil
-                    self.footerContentNode.setMessage(message, displayInfo: !item.displayInfoOnTop, peerIsCopyProtected: item.peerIsCopyProtected)
+                self.footerContentNode.setMessage(message, displayInfo: !item.displayInfoOnTop, peerIsCopyProtected: item.peerIsCopyProtected, blurred: !self.isContentAccessGranted)
                 case let .webPage(webPage, media, _):
                     self.footerContentNode.setWebPage(webPage, media: media)
             }
@@ -1975,7 +2001,123 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
         self.pictureInPictureButton?.isEnabled = self.pictureInPictureNode == nil
     }
     
+    private func setupChildModeOverlay() {
+        self.contentHiddenOverlayNode = ContentHiddenOverlayNode(
+            theme: self.presentationData.theme,
+            strings: self.presentationData.strings,
+            contentType: .media
+        )
+        
+        self.contentHiddenOverlayNode?.requestAccessAction = { [weak self] in
+            self?.requestContentAccess()
+        }
+        
+        if let overlayNode = self.contentHiddenOverlayNode {
+            overlayNode.isHidden = true
+            overlayNode.alpha = 0.0
+            self.addSubnode(overlayNode)
+        }
+    }
+    
+    private func requestContentAccess() {
+        guard let childModeManager = self.context.childModeManager,
+              let message = self.getMessage() else { return }
+        
+        let peerId = message.id.peerId
+        let title = "ChildMode.Media.RequestTitle".tp_loc(lang: self.presentationData.strings.baseLanguageCode)
+        let description = "ChildMode.Media.RequestDescription".tp_loc(lang: self.presentationData.strings.baseLanguageCode)
+        
+        _ = (childModeManager.requestPermission(for: peerId, title: title, description: description)
+             |> deliverOnMainQueue).start(next: { [weak self] _ in
+            
+            guard let self = self else { return }
+            
+            self.dismissAction?()
+            
+            Queue.mainQueue().after(0.2) {
+                let content = UndoOverlayContent.universalImage(
+                    image: UIImage(named: "Child Mode/Check") ?? UIImage(),
+                    size: CGSize(width: 24, height: 24),
+                    title: "ChildMode.Request.Sent".tp_loc(lang: self.presentationData.strings.baseLanguageCode),
+                    text: "ChildMode.Content.AvailableAfterConfirmation".tp_loc(lang: self.presentationData.strings.baseLanguageCode),
+                    customUndoText: nil,
+                    timeout: 5.0
+                )
+                
+                if let controller = self.baseNavigationController()?.topViewController as? ViewController {
+                    controller.present(UndoOverlayController(presentationData: self.presentationData, content: content, elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))
+                }
+            }
+        }, error: { [weak self]  _ in
+            guard let self = self else {
+                return
+            }
+            self.dismissAction?()
+            
+            Queue.mainQueue().after(0.2) {
+                let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
+                
+                let content = UndoOverlayContent.universalImage(
+                    image: UIImage(named: "Child Mode/Dissmis") ?? UIImage(),
+                    size: CGSize(width: 24, height: 24),
+                    title: "ChildMode.Request.FailedToSend".tp_loc(lang: presentationData.strings.baseLanguageCode),
+                    text: "ChildMode.Internet.CheckConnection".tp_loc(lang: presentationData.strings.baseLanguageCode),
+                    customUndoText: nil,
+                    timeout: 5.0
+                )
+                
+                if let controller = self.baseNavigationController()?.topViewController as? ViewController {
+                    controller.present(UndoOverlayController(presentationData: self.presentationData, content: content, elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))
+                }
+            }
+        })
+    }
+    
+    private func getMessage() -> Message? {
+        if let contentInfo = self.item?.contentInfo, case let .message(message, _) = contentInfo {
+            return message
+        }
+        return nil
+    }
+    
+    func updateAccessState(accessGranted: Bool, animated: Bool) {
+        self.isContentAccessGranted = accessGranted
+        
+        guard let overlayNode = self.contentHiddenOverlayNode else { return }
+        
+        let transition: ContainedViewLayoutTransition = animated
+        ? .animated(duration: 0.3, curve: .easeInOut)
+        : .immediate
+        
+        if accessGranted {
+            transition.updateAlpha(node: overlayNode, alpha: 0.0) { [weak self] _ in
+                guard let self = self else { return }
+                overlayNode.isHidden = true
+                overlayNode.view.isUserInteractionEnabled = false
+                
+                self.videoNode?.isUserInteractionEnabled = self.videoNodeUserInteractionEnabled
+                self.moreBarButton.isUserInteractionEnabled = true
+                self.settingsBarButton.isUserInteractionEnabled = true
+            }
+            self.footerContentNode.setCompletelyHidden(false)
+        } else {
+            overlayNode.isHidden = false
+            overlayNode.view.isUserInteractionEnabled = true
+            transition.updateAlpha(node: overlayNode, alpha: 1.0)
+            
+            self.videoNode?.isUserInteractionEnabled = false
+            self.moreBarButton.isUserInteractionEnabled = false
+            self.settingsBarButton.isUserInteractionEnabled = false
+            self.statusButtonNode.isUserInteractionEnabled = false
+            self.footerContentNode.setCompletelyHidden(true)
+        }
+        
+    }
+    
     private func shouldAutoplayOnCentrality() -> Bool {
+        if item?.blurred == true {
+            return false
+        }
         if let item = self.item, let content = item.content as? NativeVideoContent {
             var isLocal = false
             if let fetchStatus = self.fetchStatus, case .Local = fetchStatus {
@@ -3131,14 +3273,13 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
             }, iconSource: nil, action: { [weak self] _, f in
                 f(.default)
                 
-                let _ = (context.engine.messages.reportAdMessage(peerId: message.id.peerId, opaqueId: adAttribute.opaqueId, option: nil)
+                let _ = (context.engine.messages.reportAdMessage(opaqueId: adAttribute.opaqueId, option: nil)
                 |> deliverOnMainQueue).start(next: { [weak self] result in
                     if case let .options(title, options) = result {
                         if let navigationController = self?.baseNavigationController() as? NavigationController {
                             navigationController.pushViewController(
                                 AdsReportScreen(
                                     context: context,
-                                    peerId: message.id.peerId,
                                     opaqueId: adAttribute.opaqueId,
                                     title: title,
                                     options: options,

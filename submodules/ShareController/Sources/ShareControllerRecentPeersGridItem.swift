@@ -73,6 +73,9 @@ final class ShareControllerRecentPeersGridItemNode: GridItemNode {
                     theme: theme,
                     mode: .actionSheet,
                     strings: strings,
+                    isPeerBlurred: { _ in
+                        return false
+                    },
                     peerSelected: { [weak self] peer in
                         self?.controllerInteraction?.togglePeer(EngineRenderedPeer(peer: peer), true)
                     },

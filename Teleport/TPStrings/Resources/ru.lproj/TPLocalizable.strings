@@ -62,8 +62,12 @@
 "DahlSettings.MessageMenu.SaveSound" = "Сохранить звук";
 "DahlSettings.MessageMenu.Reply" = "Ответить";
 "DahlSettings.MessageMenu.Report" = "Пожаловаться";
+"DahlSettings.MessageMenu.Saved" = "Переслать в Избранное";
 "DahlSettings.MessageMenu.ReportGroups" = "Группы, Каналы";
+"DahlSettings.MessageMenu.ForwardWithoutName" = "Переслать без имени";
 "DahlSettings.MessageMenu.Footer" = "Настройте контекстные меню сообщений и постов под себя: отключите пункты, которыми не пользуетесь.";
+"DahlSettings.MessageMenu.ReplyPrivately" = "Ответить лично";
+"DahlSettings.MessageMenu.ReplyPrivatelyGroups" = "Группы";
 
 "DahlSettings.Common.RestartRequired" = "Требуется перезапуск";
 "DahlSettings.Common.RestartNow" = "Перезапустить";
@@ -122,6 +126,7 @@
 "DahlSettings.Appearance.Chats.ChannelBottomPanel" = "Нижняя панель в каналах";
 
 "DahlSettings.Appearance.ChatsList.Header" = "Вид списка чатов";
+"DahlSettings.Appearance.ChatsList.ShowSeparators" = "С разделителями";
 
 "DahlSettings.Appearance.MenuItems.Header" = "Меню настроек Telegram";
 "DahlSettings.Appearance.MenuItems" = "Пункты меню";
@@ -150,8 +155,21 @@
 "DahlSettings.Chats.Folders.HideAllChats" = "Скрыть папку “Все чаты”";
 "DahlSettings.Chats.Folders.ShowChatFolders" = "Показывать все папки";
 
+"DahlSettings.Chats.Message.Header" = "Сообщение";
+"DahlSettings.Chats.Message.DoubleTapAction.Title" = "Двойное нажатие";
+"DahlSettings.Chats.Message.DoubleTapAction.Disabled" = "Отключено";
+"DahlSettings.Chats.Message.DoubleTapAction.EditMessage" = "Изменить";
+"DahlSettings.Chats.Message.DoubleTapAction.ForwardMessage" = "Переслать";
+"DahlSettings.Chats.Message.DoubleTapAction.ForwardToSavedMessage" = "Переслать в Избранное";
+"DahlSettings.Chats.Message.DoubleTapAction.QuickReaction" = "Быстрая реакция";
+"DahlSettings.Chats.Message.DoubleTapAction.Header" = "Действие при двойном нажатии";
+"DahlSettings.Chats.Message.DoubleTapAction.Footer" = "Вы можете выбрать действие на двойное нажатие по сообщению или отключить его совсем. Если действие нельзя применить, сработает “Быстрая реакция”.";
+
 "DahlSettings.Chats.Keyboard.Header" = "КЛАВИАТУРА";
 "DahlSettings.Chats.Keyboard.ChatFullscreenInput" = "Полноэкранный ввод";
+"DahlSettings.Chats.Keyboard.TextFormatting" = "Форматирование текста";
+
+"DahlSettings.Chats.Keyboard.TextFormatting.Toolbar" = "Панель инструментов";
 
 "DahlSettings.Support.Title" = "Поддержка";
 "DahlSettings.Support.Alert.Title" = "Пожалуйста, обратите внимание, что в поддержке Даль отвечают волонтеры. Мы постараемся помочь, как можно скорее, но ожидание может занять время.";
@@ -251,3 +269,38 @@
 "Settings.AppIcon.Tatarstan" = "Татарстан";
 "Settings.AppIcon.Russia" = "Россия";
 "Settings.AppIcon.Birch" = "Береза";
+
+// Child Mode
+
+"ChildMode.RequestAccessButton" = "Спросить разрешение";
+
+"ChildMode.Request.Sent" = "Запрос отправлен";
+"ChildMode.Chat.AvailableAfterConfirmation" = "Чат станет доступен после подтверждения";
+"ChildMode.Request.FailedToSend" = "Не удалось отправить запрос";
+"ChildMode.Internet.CheckConnection" = "Проверьте подключение к интернету";
+
+"ChildMode.RequestPermission" = "Спросить разрешение";
+
+"ChildMode.ChatHidden" = "Чат скрыт";
+"ChildMode.MessageHidden" = "Cообщение скрыто";
+"ChildMode.MediaHidden" = "Медиа скрыто";
+"ChildMode.FileHidden" = "Файл скрыт";
+"ChildMode.LinkHidden" = "Ссылка скрыта";
+"ChildMode.GroupHidden" = "Группа скрыта";
+"ChildMode.ChannelHidden" = "Канал скрыт";
+"ChildMode.ContentHidden" = "Контакт скрыт";
+
+"ChildMode.LinkHiddenDescription" = "Нажми кнопку \"Спросить разрешение\"\nи дождись подтверждения,\nчтобы увидеть ссылку из чата";
+"ChildMode.FileHiddenDescription" = "Нажми кнопку \"Спросить разрешение\"\nи дождись подтверждения,\nчтобы увидеть файл из чата";
+"ChildMode.MediaHiddenDescription" = "Нажми кнопку \"Спросить разрешение\"\nи дождись подтверждения,\nчтобы увидеть медиа из чата";
+"ChildMode.ContentHiddenDescription" = "Нажми кнопку \"Спросить разрешение\"\nи дождись подтверждения,\nчтобы увидеть информацию";
+"ChildMode.ChatHiddenDescription" = "Нажми кнопку \"Спросить разрешение\"\nи дождись подтверждения,\nчтобы прочитать сообщения";
+"ChildMode.ChannelHiddenDescription" = "Нажми кнопку \"Спросить разрешение\"\nи дождись подтверждения,\nчтобы начать читать сообщения канала";
+"ChildMode.GroupHiddenDescription" = "Нажми кнопку \"Спросить разрешение\"\nи дождись подтверждения,\nчтобы начать общение";
+
+"ChildMode.Link.AvailableAfterConfirmation" = "Чат и ссылка станут доступны после подтверждения";
+"ChildMode.File.AvailableAfterConfirmation" = "Чат и файл станут доступны после подтверждения";
+"ChildMode.Media.AvailableAfterConfirmation" = "Чат и медиа станут доступны после подтверждения";
+"ChildMode.Chat.AvailableAfterConfirmation" = "Чат станет доступен после подтверждения";
+"ChildMode.Channel.AvailableAfterConfirmation" = "Канал станет доступен после подтверждения";
+"ChildMode.Group.AvailableAfterConfirmation" = "Группа станет доступена после подтверждения";

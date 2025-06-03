@@ -23,6 +23,7 @@ import ChatMediaInputStickerGridItem
 import UndoUI
 import PremiumUI
 import LottieComponent
+import BundleIconComponent
 
 import TPStrings
 
@@ -833,6 +834,10 @@ private final class ChatEmptyNodeCloudChatContent: ASDisplayNode, ChatEmptyNodeC
                 insets.top = -9.0
                 imageSpacing = 4.0
                 titleSpacing = 5.0
+            case .postSuggestions:
+                insets.top = 10.0
+                imageSpacing = 5.0
+                titleSpacing = 5.0
             case .hashTagSearch, .wall:
                 break
             }
@@ -894,7 +899,7 @@ private final class ChatEmptyNodeCloudChatContent: ASDisplayNode, ChatEmptyNodeC
                     }
                     
                     self.businessLink = link
-                case .hashTagSearch:
+                case .hashTagSearch, .postSuggestions:
                     titleString = ""
                     strings = []
                 case .wall:
@@ -1269,9 +1274,9 @@ public final class ChatEmptyNodePremiumRequiredChatContent: ASDisplayNode, ChatE
     private var currentTheme: PresentationTheme?
     private var currentStrings: PresentationStrings?
     
-    private let stars: StarsAmount?
+    private let stars: Int64?
     
-    public init(context: AccountContext, interaction: ChatPanelInterfaceInteraction?, stars: StarsAmount?) {
+    public init(context: AccountContext, interaction: ChatPanelInterfaceInteraction?, stars: Int64?) {
         let premiumConfiguration = PremiumConfiguration.with(appConfiguration: context.currentAppConfiguration.with { $0 })
         self.isPremiumDisabled = premiumConfiguration.isPremiumDisabled
         self.stars = stars
@@ -1351,9 +1356,13 @@ public final class ChatEmptyNodePremiumRequiredChatContent: ASDisplayNode, ChatE
             }
         )
         if let amount = self.stars {
-            let starsString = presentationStringsFormattedNumber(Int32(amount.value), interfaceState.dateTimeFormat.groupingSeparator)
+            let starsString = presentationStringsFormattedNumber(Int32(amount), interfaceState.dateTimeFormat.groupingSeparator)
             let rawText: String
-            if self.isPremiumDisabled {
+            
+            if case let .customChatContents(customChatContents) = interfaceState.subject, case .postSuggestions = customChatContents.kind {
+                //TODO:localize
+                rawText = "\(peerTitle) charges  $ \(starsString) per message suggestion."
+            } else if self.isPremiumDisabled {
                 rawText = interfaceState.strings.Chat_EmptyStatePaidMessagingDisabled_Text(peerTitle, " $ \(starsString)").string
             } else {
                 rawText = interfaceState.strings.Chat_EmptyStatePaidMessaging_Text(peerTitle, " $ \(starsString)").string
@@ -1415,16 +1424,27 @@ public final class ChatEmptyNodePremiumRequiredChatContent: ASDisplayNode, ChatE
         contentsHeight += iconBackgroundSize
         contentsHeight += iconTextSpacing
         
-        let iconSize = self.icon.update(
-            transition: .immediate,
-            component: AnyComponent(
+        let iconComponent: AnyComponent<Empty>
+        if case let .customChatContents(customChatContents) = interfaceState.subject, case .postSuggestions = customChatContents.kind {
+            iconComponent = AnyComponent(
+                BundleIconComponent(
+                    name: "Chat/Empty Chat/PostSuggestions",
+                    tintColor: serviceColor.primaryText
+                )
+            )
+        } else {
+            iconComponent = AnyComponent(
                 LottieComponent(
                     content: LottieComponent.AppBundleContent(name: "PremiumRequired"),
                     color: serviceColor.primaryText,
                     size: CGSize(width: 120.0, height: 120.0),
                     loop: true
                 )
-            ),
+            )
+        }
+        let iconSize = self.icon.update(
+            transition: .immediate,
+            component: iconComponent,
             environment: {},
             containerSize: CGSize(width: maxWidth - sideInset * 2.0, height: 500.0)
         )
@@ -1482,8 +1502,9 @@ private enum ChatEmptyNodeContentType: Equatable {
     case greeting
     case topic
     case premiumRequired
-    case starsRequired
+    case starsRequired(Int64)
     case wall
+    case postSuggestions(Int64)
 }
 
 private final class EmptyAttachedDescriptionNode: HighlightTrackingButtonNode {
@@ -1844,7 +1865,7 @@ public final class ChatEmptyNode: ASDisplayNode {
             isScheduledMessages = true
         }
         
-        let contentType: ChatEmptyNodeContentType
+        var contentType: ChatEmptyNodeContentType
         var displayAttachedDescription = false
         switch subject {
         case .detailsPlaceholder:
@@ -1856,6 +1877,8 @@ public final class ChatEmptyNode: ASDisplayNode {
                 switch content.kind {
                 case .wall:
                     contentType = .wall
+				case let .postSuggestions(postSuggestions):
+					contentType = .postSuggestions(postSuggestions.value)
                 default:
                     contentType = .cloud
                 }
@@ -1877,8 +1900,8 @@ public final class ChatEmptyNode: ASDisplayNode {
                 } else if let _ = interfaceState.peerNearbyData {
                     contentType = .peerNearby
                 } else if let peer = peer as? TelegramUser {
-                    if let _ = interfaceState.sendPaidMessageStars {
-                        contentType = .starsRequired
+                    if let sendPaidMessageStars = interfaceState.sendPaidMessageStars, interfaceState.businessIntro == nil {
+                        contentType = .starsRequired(sendPaidMessageStars.value)
                     } else if interfaceState.isPremiumRequiredForMessaging {
                         contentType = .premiumRequired
                     } else {
@@ -1945,8 +1968,10 @@ public final class ChatEmptyNode: ASDisplayNode {
                 node = ChatEmptyNodeTopicChatContent(context: self.context)
             case .premiumRequired:
                 node = ChatEmptyNodePremiumRequiredChatContent(context: self.context, interaction: self.interaction, stars: nil)
-            case .starsRequired:
-                node = ChatEmptyNodePremiumRequiredChatContent(context: self.context, interaction: self.interaction, stars: interfaceState.sendPaidMessageStars)
+            case let .starsRequired(stars):
+                node = ChatEmptyNodePremiumRequiredChatContent(context: self.context, interaction: self.interaction, stars: stars)
+            case let .postSuggestions(stars):
+                node = ChatEmptyNodePremiumRequiredChatContent(context: self.context, interaction: self.interaction, stars: stars)
             }
             self.content = (contentType, node)
             self.addSubnode(node)
@@ -1957,8 +1982,13 @@ public final class ChatEmptyNode: ASDisplayNode {
                 node.layer.animateScale(from: 0.0, to: 1.0, duration: duration, timingFunction: curve.timingFunction)
             }
         }
-        self.isUserInteractionEnabled = [.peerNearby, .greeting, .premiumRequired, .starsRequired, .cloud].contains(contentType)
-        
+        switch contentType {
+        case .peerNearby, .greeting, .premiumRequired, .starsRequired, .cloud, .postSuggestions:
+            self.isUserInteractionEnabled = true
+        default:
+            self.isUserInteractionEnabled = false
+        }
+
         let displayRect = CGRect(origin: CGPoint(x: 0.0, y: insets.top), size: CGSize(width: size.width, height: size.height - insets.top - insets.bottom))
         
         var contentSize = CGSize()

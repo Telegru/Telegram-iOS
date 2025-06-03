@@ -2,7 +2,7 @@ load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
 
 tp_deps = [
     "//Teleport/DAuth:DAuth",
-    "//Teleport/DClient:DClient",
+    "//Teleport/DClient:DNetwork",
     "//Teleport/DOnboarding:DOnboarding",
 ]
 
@@ -48,6 +48,8 @@ swift_library(
         "//submodules/TelegramUI/Components/TextNodeWithEntities:TextNodeWithEntities",
         "//submodules/MoreButtonNode:MoreButtonNode",
         "//submodules/ContextUI:ContextUI",
+        "//submodules/InAppPurchaseManager",
+        "//submodules/TelegramUI/Components/Premium/PremiumCoinComponent",
     ],
     visibility = [
         "//visibility:public",

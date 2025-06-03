@@ -24,6 +24,7 @@ private final class DAppearanceSettingsArguments {
     let updateViewRounding: (Bool) -> Void
     let updateVKIcons: (Bool) -> Void
     let updateAlternativeFontInAvatars: (Bool) -> Void
+    let updateShowChatListSeparators: (Bool) -> Void
     
     init(
         context: AccountContext,
@@ -32,7 +33,8 @@ private final class DAppearanceSettingsArguments {
         updateChatsListViewType: @escaping (DChatListViewStyle) -> Void,
         updateViewRounding: @escaping (Bool) -> Void,
         updateVKIcons: @escaping (Bool) -> Void,
-        updateAlternativeFontInAvatars: @escaping (Bool) -> Void
+        updateAlternativeFontInAvatars: @escaping (Bool) -> Void,
+        updateShowChatListSeparators: @escaping (Bool) -> Void
     ) {
         self.context = context
         self.updateShowCustomWallpaperInChannels = updateShowCustomWallpaperInChannels
@@ -41,6 +43,7 @@ private final class DAppearanceSettingsArguments {
         self.updateViewRounding = updateViewRounding
         self.updateVKIcons = updateVKIcons
         self.updateAlternativeFontInAvatars = updateAlternativeFontInAvatars
+        self.updateShowChatListSeparators = updateShowChatListSeparators
     }
 }
 
@@ -59,6 +62,7 @@ private enum DAppearanceSettingsEntry: ItemListNodeEntry {
     
     case listViewTypeHeader(title: String)
     case listViewTypeOptions(types: [DChatListViewStyle], currentType: DChatListViewStyle, theme: PresentationTheme)
+    case showChatListSeparators(title: String, isActive: Bool)
     
     case viewRoundingHeader(title: String)
     case viewRounding(title: String, isActive: Bool)
@@ -76,7 +80,7 @@ private enum DAppearanceSettingsEntry: ItemListNodeEntry {
         case .chatsAppearanceHeader, .showCustomWallpaperInChannels, .showChannelBottomPanel:
             return DAppearanceSettingsSection.chatsAppearance.rawValue
             
-        case .listViewTypeHeader, .listViewTypeOptions:
+        case .listViewTypeHeader, .listViewTypeOptions, .showChatListSeparators:
             return DAppearanceSettingsSection.listViewType.rawValue
             
         case .viewRoundingHeader, .viewRounding:
@@ -102,22 +106,24 @@ private enum DAppearanceSettingsEntry: ItemListNodeEntry {
             return 3
         case .listViewTypeOptions:
             return 4
-        case .viewRoundingHeader:
+        case .showChatListSeparators:
             return 5
-        case .viewRounding:
+        case .viewRoundingHeader:
             return 6
-        case .avatarFontHeader:
+        case .viewRounding:
             return 7
-        case .avatarFont:
+        case .avatarFontHeader:
             return 8
-        case .avatarFontFooter:
+        case .avatarFont:
             return 9
-        case .iconsHeader:
+        case .avatarFontFooter:
             return 10
-        case .vkIcons:
+        case .iconsHeader:
             return 11
-        case .iconsPreview:
+        case .vkIcons:
             return 12
+        case .iconsPreview:
+            return 13
         }
     }
     
@@ -150,6 +156,12 @@ private enum DAppearanceSettingsEntry: ItemListNodeEntry {
         case let .listViewTypeOptions(lhsTypes, lhsCurrentType, lhsTheme):
             if case let .listViewTypeOptions(rhsTypes, rhsCurrentType, rhsTheme) = rhs {
                 return lhsTypes == rhsTypes && lhsCurrentType == rhsCurrentType && lhsTheme === rhsTheme
+            }
+            return false
+            
+        case let .showChatListSeparators(lhsTitle, lhsIsActive):
+            if case let .showChatListSeparators(rhsTitle, rhsIsActive) = rhs {
+                return lhsTitle == rhsTitle && lhsIsActive == rhsIsActive
             }
             return false
             
@@ -261,6 +273,18 @@ private enum DAppearanceSettingsEntry: ItemListNodeEntry {
                 }
             )
             
+        case let .showChatListSeparators(title, isActive):
+            return ItemListSwitchItem(
+                presentationData: presentationData,
+                title: title,
+                value: isActive,
+                sectionId: self.section,
+                style: .blocks,
+                updated: { value in
+                    arguments.updateShowChatListSeparators(value)
+                }
+            )
+            
         case let .viewRoundingHeader(title):
             return ItemListSectionHeaderItem(
                 presentationData: presentationData,
@@ -300,8 +324,7 @@ private enum DAppearanceSettingsEntry: ItemListNodeEntry {
                 presentationData: presentationData,
                 text: .custom(context: arguments.context, string: text),
                 sectionId: self.section,
-                style: .blocks,
-                additionalInsets: UIEdgeInsets(top: -12.0, left: 0.0, bottom: 0.0, right: 0.0)
+                style: .blocks
             )
             
         case let .iconsHeader(title):
@@ -388,6 +411,13 @@ public func dAppearanceSettingsController(
             if DFontManager.shared.isAlternativeFontEnabled != value {
                 showRestartToast?()
             }
+        },
+        updateShowChatListSeparators: { value in
+            let _ = updateDalSettingsInteractively(accountManager: context.sharedContext.accountManager) { settings in
+                var updatedSettings = settings
+                updatedSettings.appearanceSettings.showChatListSeparators = value
+                return updatedSettings
+            }.start()
         }
     )
     
@@ -432,6 +462,13 @@ public func dAppearanceSettingsController(
         )
         
         entries.append(.listViewTypeOptions(types: DChatListViewStyle.allCases, currentType: dahlSettings.chatsListViewType, theme: presentationData.theme))
+        
+        entries.append(
+            .showChatListSeparators(
+                title: "DahlSettings.Appearance.ChatsList.ShowSeparators".tp_loc(lang: lang),
+                isActive: dahlSettings.appearanceSettings.showChatListSeparators
+            )
+        )
         
         entries.append(
             .viewRoundingHeader(

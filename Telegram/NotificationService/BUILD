@@ -23,7 +23,9 @@ swift_library(
         "//submodules/PersistentStringHash:PersistentStringHash",
         "//submodules/Utils/RangeSet",
         "//submodules/Media/ConvertOpusToAAC",
+
     
+        "//Teleport/DChildMode:DChildMode",
     ],
     visibility = [
         "//visibility:public",

@@ -307,7 +307,7 @@ final class ShareSearchContainerNode: ASDisplayNode, ShareContentContainerNode {
                     foundLocalPeers,
                     foundRemotePeers
                 )
-               |> map { foundLocalPeers, foundRemotePeers -> FoundPeers in
+                               |> map { foundLocalPeers, foundRemotePeers -> FoundPeers in
                     return FoundPeers(
                         foundLocalPeers: foundLocalPeers,
                         foundRemotePeers: foundRemotePeers
@@ -350,9 +350,11 @@ final class ShareSearchContainerNode: ASDisplayNode, ShareContentContainerNode {
                         )
                     )
                 }
-                
-                return combineLatest(accountPeer, foundPeers.get(), peerRequiresPremiumForMessaging)
-                |> map { accountPeer, foundPeers, peerRequiresPremiumForMessaging -> ([ShareSearchPeerEntry]?, Bool) in
+                let whitelist: Signal<(Bool, [EnginePeer.Id]), NoError> = (context.childManager?.whitelist() ?? .single((false, [])))
+                    |> take(1)
+
+                return combineLatest(accountPeer, foundPeers.get(), peerRequiresPremiumForMessaging, whitelist)
+                |> map { accountPeer, foundPeers, peerRequiresPremiumForMessaging, whitelist -> ([ShareSearchPeerEntry]?, Bool) in
                     let foundLocalPeers = foundPeers.foundLocalPeers
                     let foundRemotePeers = foundPeers.foundRemotePeers
                     
@@ -406,7 +408,14 @@ final class ShareSearchContainerNode: ASDisplayNode, ShareContentContainerNode {
                             }
                         }
                     }
-                    
+                    if whitelist.0 {
+                        entries = entries.filter {
+                            if let peerId = $0.peer?.peerId {
+                                return whitelist.1.contains(peerId)
+                            }
+                            return true
+                        }
+                    }
                     return (entries, isPlaceholder)
                 }
             } else {
@@ -457,17 +466,24 @@ final class ShareSearchContainerNode: ASDisplayNode, ShareContentContainerNode {
         }
         |> distinctUntilChanged
         
-        let recentItems: Signal<[ShareSearchRecentEntry], NoError> = combineLatest(hasRecentPeers, self.themePromise.get())
-        |> map { hasRecentPeers, theme -> [ShareSearchRecentEntry] in
+        let whitelist: Signal<(Bool, [EnginePeer.Id]), NoError> = (context.childManager?.whitelist() ?? .single((false, [])))
+            |> take(1)
+        
+        let recentItems: Signal<[ShareSearchRecentEntry], NoError> = combineLatest(hasRecentPeers, self.themePromise.get(), whitelist)
+        |> map { hasRecentPeers, theme, whitelist -> [ShareSearchRecentEntry] in
             var recentItemList: [ShareSearchRecentEntry] = []
             if hasRecentPeers {
                 recentItemList.append(.topPeers(theme, strings))
             }
             var index = 0
             for (peer, requiresPremiumForMessaging) in recentPeerList {
+                
                 if let mainPeer = peer.peers[peer.peerId], canSendMessagesToPeer(mainPeer._asPeer()) {
-                    recentItemList.append(.peer(index: index, theme: theme, peer: mainPeer, associatedPeer: mainPeer._asPeer().associatedPeerId.flatMap { peer.peers[$0] }, presence: nil, requiresPremiumForMessaging: requiresPremiumForMessaging, requiresStars: nil, strings: strings))
-                    index += 1
+                    if !whitelist.0 || whitelist.1.contains(mainPeer.id) {
+                        recentItemList.append(.peer(index: index, theme: theme, peer: mainPeer, associatedPeer: mainPeer._asPeer().associatedPeerId.flatMap { peer.peers[$0] }, presence: nil, requiresPremiumForMessaging: requiresPremiumForMessaging, requiresStars: nil, strings: strings))
+                        index += 1
+                    }
+                   
                 }
             }
             return recentItemList

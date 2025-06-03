@@ -65,7 +65,7 @@ fileprivate final class RecentChatAvatarNode: ASDisplayNode {
         }
     }
     
-    public func setup(context: AccountContext, theme: PresentationTheme, peer: EngineRenderedPeer, synchronousLoad: Bool) {
+    public func setup(context: AccountContext, theme: PresentationTheme, peer: EngineRenderedPeer, synchronousLoad: Bool, blurred: Bool) {
         self.peer = peer
         guard let mainPeer = peer.chatMainPeer else {
             return
@@ -89,7 +89,9 @@ fileprivate final class RecentChatAvatarNode: ASDisplayNode {
             peer: mainPeer,
             overrideImage: overrideImage,
             emptyColor: .white,
-            synchronousLoad: synchronousLoad
+            synchronousLoad: synchronousLoad,
+            blurred: blurred,
+            displayLetters: !blurred
         )
         
         self.setNeedsLayout()
@@ -152,6 +154,7 @@ public final class RecentChatItem: ListViewItem {
     let customWidth: CGFloat?
     let presence: EnginePeer.Presence?
     let unreadBadge: (Int32, Bool)?
+    let blurred: Bool
     
     public init(
         theme: PresentationTheme,
@@ -162,7 +165,8 @@ public final class RecentChatItem: ListViewItem {
         action: @escaping (EnginePeer) -> Void,
         contextAction: ((EnginePeer, ASDisplayNode, ContextGesture?, CGPoint?) -> Void)?,
         isPeerSelected: @escaping (EnginePeer.Id) -> Bool,
-        customWidth: CGFloat?
+        customWidth: CGFloat?,
+        blurred: Bool
     ) {
         self.theme = theme
         self.context = context
@@ -173,6 +177,7 @@ public final class RecentChatItem: ListViewItem {
         self.customWidth = customWidth
         self.presence = presence
         self.unreadBadge = unreadBadge
+        self.blurred = blurred
     }
     
     public func nodeConfiguredForParams(async: @escaping (@escaping () -> Void) -> Void, params: ListViewItemLayoutParams, synchronousLoads: Bool, previousItem: ListViewItem?, nextItem: ListViewItem?, completion: @escaping (ListViewItemNode, @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)) -> Void) {
@@ -304,7 +309,7 @@ public final class RecentChatItemNode: ListViewItemNode {
                 if let strongSelf = self {
                     strongSelf.item = item
                    
-                    strongSelf.peerNode.setup(context: item.context, theme: item.theme, peer: EngineRenderedPeer(peer: item.peer), synchronousLoad: synchronousLoads)
+                    strongSelf.peerNode.setup(context: item.context, theme: item.theme, peer: EngineRenderedPeer(peer: item.peer), synchronousLoad: synchronousLoads, blurred: item.blurred)
                     strongSelf.peerNode.frame = CGRect(origin: CGPoint(), size: itemLayout.size)
                     strongSelf.peerNode.updateSelection(selected: item.isPeerSelected(item.peer.id), animated: false)
                     

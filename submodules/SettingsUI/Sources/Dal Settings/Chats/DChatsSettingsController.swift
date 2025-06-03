@@ -21,7 +21,9 @@ private final class DChatsSettingsArguments {
     let updateFolderInfiniteScrolling: (Bool) -> Void
     let updateHideAllChats: (Bool) -> Void
     let updateChatFolderVisibility: (Bool) -> Void
+    let openDoubleTapToMessageSettings: () -> Void
     let updateChatFullscreenInput: (Bool) -> Void
+    let openTextFormattingSettings: () -> Void
 
     init(
         context: AccountContext,
@@ -33,7 +35,9 @@ private final class DChatsSettingsArguments {
         updateFolderInfiniteScrolling: @escaping (Bool) -> Void,
         updateHideAllChats: @escaping (Bool) -> Void,
         updateChatFolderVisibility: @escaping (Bool) -> Void,
-        updateChatFullscreenInput: @escaping (Bool) -> Void
+        openDoubleTapToMessageSettings: @escaping () -> Void,
+        updateChatFullscreenInput: @escaping (Bool) -> Void,
+        openTextFormattingSettings: @escaping () -> Void
     ) {
         self.context = context
         self.updateCallConfirmation = updateCallConfirmation
@@ -44,7 +48,9 @@ private final class DChatsSettingsArguments {
         self.updateFolderInfiniteScrolling = updateFolderInfiniteScrolling
         self.updateHideAllChats = updateHideAllChats
         self.updateChatFolderVisibility = updateChatFolderVisibility
+        self.openDoubleTapToMessageSettings = openDoubleTapToMessageSettings
         self.updateChatFullscreenInput = updateChatFullscreenInput
+        self.openTextFormattingSettings = openTextFormattingSettings
     }
 }
 
@@ -52,6 +58,7 @@ private enum DChatsSettingsSection: Int32 {
     case confirmation
     case recentChats
     case folders
+    case message
     case keyboard
 }
 
@@ -71,8 +78,12 @@ private enum DChatsSettingsEntry: ItemListNodeEntry {
     case showChatFolders(title: String, value: Bool)
     case hideAllChats(title: String, value: Bool, enabled: Bool)
     
+    case messageHeader(title: String)
+    case doubleTap(title: String, label: String)
+    
     case keyboardHeader(title: String)
     case fullscreenInput(title: String, value: Bool)
+    case textFormatting(title: String)
     
     var section: ItemListSectionId {
         switch self {
@@ -84,8 +95,11 @@ private enum DChatsSettingsEntry: ItemListNodeEntry {
             
         case .foldersHeader, .bottomFolder, .folderInfiniteScroll, .showChatFolders, .hideAllChats:
             return DChatsSettingsSection.folders.rawValue
+            
+        case .messageHeader, .doubleTap:
+            return DChatsSettingsSection.message.rawValue
                 
-        case .keyboardHeader, .fullscreenInput:
+        case .keyboardHeader, .fullscreenInput, .textFormatting:
             return DChatsSettingsSection.keyboard.rawValue
         }
     }
@@ -104,8 +118,11 @@ private enum DChatsSettingsEntry: ItemListNodeEntry {
         case .folderInfiniteScroll: return 9
         case .showChatFolders: return 10
         case .hideAllChats: return 11
-        case .keyboardHeader: return 12
-        case .fullscreenInput: return 13
+        case .messageHeader: return 12
+        case .doubleTap: return 13
+        case .keyboardHeader: return 14
+        case .fullscreenInput: return 15
+        case .textFormatting: return 16
         }
     }
 
@@ -183,6 +200,18 @@ private enum DChatsSettingsEntry: ItemListNodeEntry {
             }
             return false
             
+        case let .messageHeader(lhsTitle):
+            if case let .messageHeader(rhsTitle) = rhs {
+                return lhsTitle == rhsTitle
+            }
+            return false
+            
+        case let .doubleTap(lhsTitle, lhsLabel):
+            if case let .doubleTap(rhsTitle, rhsLable) = rhs {
+                return lhsTitle == rhsTitle && lhsLabel == rhsLable
+            }
+            return false
+            
         case let .keyboardHeader(lhsTitle):
             if case let .keyboardHeader(rhsTitle) = rhs {
                 return lhsTitle == rhsTitle
@@ -192,6 +221,12 @@ private enum DChatsSettingsEntry: ItemListNodeEntry {
         case let .fullscreenInput(lhsTitle, lhsValue):
             if case let .fullscreenInput(rhsTitle, rhsValue) = rhs {
                 return lhsTitle == rhsTitle && lhsValue == rhsValue
+            }
+            return false
+            
+        case let .textFormatting(lhsTitle):
+            if case let .textFormatting(rhsTitle) = rhs {
+                return lhsTitle == rhsTitle
             }
             return false
         }
@@ -314,6 +349,23 @@ private enum DChatsSettingsEntry: ItemListNodeEntry {
                 sectionId: section
             )
             
+        case let .messageHeader(title):
+            return ItemListSectionHeaderItem(
+                presentationData: presentationData,
+                text: title,
+                sectionId: section
+            )
+            
+        case let .doubleTap(title, label):
+            return ItemListDisclosureItem(
+                presentationData: presentationData,
+                title: title,
+                label: label,
+                sectionId: section,
+                style: .blocks,
+                action: arguments.openDoubleTapToMessageSettings
+            )
+            
         case let .keyboardHeader(title):
             return ItemListSectionHeaderItem(
                 presentationData: presentationData,
@@ -330,6 +382,16 @@ private enum DChatsSettingsEntry: ItemListNodeEntry {
                 style: .blocks) { updatedValue in
                     arguments.updateChatFullscreenInput(updatedValue)
                 }
+            
+        case let .textFormatting(title):
+            return ItemListDisclosureItem(
+                presentationData: presentationData,
+                title: title,
+                label: "",
+                sectionId: section,
+                style: .blocks,
+                action: arguments.openTextFormattingSettings
+            )
         }
     }
 }
@@ -340,6 +402,8 @@ public func dChatsSettingsController(
     context: AccountContext
 ) -> ViewController {
     var openVideoMessageSettings: (() -> Void)?
+    var openTextFormattingSettings: (() -> Void)?
+    var openDoubleTapToMessageSettings: (() -> Void)?
     
     let arguments = DChatsSettingsArguments(
         context: context,
@@ -419,6 +483,9 @@ public func dChatsSettingsController(
                 }
             ).start()
         },
+        openDoubleTapToMessageSettings: {
+            openDoubleTapToMessageSettings?()
+        },
         updateChatFullscreenInput: { updatedValue in
             let _ = updateDalSettingsInteractively(
                 accountManager: context.sharedContext.accountManager,
@@ -428,6 +495,9 @@ public func dChatsSettingsController(
                     return settings
                 }
             ).start()
+        },
+        openTextFormattingSettings: {
+            openTextFormattingSettings?()
         }
     )
     
@@ -545,6 +615,18 @@ public func dChatsSettingsController(
         )
         
         entries.append(
+            .messageHeader(
+                title: "DahlSettings.Chats.Message.Header".tp_loc(lang: lang).uppercased()
+            )
+        )
+        entries.append(
+            .doubleTap(
+                title: "DahlSettings.Chats.Message.DoubleTapAction.Title".tp_loc(lang: lang),
+                label: dahlSettings.chatsSettings.messageDoubleTapActionType.localized(lang: lang)
+            )
+        )
+        
+        entries.append(
             .keyboardHeader(title: "DahlSettings.Chats.Keyboard.Header".tp_loc(lang: lang).uppercased())
         )
         
@@ -552,6 +634,12 @@ public func dChatsSettingsController(
             .fullscreenInput(
                 title: "DahlSettings.Chats.Keyboard.ChatFullscreenInput".tp_loc(lang: lang),
                 value: dahlSettings.chatFullscreenInput
+            )
+        )
+        
+        entries.append(
+            .textFormatting(
+                title: "DahlSettings.Chats.Keyboard.TextFormatting".tp_loc(lang: lang)
             )
         )
         
@@ -581,6 +669,16 @@ public func dChatsSettingsController(
             }
         )
         controller?.push(cameraSettingsController)
+    }
+    
+    openTextFormattingSettings = { [weak controller] in
+        let formattingSettingController = dChatTextFormattingSettingsController(context: context)
+        controller?.push(formattingSettingController)
+    }
+    
+    openDoubleTapToMessageSettings = { [weak controller] in
+        let doubleTapSettingsController = dMessageItemDoubleTapSettingsController(context: context)
+        controller?.push(doubleTapSettingsController)
     }
     
     return controller

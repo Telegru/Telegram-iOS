@@ -14,18 +14,20 @@ class ChatListRecentPeersListItem: ListViewItem {
     let strings: PresentationStrings
     let context: AccountContext
     let peers: [EnginePeer]
+    let whitelist: [EnginePeer.Id]?
     let peerSelected: (EnginePeer) -> Void
     let peerContextAction: (EnginePeer, ASDisplayNode, ContextGesture?, CGPoint?) -> Void
     
     let header: ListViewItemHeader?
     
-    init(theme: PresentationTheme, strings: PresentationStrings, context: AccountContext, peers: [EnginePeer], peerSelected: @escaping (EnginePeer) -> Void, peerContextAction: @escaping (EnginePeer, ASDisplayNode, ContextGesture?, CGPoint?) -> Void) {
+    init(theme: PresentationTheme, strings: PresentationStrings, context: AccountContext, peers: [EnginePeer], whitelist: [EnginePeer.Id]?, peerSelected: @escaping (EnginePeer) -> Void, peerContextAction: @escaping (EnginePeer, ASDisplayNode, ContextGesture?, CGPoint?) -> Void) {
         self.theme = theme
         self.strings = strings
         self.context = context
         self.peers = peers
         self.peerSelected = peerSelected
         self.peerContextAction = peerContextAction
+        self.whitelist = whitelist
         self.header = nil
     }
     
@@ -132,6 +134,12 @@ class ChatListRecentPeersListItemNode: ListViewItemNode {
                             theme: item.theme,
                             mode: .list(compact: false),
                             strings: item.strings,
+                            isPeerBlurred: { peer in
+                                guard let whitelist = self?.item?.whitelist else {
+                                    return false
+                                }
+                                return !whitelist.contains { $0 == peer }
+                            },
                             peerSelected: { peer in
                                 self?.item?.peerSelected(peer)
                             },

@@ -187,7 +187,9 @@ public final class LoadingOverlayNode: ASDisplayNode {
             }, editPeer: { _ in
             }, openWebApp: { _ in
             }, openPhotoSetup: {
-            }, openAdInfo: { _ in
+            }, openAdInfo: { _, _ in
+            }, openAccountFreezeInfo: {
+            }, openUrl: { _ in
             })
             
             let items = (0 ..< 1).map { _ -> ChatListItem in
@@ -242,7 +244,7 @@ public final class LoadingOverlayNode: ASDisplayNode {
                     requiresPremiumForMessaging: false,
                     displayAsTopicList: false,
                     tags: []
-                )), editing: false, hasActiveRevealControls: false, selected: false, header: nil, enableContextActions: false, hiddenOffset: false, interaction: interaction, chatListItemTextLineCount: 2)
+                )), editing: false, hasActiveRevealControls: false, selected: false, header: nil, enableContextActions: false, hiddenOffset: false, interaction: interaction, chatListItemTextLineCount: 2, showSeparator: true, blurred: false)
             }
             
             var itemNodes: [ChatListItemNode] = []
@@ -547,7 +549,11 @@ private final class PeerInfoScreenPersonalChannelItemNode: PeerInfoScreenItemNod
             },
             openPhotoSetup: {
             },
-            openAdInfo: { _ in
+            openAdInfo: { _, _ in
+            },
+            openAccountFreezeInfo: {
+            },
+            openUrl: { _ in
             }
         )
         
@@ -613,7 +619,9 @@ private final class PeerInfoScreenPersonalChannelItemNode: PeerInfoScreenItemNod
             enableContextActions: false,
             hiddenOffset: false,
             interaction: chatListNodeInteraction,
-            chatListItemTextLineCount: 2
+            chatListItemTextLineCount: 2,
+            showSeparator: true,
+            blurred: false
         )
         var itemNode: ListViewItemNode?
         let params = ListViewItemLayoutParams(width: width - safeInsets.left - safeInsets.right, leftInset: 0.0, rightInset: 0.0, availableHeight: 1000.0)

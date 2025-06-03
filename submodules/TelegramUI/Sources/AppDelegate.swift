@@ -46,7 +46,8 @@ import RecaptchaEnterprise
 import DOnboarding
 import FirebaseCore
 import DAnalytics
-import DClient
+import DNetwork
+import DSessionEvents
 
 #if canImport(AppCenter)
 import AppCenter
@@ -989,8 +990,8 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             var setPresentationCall: ((PresentationCall?) -> Void)?
             let sharedContext = SharedAccountContextImpl(mainWindow: self.mainWindow, sharedContainerPath: legacyBasePath, basePath: rootPath, encryptionParameters: encryptionParameters, accountManager: accountManager, appLockContext: appLockContext, notificationController: nil, applicationBindings: applicationBindings, initialPresentationDataAndSettings: initialPresentationDataAndSettings, networkArguments: networkArguments, hasInAppPurchases: buildConfig.isAppStoreBuild && buildConfig.apiId == 1, rootPath: rootPath, legacyBasePath: legacyBasePath, apsNotificationToken: self.notificationTokenPromise.get() |> map(Optional.init), voipNotificationToken: self.voipTokenPromise.get() |> map(Optional.init), firebaseSecretStream: self.firebaseSecretStream.get(), setNotificationCall: { call in
                 setPresentationCall?(call)
-            }, navigateToChat: { accountId, peerId, messageId in
-                self.openChatWhenReady(accountId: accountId, peerId: peerId, threadId: nil, messageId: messageId, storyId: nil)
+            }, navigateToChat: { accountId, peerId, messageId, alwaysKeepMessageId in
+                self.openChatWhenReady(accountId: accountId, peerId: peerId, threadId: nil, messageId: messageId, storyId: nil, alwaysKeepMessageId: alwaysKeepMessageId)
             }, displayUpgradeProgress: { progress in
                 if let progress = progress {
                     if self.dataImportSplash == nil {
@@ -1164,8 +1165,12 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                     }
                 }
             }
-            |> mapToSignal { accountAndSettings -> Signal<(AccountContext, CallListSettings, DalSettings)?, NoError> in
-                return sharedApplicationContext.sharedContext.accountManager.transaction { transaction -> DalSettings? in
+            |> mapToSignal { accountAndSettings -> Signal<(AccountContext, CallListSettings, DalSettings, Bool)?, NoError> in
+                guard let accountAndSettings = accountAndSettings else {
+                    return .single(nil)
+                }
+                
+                let dalSignal: Signal<DalSettings?, NoError> = sharedApplicationContext.sharedContext.accountManager.transaction { transaction -> DalSettings? in
                     return transaction.getSharedData(ApplicationSpecificSharedDataKeys.dalSettings)?.get(DalSettings.self)
                 }
                 |> reduceLeft(value: nil) { current, updated -> DalSettings? in
@@ -1177,18 +1182,18 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                     }
                     return result
                 }
-                |> map { dahlSettings -> (AccountContext, CallListSettings, DalSettings)? in
-                    if let context = accountAndSettings?.0, let callListSettings = accountAndSettings?.1 {
-                        return (context, callListSettings, dahlSettings ?? .defaultSettings)
-                    } else {
-                        return nil
-                    }
+                let isChildModeActiveSignal: Signal<Bool, NoError> = (accountAndSettings.0.childModeManager?.isChildModeActive ?? .single(false))
+                    |> distinctUntilChanged
+                
+                return combineLatest(dalSignal, isChildModeActiveSignal)
+                |> map { dalSettings, isChildModeActive -> (AccountContext, CallListSettings, DalSettings, Bool)? in
+                    return (accountAndSettings.0, accountAndSettings.1, dalSettings ?? .defaultSettings, isChildModeActive)
                 }
             }
             |> deliverOnMainQueue
             |> map { accountAndSettings -> AuthorizedApplicationContext? in
-                return accountAndSettings.flatMap { context, callListSettings, dahlSettings in
-                    return AuthorizedApplicationContext(sharedApplicationContext: sharedApplicationContext, mainWindow: self.mainWindow, watchManagerArguments: .single(nil), context: context as! AccountContextImpl, accountManager: sharedApplicationContext.sharedContext.accountManager, showCallsTab: callListSettings.showTab, appTabs: dahlSettings.tabBarSettings.activeTabs, reinitializedNotificationSettings: {
+                return accountAndSettings.flatMap { context, callListSettings, dahlSettings, isChildModeActive  in
+                    return AuthorizedApplicationContext(sharedApplicationContext: sharedApplicationContext, mainWindow: self.mainWindow, watchManagerArguments: .single(nil), context: context as! AccountContextImpl, accountManager: sharedApplicationContext.sharedContext.accountManager, showCallsTab: callListSettings.showTab, appTabs: isChildModeActive ? DTabBarSettings.childMode.activeTabs : dahlSettings.tabBarSettings.activeTabs, reinitializedNotificationSettings: {
                         let _ = (self.context.get()
                         |> take(1)
                         |> deliverOnMainQueue).start(next: { context in
@@ -1273,12 +1278,14 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             if let context {
                 DConnectionChecker.shared.configure(with: DProxyManagerFactory.makeDefaultManager())
                 DConnectionChecker.shared.checkAndEnableProxyIfNeeded(network: context.context.account.network, sharedContext: context.sharedApplicationContext.sharedContext)
+                SessionEventMonitor.shared.startObserving(forUserID: context.context.account.peerId.id._internalGetInt64Value())
                 
                 Analytics.setUserId(String(context.context.account.peerId.id._internalGetInt64Value()))
-                let dAuthenticator = DAuthenticationCoordinator(context: context.context)
-                self.dAuthenticator = dAuthenticator
-                dAuthenticator.startAuthentication()
-                dAuthenticator.registerLifecycleHandler()
+                if let networkAssembly = context.context.networkAssembly {
+                    let dAuthenticator = networkAssembly.authCoordinator()
+                    self.dAuthenticator = dAuthenticator
+                    dAuthenticator.startAuthentication()
+                }
             } else {
                 Analytics.setUserId(nil)
             }
@@ -1477,7 +1484,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                 }
                 return updated
             }).start(next: { [weak self] _  in
-                self?.dAuthenticator?.removeAccessToken()
+                self?.dAuthenticator?.logout()
             })
         }))
         
@@ -2065,6 +2072,22 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         self.maybeCheckForUpdates()
         
         SharedDisplayLinkDriver.shared.updateForegroundState(self.isActiveValue)
+        
+        func cancelWindowPanGestures(view: UIView) {
+            if let gestureRecognizers = view.gestureRecognizers {
+                for recognizer in gestureRecognizers {
+                    if let recognizer = recognizer as? WindowPanRecognizer {
+                        recognizer.cancel()
+                    }
+                }
+            }
+            
+            for subview in view.subviews {
+                cancelWindowPanGestures(view: subview)
+            }
+        }
+        
+        //cancelWindowPanGestures(view: self.mainWindow.hostView.containerView)
     }
     
     func applicationWillTerminate(_ application: UIApplication) {
@@ -2145,12 +2168,6 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             sharedApplicationContext.notificationManager.addNotification(userInfo)
         })
     }
-    
-    /*func application(_ application: UIApplication, didReceive notification: UILocalNotification) {
-        if (application.applicationState == .inactive) {
-            Logger.shared.log("App \(self.episodeId)", "tap local notification \(String(describing: notification.userInfo)), applicationState \(application.applicationState)")
-        }
-    }*/
 
     public func pushRegistry(_ registry: PKPushRegistry, didUpdate credentials: PKPushCredentials, for type: PKPushType) {
         if #available(iOS 9.0, *) {
@@ -2244,102 +2261,229 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             return
         }
         
-        guard var updateString = payloadJson["updates"] as? String else {
-            Logger.shared.log("App \(self.episodeId) PushRegistry", "updates is nil")
-            completion()
-            return
-        }
-
-        updateString = updateString.replacingOccurrences(of: "-", with: "+")
-        updateString = updateString.replacingOccurrences(of: "_", with: "/")
-        while updateString.count % 4 != 0 {
-            updateString.append("=")
-        }
-        guard let updateData = Data(base64Encoded: updateString) else {
-            Logger.shared.log("App \(self.episodeId) PushRegistry", "Couldn't decode updateData")
-            completion()
-            return
-        }
-        guard let callUpdate = AccountStateManager.extractIncomingCallUpdate(data: updateData) else {
-            Logger.shared.log("App \(self.episodeId) PushRegistry", "Couldn't extract call update")
-            completion()
-            return
-        }
-        guard let callKitIntegration = CallKitIntegration.shared else {
-            Logger.shared.log("App \(self.episodeId) PushRegistry", "CallKitIntegration is not available")
-            completion()
-            return
-        }
-        
         let phoneNumber = payloadJson["phoneNumber"] as? String
-
-        callKitIntegration.reportIncomingCall(
-            uuid: CallSessionManager.getStableIncomingUUID(stableId: callUpdate.callId),
-            stableId: callUpdate.callId,
-            handle: "\(callUpdate.peer.id.id._internalGetInt64Value())",
-            phoneNumber: phoneNumber.flatMap(formatPhoneNumber),
-            isVideo: callUpdate.isVideo,
-            displayTitle: callUpdate.peer.debugDisplayTitle,
-            completion: { error in
-                if let error = error {
-                    if error.domain == "com.apple.CallKit.error.incomingcall" && (error.code == -3 || error.code == 3) {
-                        Logger.shared.log("PresentationCall", "reportIncomingCall device in DND mode")
-                    } else {
-                        Logger.shared.log("PresentationCall", "reportIncomingCall error \(error)")
-                        /*Queue.mainQueue().async {
-                            if let strongSelf = self {
-                                strongSelf.callSessionManager.drop(internalId: strongSelf.internalId, reason: .hangUp, debugLog: .single(nil))
-                            }
-                        }*/
-                    }
-                }
-            }
-        )
         
-        let _ = (self.sharedContextPromise.get()
-        |> take(1)
-        |> deliverOnMainQueue).start(next: { sharedApplicationContext in
-            let _ = (sharedApplicationContext.sharedContext.activeAccountContexts
+        if let fromIdString = payloadJson["from_id"] as? String, let fromId = Int64(fromIdString), let groupCallIdString = payloadJson["group_call_id"] as? String, let groupCallId = Int64(groupCallIdString), let messageIdString = payloadJson["msg_id"] as? String, let messageId = Int32(messageIdString), let fromTitle = payloadJson["from_title"] as? String {
+            guard let callKitIntegration = CallKitIntegration.shared else {
+                Logger.shared.log("App \(self.episodeId) PushRegistry", "CallKitIntegration is not available")
+                completion()
+                return
+            }
+            
+            var isVideo = false
+            if let isVideoString = payloadJson["video"] as? String, let isVideoValue = Int32(isVideoString) {
+                isVideo = isVideoValue != 0
+            } else if let isVideoString = payloadJson["video"] as? String, let isVideoValue = Bool(isVideoString) {
+                isVideo = isVideoValue
+            }
+
+            let fromPeerId = PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(fromId))
+            let messageId = MessageId(peerId: fromPeerId, namespace: Namespaces.Message.Cloud, id: messageId)
+            
+            let internalId = CallSessionManager.getStableIncomingUUID(peerId: fromPeerId.id._internalGetInt64Value(), messageId: messageId.id)
+            
+            var strings: PresentationStrings = defaultPresentationStrings
+            let _ = (self.sharedContextPromise.get()
             |> take(1)
-            |> deliverOnMainQueue).start(next: { activeAccounts in
-                var processed = false
-                for (_, context, _) in activeAccounts.accounts {
-                    if context.account.id == accountId {
-                        context.account.stateManager.processIncomingCallUpdate(data: updateData, completion: { _ in
-                        })
-                        
-                        //callUpdate.callId
-                        let disposable = MetaDisposable()
-                        self.watchedCallsDisposables.add(disposable)
-                        
-                        disposable.set((context.account.callSessionManager.callState(internalId: CallSessionManager.getStableIncomingUUID(stableId: callUpdate.callId))
-                        |> deliverOnMainQueue).start(next: { state in
-                            switch state.state {
-                            case .terminated:
-                                callKitIntegration.dropCall(uuid: CallSessionManager.getStableIncomingUUID(stableId: callUpdate.callId))
-                            default:
-                                break
-                            }
-                        }))
-                        
-                        processed = true
-                        
-                        break
+            |> deliverOnMainQueue).start(next: { sharedApplicationContext in
+                strings = sharedApplicationContext.sharedContext.currentPresentationData.with { $0.strings }
+            })
+
+            let displayTitle: String
+            if let memberCountString = payloadJson["member_count"] as? String, let memberCount = Int(memberCountString) {
+                displayTitle = strings.Call_IncomingGroupCallTitle_Multiple(Int32(memberCount)).replacingOccurrences(of: "{}", with: fromTitle)
+            } else {
+                displayTitle = strings.Call_IncomingGroupCallTitle_Single(fromTitle).string
+            }
+            
+            callKitIntegration.reportIncomingCall(
+                uuid: internalId,
+                stableId: groupCallId,
+                handle: "\(fromPeerId.id._internalGetInt64Value())",
+                phoneNumber: phoneNumber.flatMap(formatPhoneNumber),
+                isVideo: isVideo,
+                displayTitle: displayTitle,
+                completion: { error in
+                    if let error = error {
+                        if error.domain == "com.apple.CallKit.error.incomingcall" && (error.code == -3 || error.code == 3) {
+                            Logger.shared.log("PresentationCall", "reportIncomingCall device in DND mode")
+                        } else {
+                            Logger.shared.log("PresentationCall", "reportIncomingCall error \(error)")
+                            /*Queue.mainQueue().async {
+                             if let strongSelf = self {
+                             strongSelf.callSessionManager.drop(internalId: strongSelf.internalId, reason: .hangUp, debugLog: .single(nil))
+                             }
+                             }*/
+                        }
                     }
                 }
+            )
+            
+            let _ = (self.sharedContextPromise.get()
+            |> take(1)
+            |> deliverOnMainQueue).start(next: { sharedApplicationContext in
+                let _ = (sharedApplicationContext.sharedContext.activeAccountContexts
+                |> take(1)
+                |> deliverOnMainQueue).start(next: { activeAccounts in
+                    var processed = false
+                    for (_, context, _) in activeAccounts.accounts {
+                        if context.account.id == accountId {
+                            context.account.callSessionManager.addConferenceInvitationMessages(ids: [(messageId, IncomingConferenceTermporaryExternalInfo(callId: groupCallId, isVideo: isVideo))])
+                            
+                            let disposable = MetaDisposable()
+                            self.watchedCallsDisposables.add(disposable)
+                            
+                            if let callManager = context.sharedContext.callManager {
+                                let signal = combineLatest(queue: .mainQueue(), context.account.callSessionManager.ringingStates()
+                                    |> map { ringingStates -> Bool in
+                                        for state in ringingStates {
+                                            if state.id == internalId {
+                                                return true
+                                            }
+                                        }
+                                        return false
+                                    },
+                                    callManager.currentGroupCallSignal
+                                    |> map { currentGroupCall -> Bool in
+                                        if case let .group(groupCall) = currentGroupCall {
+                                            if groupCall.internalId == internalId {
+                                                return true
+                                            }
+                                        }
+                                        return false
+                                    }
+                                )
+                                |> mapToSignal { exists0, exists1 -> Signal<Void, NoError> in
+                                    if !(exists0 || exists1) {
+                                        return .single(Void())
+                                        |> delay(1.0, queue: .mainQueue())
+                                    }
+                                    return .never()
+                                }
+                                
+                                disposable.set((signal
+                                |> take(1)
+                                |> deliverOnMainQueue).startStrict(next: { _ in
+                                    callKitIntegration.dropCall(uuid: internalId)
+                                }))
+                            }
+                            
+                            processed = true
+                            
+                            break
+                        }
+                    }
+                    
+                    if !processed {
+                        callKitIntegration.dropCall(uuid: internalId)
+                    }
+                })
                 
-                if !processed {
-                    callKitIntegration.dropCall(uuid: CallSessionManager.getStableIncomingUUID(stableId: callUpdate.callId))
+                sharedApplicationContext.wakeupManager.allowBackgroundTimeExtension(timeout: 2.0)
+                
+                if case PKPushType.voIP = type {
+                    Logger.shared.log("App \(self.episodeId) PushRegistry", "pushRegistry payload: \(payload.dictionaryPayload)")
+                    sharedApplicationContext.notificationManager.addNotification(payload.dictionaryPayload)
                 }
             })
-            
-            sharedApplicationContext.wakeupManager.allowBackgroundTimeExtension(timeout: 2.0)
-
-            if case PKPushType.voIP = type {
-                Logger.shared.log("App \(self.episodeId) PushRegistry", "pushRegistry payload: \(payload.dictionaryPayload)")
-                sharedApplicationContext.notificationManager.addNotification(payload.dictionaryPayload)
+        } else {
+            guard var updateString = payloadJson["updates"] as? String else {
+                Logger.shared.log("App \(self.episodeId) PushRegistry", "updates is nil")
+                self.reportFailedIncomingCallKitCall()
+                completion()
+                return
             }
-        })
+            
+            updateString = updateString.replacingOccurrences(of: "-", with: "+")
+            updateString = updateString.replacingOccurrences(of: "_", with: "/")
+            while updateString.count % 4 != 0 {
+                updateString.append("=")
+            }
+            guard let updateData = Data(base64Encoded: updateString) else {
+                Logger.shared.log("App \(self.episodeId) PushRegistry", "Couldn't decode updateData")
+                self.reportFailedIncomingCallKitCall()
+                completion()
+                return
+            }
+            guard let callUpdate = AccountStateManager.extractIncomingCallUpdate(data: updateData) else {
+                Logger.shared.log("App \(self.episodeId) PushRegistry", "Couldn't extract call update")
+                self.reportFailedIncomingCallKitCall()
+                completion()
+                return
+            }
+            guard let callKitIntegration = CallKitIntegration.shared else {
+                Logger.shared.log("App \(self.episodeId) PushRegistry", "CallKitIntegration is not available")
+                completion()
+                return
+            }
+            
+            callKitIntegration.reportIncomingCall(
+                uuid: CallSessionManager.getStableIncomingUUID(stableId: callUpdate.callId),
+                stableId: callUpdate.callId,
+                handle: "\(callUpdate.peer.id.id._internalGetInt64Value())",
+                phoneNumber: phoneNumber.flatMap(formatPhoneNumber),
+                isVideo: callUpdate.isVideo,
+                displayTitle: callUpdate.peer.debugDisplayTitle,
+                completion: { error in
+                    if let error = error {
+                        if error.domain == "com.apple.CallKit.error.incomingcall" && (error.code == -3 || error.code == 3) {
+                            Logger.shared.log("PresentationCall", "reportIncomingCall device in DND mode")
+                        } else {
+                            Logger.shared.log("PresentationCall", "reportIncomingCall error \(error)")
+                            /*Queue.mainQueue().async {
+                             if let strongSelf = self {
+                             strongSelf.callSessionManager.drop(internalId: strongSelf.internalId, reason: .hangUp, debugLog: .single(nil))
+                             }
+                             }*/
+                        }
+                    }
+                }
+            )
+            
+            let _ = (self.sharedContextPromise.get()
+            |> take(1)
+            |> deliverOnMainQueue).start(next: { sharedApplicationContext in
+                let _ = (sharedApplicationContext.sharedContext.activeAccountContexts
+                |> take(1)
+                |> deliverOnMainQueue).start(next: { activeAccounts in
+                    var processed = false
+                    for (_, context, _) in activeAccounts.accounts {
+                        if context.account.id == accountId {
+                            context.account.stateManager.processIncomingCallUpdate(data: updateData, completion: { _ in
+                            })
+                            
+                            let disposable = MetaDisposable()
+                            self.watchedCallsDisposables.add(disposable)
+                            
+                            disposable.set((context.account.callSessionManager.callState(internalId: CallSessionManager.getStableIncomingUUID(stableId: callUpdate.callId))
+                            |> deliverOnMainQueue).start(next: { state in
+                                switch state.state {
+                                case .terminated:
+                                    callKitIntegration.dropCall(uuid: CallSessionManager.getStableIncomingUUID(stableId: callUpdate.callId))
+                                default:
+                                    break
+                                }
+                            }))
+                            
+                            processed = true
+                            
+                            break
+                        }
+                    }
+                    
+                    if !processed {
+                        callKitIntegration.dropCall(uuid: CallSessionManager.getStableIncomingUUID(stableId: callUpdate.callId))
+                    }
+                })
+                
+                sharedApplicationContext.wakeupManager.allowBackgroundTimeExtension(timeout: 2.0)
+                
+                if case PKPushType.voIP = type {
+                    Logger.shared.log("App \(self.episodeId) PushRegistry", "pushRegistry payload: \(payload.dictionaryPayload)")
+                    sharedApplicationContext.notificationManager.addNotification(payload.dictionaryPayload)
+                }
+            })
+        }
         
         Logger.shared.log("App \(self.episodeId) PushRegistry", "Invoking completion handler")
         
@@ -2348,6 +2492,33 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     
     public func pushRegistry(_ registry: PKPushRegistry, didInvalidatePushTokenFor type: PKPushType) {
         Logger.shared.log("App \(self.episodeId)", "invalidated token for \(type)")
+    }
+    
+    private func reportFailedIncomingCallKitCall() {
+        guard let callKitIntegration = CallKitIntegration.shared else {
+            return
+        }
+        let uuid = CallSessionInternalId()
+        callKitIntegration.reportIncomingCall(
+            uuid: uuid,
+            stableId: Int64.random(in: Int64.min ... Int64.max),
+            handle: "Unknown",
+            phoneNumber: nil,
+            isVideo: false,
+            displayTitle: "Unknown",
+            completion: { error in
+                if let error = error {
+                    if error.domain == "com.apple.CallKit.error.incomingcall" && (error.code == -3 || error.code == 3) {
+                        Logger.shared.log("PresentationCall", "reportFailedIncomingCallKitCall device in DND mode")
+                    } else {
+                        Logger.shared.log("PresentationCall", "reportFailedIncomingCallKitCall error \(error)")
+                    }
+                }
+            }
+        )
+        Queue.mainQueue().after(1.0, {
+            callKitIntegration.dropCall(uuid: uuid)
+        })
     }
     
     private func authorizedContext() -> Signal<AuthorizedApplicationContext, NoError> {
@@ -2660,7 +2831,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         }))
     }
     
-    private func openChatWhenReady(accountId: AccountRecordId?, peerId: PeerId, threadId: Int64?, messageId: MessageId? = nil, activateInput: Bool = false, storyId: StoryId?, openAppIfAny: Bool = false) {
+    private func openChatWhenReady(accountId: AccountRecordId?, peerId: PeerId, threadId: Int64?, messageId: MessageId? = nil, activateInput: Bool = false, storyId: StoryId?, openAppIfAny: Bool = false, alwaysKeepMessageId: Bool = false) {
         let signal = self.sharedContextPromise.get()
         |> take(1)
         |> deliverOnMainQueue
@@ -2679,7 +2850,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         }
         self.openChatWhenReadyDisposable.set((signal
         |> deliverOnMainQueue).start(next: { context in
-            context.openChatWithPeerId(peerId: peerId, threadId: threadId, messageId: messageId, activateInput: activateInput, storyId: storyId, openAppIfAny: openAppIfAny)
+            context.openChatWithPeerId(peerId: peerId, threadId: threadId, messageId: messageId, activateInput: activateInput, storyId: storyId, openAppIfAny: openAppIfAny, alwaysKeepMessageId: alwaysKeepMessageId)
         }))
     }
     
