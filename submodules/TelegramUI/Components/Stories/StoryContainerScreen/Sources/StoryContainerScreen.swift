@@ -1733,6 +1733,14 @@ private final class StoryContainerScreenComponent: Component {
                                     
                                     self.state?.updated(transition: .immediate)
                                 },
+                                requestAccessAction: { [weak self] in
+                                    guard let self, let environment = self.environment else {
+                                        return
+                                    }
+                                    if let controller = environment.controller() as? StoryContainerScreen {
+                                        controller.performRequestPermissionAction?(slice.peer.id)
+                                    }
+                                },
                                 keyboardInputData: self.inputMediaNodeDataPromise.get(),
                                 closeFriends: self.closeFriendsPromise,
                                 blockedPeers: self.blockedPeers,
@@ -2047,7 +2055,8 @@ public class StoryContainerScreen: ViewControllerComponentContainer {
     
     public var customBackAction: (() -> Void)?
     public var performReorderAction: (() -> Void)?
-    
+    public var performRequestPermissionAction: ((EnginePeer.Id) -> Void)?
+
     public init(
         context: AccountContext,
         content: StoryContentContext,
@@ -2071,6 +2080,10 @@ public class StoryContainerScreen: ViewControllerComponentContainer {
         self.supportedOrientations = ViewControllerSupportedOrientations(regularSize: .all, compactSize: [.portrait])
         
         self.context.sharedContext.hasPreloadBlockingContent.set(.single(true))
+        
+        self.performRequestPermissionAction = {[weak self] peerId in
+            self?.requestChatAccess(peerId: peerId)
+        }
     }
     
     required public init(coder aDecoder: NSCoder) {
@@ -2133,6 +2146,56 @@ public class StoryContainerScreen: ViewControllerComponentContainer {
                 self.dismiss(animated: false)
             }
         }
+    }
+    
+    private func requestChatAccess(peerId: EnginePeer.Id) {
+        guard let childModeManager = self.context.childModeManager else { return }
+                
+        _ = (childModeManager.requestPermission(for: peerId, title: nil, description: nil)
+             |> deliverOnMainQueue).start(next: { [weak self] _ in
+            
+            guard let self = self else {
+                return
+            }
+            
+            Queue.mainQueue().after(0.2) {
+                let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
+                
+                let content = UndoOverlayContent.universalImage(
+                    image: UIImage(named: "Child Mode/Check") ?? UIImage(),
+                    size: CGSize(width: 24, height: 24),
+                    title: "ChildMode.Request.Sent".tp_loc(lang: presentationData.strings.baseLanguageCode),
+                    text: "ChildMode.Media.AvailableAfterConfirmation".tp_loc(lang: presentationData.strings.baseLanguageCode),
+                    customUndoText: nil,
+                    timeout: 5.0
+                )
+                self.dismiss()
+                if let controller = (self.navigationController as? NavigationController)?.topViewController as? ViewController {
+                    controller.present(UndoOverlayController(presentationData: presentationData, content: content, elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))
+                }
+            }
+        }, error: { [weak self] _ in
+            guard let self = self else {
+                return
+            }
+            
+            Queue.mainQueue().after(0.2) {
+                let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
+                
+                let content = UndoOverlayContent.universalImage(
+                    image: UIImage(named: "Child Mode/Dissmis") ?? UIImage(),
+                    size: CGSize(width: 24, height: 24),
+                    title: "ChildMode.Request.FailedToSend".tp_loc(lang: presentationData.strings.baseLanguageCode),
+                    text: "ChildMode.Internet.CheckConnection".tp_loc(lang: presentationData.strings.baseLanguageCode),
+                    customUndoText: nil,
+                    timeout: 5.0
+                )
+                self.dismiss()
+                if let controller = (self.navigationController as? NavigationController)?.topViewController as? ViewController {
+                    controller.present(UndoOverlayController(presentationData: presentationData, content: content, elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))
+                }
+            }
+        })
     }
     
     override public func inFocusUpdated(isInFocus: Bool) {

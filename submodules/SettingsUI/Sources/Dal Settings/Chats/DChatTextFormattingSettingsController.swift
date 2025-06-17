@@ -93,7 +93,7 @@ public func dChatTextFormattingSettingsController(
         context: context,
         updateShowFormattingPanel: { value in
             _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager) { settings in
+                engine: context.engine) { settings in
                     var updatedSettings = settings
                     updatedSettings.chatsSettings.formattingPanelEnabled = value
                     return updatedSettings
@@ -101,10 +101,9 @@ public func dChatTextFormattingSettingsController(
                 .start()
         }
     )
-    
-    let showFormattingPanelSignal = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-    |> map { sharedData -> Bool in
-        let dahlSettings = sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? .defaultSettings
+    let showFormattingPanelSignal = context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+    |> map { view -> Bool in
+        let dahlSettings = view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
         return dahlSettings.chatsSettings.formattingPanelEnabled
     } |> distinctUntilChanged
     

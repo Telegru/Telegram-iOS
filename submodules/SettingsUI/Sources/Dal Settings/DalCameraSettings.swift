@@ -129,15 +129,11 @@ public func dalCameraSettingsController(context: AccountContext, updateCamera: @
         updateCamera(newCamera)
     })
 
-    let selectedCamera = (context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-    |> map { sharedData -> CameraType in
-        let dalSettings: DalSettings
-        if let entry = sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) {
-            dalSettings = entry
-        } else {
-            dalSettings = DalSettings.defaultSettings
-        }
-        return dalSettings.videoMessageCamera
+    let selectedCamera = (context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+                          |> map { view -> DalSettings in
+        return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
+    } |> map {
+        return $0.videoMessageCamera
     }
     |> distinctUntilChanged)
 

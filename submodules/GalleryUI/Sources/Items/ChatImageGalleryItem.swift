@@ -443,9 +443,9 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
                 guard let self = self else { return }
                 overlayNode.isHidden = true
                 overlayNode.view.isUserInteractionEnabled = false
-                
                 self.imageNode.isUserInteractionEnabled = true
                 self.moreBarButton.isUserInteractionEnabled = true
+                self.baseNavigationController = self.baseNavigationController
                 self.statusNodeContainer.isUserInteractionEnabled = self.status != .Local
             }
             self.footerContentNode.setCompletelyHidden(false)
@@ -456,7 +456,7 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
             self.imageNode.isUserInteractionEnabled = false
             self.moreBarButton.isUserInteractionEnabled = false
             self.statusNodeContainer.isUserInteractionEnabled = false
-
+            transition.updateAlpha(node: self.moreBarButton, alpha: 0.0)
             if let recognizedContentNode = self.recognizedContentNode {
                 recognizedContentNode.dismissSelection()
                 transition.updateAlpha(node: recognizedContentNode, alpha: 0.0)

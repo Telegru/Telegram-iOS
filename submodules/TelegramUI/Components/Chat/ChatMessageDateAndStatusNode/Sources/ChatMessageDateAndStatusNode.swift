@@ -833,6 +833,7 @@ public class ChatMessageDateAndStatusNode: ASDisplayNode {
                                 ),
                                 count: Int(reaction.count),
                                 peers: arguments.areReactionsTags ? [] : peers,
+                                whitelist: nil,
                                 chosenOrder: reaction.chosenOrder
                             )
                         },

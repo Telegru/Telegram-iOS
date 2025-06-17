@@ -690,7 +690,7 @@ public func dGeneralSettingsController(
         },
         updateHidePhone: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.hidePhone = value
@@ -716,10 +716,11 @@ public func dGeneralSettingsController(
     )
     
     let statusesContext = ProxyServersStatuses(network: context.account.network, servers: .single(proxyServer != nil ? [proxyServer!] : []))
-    let sharedData = context.sharedContext.accountManager.sharedData(keys: [
-        ApplicationSpecificSharedDataKeys.dalSettings,
-        SharedDataKeys.proxySettings
-    ])
+    let sharedData = context.sharedContext.accountManager.sharedData(keys: [SharedDataKeys.proxySettings])
+    let dahlSettingsSignal = context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+    |> map { view -> DalSettings in
+        return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
+    }
     
     let isProxyEnabled = Promise<Bool>()
     isProxyEnabled.set(
@@ -732,12 +733,12 @@ public func dGeneralSettingsController(
     
     let signal = combineLatest(
         sharedData,
+        dahlSettingsSignal,
         context.sharedContext.presentationData,
         isProxyEnabled.get(),
         statusesContext.statuses(),
         context.account.network.connectionStatus
-    ) |> map { sharedData, presentationData, isProxyEnabledValue, statuses, connectionStatus -> (ItemListControllerState, (ItemListNodeState, Any)) in
-        let dahlSettings = sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? .defaultSettings
+    ) |> map { sharedData, dahlSettings, presentationData, isProxyEnabledValue, statuses, connectionStatus -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let proxySettings = sharedData.entries[SharedDataKeys.proxySettings]?.get(ProxySettings.self) ?? .defaultSettings
         let entries = dGeneralSettingsEntries(
             presentationData: presentationData,

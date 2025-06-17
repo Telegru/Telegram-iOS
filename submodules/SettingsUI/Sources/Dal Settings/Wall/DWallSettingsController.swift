@@ -497,7 +497,7 @@ public func dWallSettingsController(
         context: context,
         updateShowArchivedChannels: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var updatedSettings = settings
                     var updatedWallSettings = settings.wallSettings
@@ -509,7 +509,7 @@ public func dWallSettingsController(
         },
         updateMarkAsRead: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var updatedSettings = settings
                     var updatedWallSettings = settings.wallSettings
@@ -520,10 +520,12 @@ public func dWallSettingsController(
             ).start()
         },
         addExcludedChannel: {
-            let _ = (context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
+            let _ = (context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+                     |> map { view -> DalSettings in
+                return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
+            }
                      |> take(1)
-                     |> deliverOnMainQueue).start(next: { sharedData in
-                let dahlSettings = sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? .defaultSettings
+                     |> deliverOnMainQueue).start(next: { dahlSettings in
                 let showArchivedChannels = dahlSettings.wallSettings.showArchivedChannels
                 
                 let allExcludedChannels = dahlSettings.wallSettings.excludedChannels
@@ -582,7 +584,7 @@ public func dWallSettingsController(
                             }
                             
                             let _ = updateDalSettingsInteractively(
-                                accountManager: context.sharedContext.accountManager,
+                                engine: context.engine,
                                 { settings in
                                     var updatedSettings = settings
                                     var updatedWallSettings = settings.wallSettings
@@ -610,17 +612,19 @@ public func dWallSettingsController(
             })
         },
         removeExcludedChannel: { peerId in
-            let _ = (context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
+            let _ = (context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+                     |> map { view -> DalSettings in
+                return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
+            }
             |> take(1)
-            |> deliverOnMainQueue).start(next: { sharedData in
-                let dahlSettings = sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? .defaultSettings
+            |> deliverOnMainQueue).start(next: { dahlSettings in
                 var excludedChannels = dahlSettings.wallSettings.excludedChannels
                 
                 if let index = excludedChannels.firstIndex(of: peerId) {
                     excludedChannels.remove(at: index)
                     
                     let _ = updateDalSettingsInteractively(
-                        accountManager: context.sharedContext.accountManager,
+                        engine: context.engine,
                         { settings in
                             var updatedSettings = settings
                             var updatedWallSettings = settings.wallSettings
@@ -645,7 +649,7 @@ public func dWallSettingsController(
                         actionSheet?.dismissAnimated()
                         
                         let _ = updateDalSettingsInteractively(
-                            accountManager: context.sharedContext.accountManager,
+                            engine: context.engine,
                             { settings in
                                 var updatedSettings = settings
                                 var updatedWallSettings = settings.wallSettings
@@ -687,17 +691,19 @@ public func dWallSettingsController(
             }, action: { _, f in
                 f(.dismissWithoutContent)
                 
-                let _ = (context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
+                let _ = (context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+                         |> map { view -> DalSettings in
+                    return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
+                }
                 |> take(1)
-                |> deliverOnMainQueue).start(next: { sharedData in
-                    let dahlSettings = sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? .defaultSettings
+                |> deliverOnMainQueue).start(next: { dahlSettings in
                     var excludedChannels = dahlSettings.wallSettings.excludedChannels
                     
                     if let index = excludedChannels.firstIndex(of: peer.id) {
                         excludedChannels.remove(at: index)
                         
                         let _ = updateDalSettingsInteractively(
-                            accountManager: context.sharedContext.accountManager,
+                            engine: context.engine,
                             { settings in
                                 var updatedSettings = settings
                                 var updatedWallSettings = settings.wallSettings
@@ -715,16 +721,17 @@ public func dWallSettingsController(
         }
     )
     
-    let sharedDataSignal = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
+    let dahlSettingsSignal = context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+    |> map { view -> DalSettings in
+        return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
+    }
     
     let signal = combineLatest(
-        sharedDataSignal,
+        dahlSettingsSignal,
         statePromise.get(),
         context.sharedContext.presentationData
     )
-    |> mapToSignal { sharedData, state, presentationData -> Signal<(PresentationData, DWallSettingsState, DalSettings, [EnginePeer], [EnginePeer.Id: EngineChatList.Group]), NoError> in
-        let dahlSettings = sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? .defaultSettings
-        
+    |> mapToSignal { dahlSettings, state, presentationData -> Signal<(PresentationData, DWallSettingsState, DalSettings, [EnginePeer], [EnginePeer.Id: EngineChatList.Group]), NoError> in
         return context.engine.data.get(
             EngineDataList(dahlSettings.wallSettings.excludedChannels.map(TelegramEngine.EngineData.Item.Peer.Peer.init)),
             EngineDataMap(dahlSettings.wallSettings.excludedChannels.map(TelegramEngine.EngineData.Item.Messages.ChatListGroup.init))

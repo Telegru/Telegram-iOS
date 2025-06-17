@@ -57,6 +57,7 @@ public final class CallController: ViewController {
     
     private let sharedContext: SharedAccountContext
     private let account: Account
+    private let engine: TelegramEngine
     public let call: PresentationCall
     private let easyDebugAccess: Bool
     
@@ -86,9 +87,10 @@ public final class CallController: ViewController {
     private var isAnimatingDismiss: Bool = false
     private var isDismissed: Bool = false
     
-    public init(sharedContext: SharedAccountContext, account: Account, call: PresentationCall, easyDebugAccess: Bool) {
+    public init(sharedContext: SharedAccountContext, account: Account, call: PresentationCall, engine: TelegramEngine, easyDebugAccess: Bool) {
         self.sharedContext = sharedContext
         self.account = account
+        self.engine = engine
         self.call = call
         self.easyDebugAccess = easyDebugAccess
         
@@ -319,21 +321,24 @@ public final class CallController: ViewController {
         
         self.controllerNode.callEnded = { [weak self] didPresentRating in
             if let strongSelf = self, !didPresentRating {
+                let dahlSettingsSignal = strongSelf.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+                |> map { view -> DalSettings in
+                    return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
+                }
                 let _ = (combineLatest(
+                    dahlSettingsSignal,
                     strongSelf.sharedContext.accountManager.sharedData(keys: Set([
-                        ApplicationSpecificSharedDataKeys.callListSettings,
-                        ApplicationSpecificSharedDataKeys.dalSettings
+                        ApplicationSpecificSharedDataKeys.callListSettings
                     ])),
                     ApplicationSpecificNotice.getCallsTabTip(accountManager: strongSelf.sharedContext.accountManager)
                 )
-                |> map { sharedData, callsTabTip -> Int32 in
+                |> map { dalSettings, sharedData, callsTabTip -> Int32 in
                     let showTab = false
 //                    if let settings = sharedData.entries[ApplicationSpecificSharedDataKeys.callListSettings]?.get(CallListSettings.self) {
 //                        showTab = settings.showTab
 //                    }
                     
                     var callsTabAlreadyAdded = false
-                    let dalSettings = sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
                     let activeTabs = dalSettings.tabBarSettings.activeTabs
                     callsTabAlreadyAdded = activeTabs.contains(.calls)
                     
@@ -348,7 +353,7 @@ public final class CallController: ViewController {
                     
                     if callsTabTip == 2 {
                         Queue.mainQueue().after(1.0) {
-                            let controller = callSuggestTabController(sharedContext: strongSelf.sharedContext)
+                            let controller = callSuggestTabController(sharedContext: strongSelf.sharedContext, engine: strongSelf.engine)
                             strongSelf.present(controller, in: .window(.root))
                         }
                     }

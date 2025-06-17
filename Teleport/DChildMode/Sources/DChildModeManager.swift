@@ -16,6 +16,8 @@ public protocol DChildModeManager {
     func requestPermission(for url: String) -> Signal<Bool, NoError>
     
     func whitelist() -> Signal<(Bool, [EnginePeer.Id]), NoError>
+    func whitelistSync() -> Set<EnginePeer.Id>?
+    func state() -> Signal<DChildModeState, NoError>
 }
 
 public final class ChildModeManager: DChildModeManager {
@@ -24,8 +26,16 @@ public final class ChildModeManager: DChildModeManager {
     private let engine: TelegramEngine?
     private let postbox: Postbox
     private let refreshWhitelistDisposable = MetaDisposable()
-    private var lastWhitelist: Atomic<(Bool, [EnginePeer.Id])?> = Atomic(value: nil)
+    private var lastWhitelist: Atomic<(Bool, Set<EnginePeer.Id>)?> = Atomic(value: nil)
     private let sessionEventMonitorDisposable = MetaDisposable()
+    private let initialWhitelistFetchDisposable = MetaDisposable()
+
+    private struct SecretCache {
+        var forward: [EnginePeer.Id: EnginePeer.Id] = [:]
+        var backward: [EnginePeer.Id: EnginePeer.Id] = [:]
+    }
+    private var secretChatCache = Atomic(value: SecretCache())
+    private var secretChatPromise: Promise<SecretCache?> = Promise(nil)
 
     public init(childModeService: ChildModeService, engine: TelegramEngine?, postbox: Postbox) {
         self.childModeService = childModeService
@@ -36,21 +46,42 @@ public final class ChildModeManager: DChildModeManager {
             let signal = engine.peers.resolvePeerByName(name: "dahl_children_control_bot", referrer: nil)
                     
             refreshWhitelistDisposable.set((signal
-                |> mapToSignal { result -> Signal<EnginePeer?, NoError> in
-                    guard case let .result(peer) = result, let peer = peer else {
-                        return .single(nil)
+                |> mapToSignal { result -> Signal<Bool, NoError> in
+                    guard case let .result(peer) = result,
+                        let peer = peer else {
+                        return .complete()
                     }
-                    return engine.account.postbox.peerView(id: peer.id) |> map { _ in peer }
-                }
-                |> deliverOnMainQueue
-                |> mapToSignal { _ -> Signal<Bool, NoError> in
-                    return childModeService.refresh()
+                    
+                    // Подписываемся на историю сообщений этого бота
+                let historySignal = engine.account.postbox.unreadMessageCountsView(items: [UnreadMessageCountsItem.peer(id: peer.id, handleThreads: false)])
+                    return historySignal
+                    |> mapToSignal { _ -> Signal<Bool, NoError> in
+                        return self.childModeService.refresh()
+                    }
                 }).start())
         }
+        
+        initialWhitelistFetchDisposable.set(
+            (childModeService.whitelist(forceUpdate: true)
+             |> distinctUntilChanged(isEqual: { lhs, rhs in
+                 lhs.0 == rhs.0 && lhs.1 == rhs.1
+             })
+            |> mapToSignal { [weak self] tuple -> Signal<((Bool, [EnginePeer.Id])), NoError> in
+                guard let self else { return .single((false, [])) }
+                let users = tuple.1.filter { $0.namespace == Namespaces.Peer.CloudUser }
+                return self.warmSecretCache(for: users)
+                |> map { _ in return tuple }
+            }).start(next: { [weak self] tuple in
+                let allowed = self?.fullAllowedList(Set(tuple.1)) ?? Set(tuple.1)
+                let _ = self?.lastWhitelist.swap((tuple.0, allowed))
+            })
+        )
     }
     
     deinit {
         sessionEventMonitorDisposable.dispose()
+        initialWhitelistFetchDisposable.dispose()
+        refreshWhitelistDisposable.dispose()
     }
     
     public var isChildModeActive: Signal<Bool, NoError> {
@@ -70,6 +101,15 @@ public final class ChildModeManager: DChildModeManager {
             |> deliverOnMainQueue
     }
     
+    private func fullAllowedList(_ raw: Set<EnginePeer.Id>) -> Set<EnginePeer.Id> {
+        let cache = secretChatCache.with { $0.forward }
+        var result = raw
+        for user in raw where user.namespace == Namespaces.Peer.CloudUser {
+            if let secret = cache[user] { result.insert(secret) }
+        }
+        return result
+    }
+    
     public func isPeerAllowedSync(_ peerId: EnginePeer.Id) -> Bool {
         if let whitelist = lastWhitelist.with({ $0 }), whitelist.0 {
             return whitelist.1.contains(peerId)
@@ -77,9 +117,36 @@ public final class ChildModeManager: DChildModeManager {
         return true
     }
     
+    public func whitelistSync() -> Set<EnginePeer.Id>? {
+        if let whitelist = lastWhitelist.with({ $0 }), whitelist.0 {
+            return whitelist.1
+        }
+        return nil
+    }
+    
     public func isPeerAllowed(_ peerId: EnginePeer.Id) -> Signal<Bool, NoError> {
-        return childModeService.whitelist(forceUpdate: false)
-        |> map { !$0.0 || $0.1.contains(peerId) }
+        if peerId.namespace == Namespaces.Peer.SecretChat {
+            guard let engine else {
+                return .single(false)
+            }
+            
+            return engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
+            |> mapToSignal { [weak self] peerResult -> Signal<Bool, NoError> in
+                guard let strongSelf = self else {
+                    return .single(false)
+                }
+                
+                if case let .secretChat(secretChat) = peerResult {
+                    return strongSelf.childModeService.whitelist(forceUpdate: false)
+                    |> map { !$0.0 || $0.1.contains(secretChat.regularPeerId) }
+                } else {
+                    return .single(false)
+                }
+            }
+        } else {
+            return childModeService.whitelist(forceUpdate: false)
+            |> map { !$0.0 || $0.1.contains(peerId) }
+        }
     }
     
     public func isLinkAllowed(_ url: String) -> Signal<Bool, NoError> {
@@ -90,36 +157,59 @@ public final class ChildModeManager: DChildModeManager {
         guard let engine else {
             return .complete()
         }
-        return engine.peers.fetchAndUpdateCachedPeerData(peerId: peerId)
+        
+        return engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
         |> castError(Error.self)
-        |> mapToSignal { [weak self] _ -> Signal<(String?, DWhitelistItemType)?, Error> in
+        |> mapToSignal { [weak self] peerResult -> Signal<Void, Error> in
             guard let strongSelf = self else {
-                return .single(nil)
-            }
-            return strongSelf.postbox.transaction { transaction -> (String?, DWhitelistItemType)? in
-                guard let peer = transaction.getPeer(peerId).flatMap(EnginePeer.init) else {
-                    return nil
-                }
-                
-                switch peer {
-                case let .user(user):
-                    return (user.addressName, user.botInfo == nil ? DWhitelistItemType.user : .bot)
-                case let .channel(channel):
-                    return (channel.addressName, .channel)
-                case let .legacyGroup(group):
-                    return (group.addressName, .chat)
-                case .secretChat:
-                    return nil // У secret chat нет username
-                }
-            }
-            |> castError(Error.self)
-        }
-        |> mapToSignal { [weak self] result -> Signal<Void, Error> in
-            guard let strongSelf = self, let (username, type) = result else {
                 return .complete()
             }
-            let link = username.map { "@" + $0 }
-            return strongSelf.childModeService.add(item: DWhitelistItem(id: peerId.id._internalGetInt64Value(), type: type, title: title, description: description, link: link))
+            
+            let targetPeerId: EnginePeer.Id
+            if case let .secretChat(secretChat) = peerResult {
+                targetPeerId = secretChat.regularPeerId
+            } else {
+                targetPeerId = peerId
+            }
+            
+            return engine.peers.fetchAndUpdateCachedPeerData(peerId: targetPeerId)
+            |> castError(Error.self)
+            |> mapToSignal { _ -> Signal<(String?, DWhitelistItemType, EnginePeer.Id)?, Error> in
+                return strongSelf.postbox.transaction { transaction -> (String?, DWhitelistItemType, EnginePeer.Id)? in
+                    guard let peer = transaction.getPeer(peerId).flatMap(EnginePeer.init) else {
+                        return nil
+                    }
+                    
+                    switch peer {
+                    case let .user(user):
+                        return (user.addressName, user.botInfo == nil ? DWhitelistItemType.user : .bot, peerId)
+                    case let .channel(channel):
+                        return (channel.addressName, .channel, peerId)
+                    case let .legacyGroup(group):
+                        return (group.addressName, .chat, peerId)
+                    case let .secretChat(secretChat):
+                        guard let regularPeer = transaction.getPeer(secretChat.regularPeerId).flatMap(EnginePeer.init),
+                              case let .user(user) = regularPeer else {
+                            return nil
+                        }
+                        return (user.addressName, .user, secretChat.regularPeerId)
+                    }
+                }
+                |> castError(Error.self)
+            }
+            |> mapToSignal { result -> Signal<Void, Error> in
+                guard let (username, type, finalPeerId) = result else {
+                    return .complete()
+                }
+                let link = username.map { "@" + $0 }
+                return strongSelf.childModeService.add(item: DWhitelistItem(
+                    id: finalPeerId.id._internalGetInt64Value(),
+                    type: type,
+                    title: title,
+                    description: description,
+                    link: link
+                ))
+            }
         }
     }
     
@@ -128,9 +218,41 @@ public final class ChildModeManager: DChildModeManager {
     }
     
     public func whitelist() -> Signal<(Bool, [EnginePeer.Id]), NoError> {
-        return childModeService.whitelist(forceUpdate: true)
-        |> afterNext { [weak self] newValue in
-            let _ = self?.lastWhitelist.swap(newValue)
+        return combineLatest(childModeService.whitelist(forceUpdate: false), secretChatPromise.get() |> take(2))
+        |> map { [weak self] whitelist, _ in
+            guard let self else {
+                return whitelist
+            }
+            let list = self.fullAllowedList(Set(whitelist.1))
+            return (whitelist.0, Array(list))
+        }
+        |> distinctUntilChanged { lhs, rhs in
+            lhs.0 == rhs.0 && lhs.1 == rhs.1
+        }
+    }
+    
+    public func state() -> Signal<DChildModeState, NoError> {
+        return childModeService.whitelist(forceUpdate: false)
+        |> map {
+            DChildModeState(isEnabled: $0.0, allowedPeerIds: Set($0.1))
+        }
+    }
+    
+    private func warmSecretCache(for users: [EnginePeer.Id]) -> Signal<Void, NoError> {
+        guard let engine else { return .single(()) }
+
+        let signals = users.map { engine.peers.mostRecentSecretChat(id: $0) }
+        return combineLatest(signals) |> map { [weak self] ids in
+            let result = self?.secretChatCache.modify {[] cache in
+                var fw = cache.forward, bw = cache.backward
+                zip(users, ids).forEach { user, secret in
+                    if let secret { fw[user] = secret; bw[secret] = user }
+                }
+                let secretCache = SecretCache(forward: fw, backward: bw)
+                return secretCache
+            }
+            self?.secretChatPromise.set(.single(result))
+            return Void()
         }
     }
     

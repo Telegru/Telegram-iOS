@@ -48,6 +48,8 @@ import FirebaseCore
 import DAnalytics
 import DNetwork
 import DSessionEvents
+import DSettings
+import DSettingsPresentationData
 
 #if canImport(AppCenter)
 import AppCenter
@@ -1116,9 +1118,10 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             }
         }
         
-       
-        
-        self.onlineLockManager = OnlineLockManager(context: self.sharedContextPromise.get())
+        self.onlineLockManager = OnlineLockManager(
+            context: self.context.get() |> filter { $0 != nil } |> map { $0!.context },
+            sharedContext: self.sharedContextPromise.get()
+        )
         
         self.sharedContextPromise.set(sharedContextSignal
         |> mapToSignal { sharedApplicationContext, loggingSettings -> Signal<SharedApplicationContext, NoError> in
@@ -1166,12 +1169,12 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                 }
             }
             |> mapToSignal { accountAndSettings -> Signal<(AccountContext, CallListSettings, DalSettings, Bool)?, NoError> in
-                guard let accountAndSettings = accountAndSettings else {
+                guard let accountAndSettings else {
                     return .single(nil)
                 }
-                
-                let dalSignal: Signal<DalSettings?, NoError> = sharedApplicationContext.sharedContext.accountManager.transaction { transaction -> DalSettings? in
-                    return transaction.getSharedData(ApplicationSpecificSharedDataKeys.dalSettings)?.get(DalSettings.self)
+                let context = accountAndSettings.0
+                let dalSignal: Signal<DalSettings?, NoError> = context.account.postbox.transaction { transaction -> DalSettings? in
+                    transaction.getPreferencesEntry(key: ApplicationSpecificPreferencesKeys.dahlSettings)?.get(DalSettings.self)
                 }
                 |> reduceLeft(value: nil) { current, updated -> DalSettings? in
                     var result: DalSettings?
@@ -1183,7 +1186,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                     return result
                 }
                 let isChildModeActiveSignal: Signal<Bool, NoError> = (accountAndSettings.0.childModeManager?.isChildModeActive ?? .single(false))
-                    |> distinctUntilChanged
+                    |> take(1)
                 
                 return combineLatest(dalSignal, isChildModeActiveSignal)
                 |> map { dalSettings, isChildModeActive -> (AccountContext, CallListSettings, DalSettings, Bool)? in
@@ -1286,6 +1289,13 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                     self.dAuthenticator = dAuthenticator
                     dAuthenticator.startAuthentication()
                 }
+                
+                AccountConfigSynchronizer.shared.startSettingsSynchronization(for: context.context, presentNativeController: { [weak self] viewController in
+                    guard let self else { return }
+                    self.mainWindow.presentNative(viewController)
+                })
+                
+                DahlPresentationDataManager.shared.didUpdateAccount(context.context.account)
             } else {
                 Analytics.setUserId(nil)
             }
@@ -2495,30 +2505,32 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     }
     
     private func reportFailedIncomingCallKitCall() {
-        guard let callKitIntegration = CallKitIntegration.shared else {
-            return
-        }
-        let uuid = CallSessionInternalId()
-        callKitIntegration.reportIncomingCall(
-            uuid: uuid,
-            stableId: Int64.random(in: Int64.min ... Int64.max),
-            handle: "Unknown",
-            phoneNumber: nil,
-            isVideo: false,
-            displayTitle: "Unknown",
-            completion: { error in
-                if let error = error {
-                    if error.domain == "com.apple.CallKit.error.incomingcall" && (error.code == -3 || error.code == 3) {
-                        Logger.shared.log("PresentationCall", "reportFailedIncomingCallKitCall device in DND mode")
-                    } else {
-                        Logger.shared.log("PresentationCall", "reportFailedIncomingCallKitCall error \(error)")
+        if #available(iOS 14.4, *) {
+            guard let callKitIntegration = CallKitIntegration.shared else {
+                return
+            }
+            let uuid = CallSessionInternalId()
+            callKitIntegration.reportIncomingCall(
+                uuid: uuid,
+                stableId: Int64.random(in: Int64.min ... Int64.max),
+                handle: "Unknown",
+                phoneNumber: nil,
+                isVideo: false,
+                displayTitle: "Unknown",
+                completion: { error in
+                    if let error = error {
+                        if error.domain == "com.apple.CallKit.error.incomingcall" && (error.code == -3 || error.code == 3) {
+                            Logger.shared.log("PresentationCall", "reportFailedIncomingCallKitCall device in DND mode")
+                        } else {
+                            Logger.shared.log("PresentationCall", "reportFailedIncomingCallKitCall error \(error)")
+                        }
                     }
                 }
-            }
-        )
-        Queue.mainQueue().after(1.0, {
-            callKitIntegration.dropCall(uuid: uuid)
-        })
+            )
+            Queue.mainQueue().after(1.0, {
+                callKitIntegration.dropCall(uuid: uuid)
+            })
+        }
     }
     
     private func authorizedContext() -> Signal<AuthorizedApplicationContext, NoError> {

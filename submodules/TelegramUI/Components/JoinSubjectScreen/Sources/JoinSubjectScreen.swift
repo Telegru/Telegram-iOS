@@ -766,7 +766,7 @@ private final class JoinSubjectScreenComponent: Component {
                     self.previewPeersAvatarsContext = previewPeersAvatarsContext
                 }
                 
-                let avatarsContent = previewPeersAvatarsContext.update(peers: previewPeers.count <= 3 ? previewPeers : Array(previewPeers.prefix(upTo: 3)), animated: false)
+                let avatarsContent = previewPeersAvatarsContext.update(peers: previewPeers.count <= 3 ? previewPeers : Array(previewPeers.prefix(upTo: 3)), whitelist: nil, animated: false)
                 let avatarsSize = previewPeersAvatarsNode.update(
                     context: component.context,
                     content: avatarsContent,

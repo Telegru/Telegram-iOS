@@ -1080,7 +1080,7 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
     private var automaticPictureInPictureDisposable: Disposable?
     
     private var contentHiddenOverlayNode: ContentHiddenOverlayNode?
-    private var isContentAccessGranted: Bool = true
+    private var isContentAccessGranted: Bool? = nil
     private var childModeDisposable: Disposable?
     
     var playbackCompleted: (() -> Void)?
@@ -1558,8 +1558,10 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
                             strongSelf.videoNode?.playOnceWithSound(playAndRecord: false, seek: .none, actionAtEnd: isAnimated ? .loop : strongSelf.actionAtEnd)
                         }
 
-                        if let playbackRate = strongSelf.playbackRate {
-                            strongSelf.videoNode?.setBaseRate(playbackRate)
+                        Queue.mainQueue().after(0.1) {
+                            if let playbackRate = strongSelf.playbackRate {
+                                strongSelf.videoNode?.setBaseRate(playbackRate)
+                            }
                         }
                     }
                 }
@@ -1957,7 +1959,9 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
             switch contentInfo {
                 case let .message(message, _):
                     isAd = message.adAttribute != nil
-                self.footerContentNode.setMessage(message, displayInfo: !item.displayInfoOnTop, peerIsCopyProtected: item.peerIsCopyProtected, blurred: !self.isContentAccessGranted)
+                if let isContentAccessGranted {
+                    self.footerContentNode.setMessage(message, displayInfo: !item.displayInfoOnTop, peerIsCopyProtected: item.peerIsCopyProtected, blurred: !isContentAccessGranted)
+                }
                 case let .webPage(webPage, media, _):
                     self.footerContentNode.setWebPage(webPage, media: media)
             }
@@ -2098,13 +2102,16 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
                 self.videoNode?.isUserInteractionEnabled = self.videoNodeUserInteractionEnabled
                 self.moreBarButton.isUserInteractionEnabled = true
                 self.settingsBarButton.isUserInteractionEnabled = true
+                self.baseNavigationController = self.baseNavigationController
             }
             self.footerContentNode.setCompletelyHidden(false)
         } else {
             overlayNode.isHidden = false
             overlayNode.view.isUserInteractionEnabled = true
             transition.updateAlpha(node: overlayNode, alpha: 1.0)
-            
+            transition.updateAlpha(node: self.moreBarButton, alpha: 0.0)
+            self._rightBarButtonItems.set(.single([]))
+
             self.videoNode?.isUserInteractionEnabled = false
             self.moreBarButton.isUserInteractionEnabled = false
             self.settingsBarButton.isUserInteractionEnabled = false

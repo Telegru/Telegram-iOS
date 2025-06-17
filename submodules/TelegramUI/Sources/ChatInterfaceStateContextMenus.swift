@@ -1847,17 +1847,17 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
                     return generateTintedImage(image: TPIconManager.shared.icon(.contextMenuExclude), color: theme.actionSheet.primaryTextColor)
                 }, action: { c, f in
                     
-                    let _ = (context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
+                    let _ = (context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
                              |> take(1)
-                             |> deliverOnMainQueue).start(next: { sharedData in
-                        let dahlSettings = sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? .defaultSettings
+                             |> deliverOnMainQueue).start(next: { view in
+                        let dahlSettings = view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
                         var excludedChannels = dahlSettings.wallSettings.excludedChannels
                         let peerId = message.id.peerId
                         
                         if !excludedChannels.contains(peerId) {
                             excludedChannels.append(peerId)
                             let _ = updateDalSettingsInteractively(
-                                accountManager: context.sharedContext.accountManager,
+                                engine: context.engine,
                                 { settings in
                                     var updatedSettings = settings
                                     var updatedWallSettings = settings.wallSettings

@@ -1681,10 +1681,6 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
             storyState = groupReference.storyState
         }
         
-        if item.blurred {
-            storyState = nil
-        }
-        
         var peer: EnginePeer?
         var displayAsMessage = false
         var enablePreview = true
@@ -1716,8 +1712,8 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
         
         self.avatarNode.setStoryStats(storyStats: storyState.flatMap { storyState in
             return AvatarNode.StoryStats(
-                totalCount: item.blurred ? 0 : storyState.stats.totalCount,
-                unseenCount: item.blurred ? 0 : storyState.stats.unseenCount,
+                totalCount: item.blurred ? 1 : storyState.stats.totalCount,
+                unseenCount: item.blurred ? 1 : storyState.stats.unseenCount,
                 hasUnseenCloseFriendsItems: storyState.hasUnseenCloseFriends
             )
         }, presentationParams: AvatarNode.StoryPresentationParams(
@@ -1767,7 +1763,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
             }
 
             if peer.smallProfileImage != nil && overrideImage == nil {
-                self.avatarNode.setPeerV2(context: item.context, theme: item.presentationData.theme, peer: peer, overrideImage: overrideImage, emptyColor: item.presentationData.theme.list.mediaPlaceholderColor, clipStyle: isForumAvatar ? .roundedRect : item.presentationData.theme.squareStyle ? .rect : .round, synchronousLoad: synchronousLoads, displayDimensions: CGSize(width: avatarDiameter, height: avatarDiameter))
+                self.avatarNode.setPeerV2(context: item.context, theme: item.presentationData.theme, peer: peer, overrideImage: overrideImage, emptyColor: item.presentationData.theme.list.mediaPlaceholderColor, clipStyle: isForumAvatar ? .roundedRect : item.presentationData.theme.squareStyle ? .rect : .round, synchronousLoad: synchronousLoads, displayDimensions: CGSize(width: avatarDiameter, height: avatarDiameter), blurred: item.blurred)
             } else {
                 self.avatarNode.setPeer(context: item.context, theme: item.presentationData.theme, peer: peer, overrideImage: overrideImage, emptyColor: item.presentationData.theme.list.mediaPlaceholderColor, clipStyle: isForumAvatar ? .roundedRect : item.presentationData.theme.squareStyle ? .rect : .round, synchronousLoad: synchronousLoads, displayDimensions: CGSize(width: 60.0, height: 60.0), blurred: item.blurred, displayLetters: !item.blurred)
             }
@@ -3296,7 +3292,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
             let (mentionBadgeLayout, mentionBadgeApply) = mentionBadgeLayout(CGSize(width: rawContentWidth, height: CGFloat.greatestFiniteMagnitude), badgeDiameter, badgeFont, currentMentionBadgeImage, mentionBadgeContent)
             
             var actionButtonTitleNodeLayoutAndApply: (TextNodeLayout, () -> TextNode)?
-            if case .none = badgeContent, case .none = mentionBadgeContent, case let .chat(itemPeer) = contentPeer, case let .user(user) = itemPeer.chatMainPeer, let botInfo = user.botInfo, botInfo.flags.contains(.hasWebApp) {
+            if !item.blurred, case .none = badgeContent, case .none = mentionBadgeContent, case let .chat(itemPeer) = contentPeer, case let .user(user) = itemPeer.chatMainPeer, let botInfo = user.botInfo, botInfo.flags.contains(.hasWebApp) {
                 actionButtonTitleNodeLayoutAndApply = makeActionButtonTitleNodeLayout(TextNodeLayoutArguments(attributedString: NSAttributedString(string: item.presentationData.strings.ChatList_InlineButtonOpenApp, font: Font.semibold(floor(item.presentationData.fontSize.itemListBaseFontSize * 15.0 / 17.0)), textColor: theme.unreadBadgeActiveTextColor), backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: rawContentWidth, height: CGFloat.greatestFiniteMagnitude), alignment: .natural, cutout: nil, insets: UIEdgeInsets()))
             }
             
@@ -5302,7 +5298,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
     
     @objc private func avatarStoryTapGesture(_ recognizer: UITapGestureRecognizer) {
         if case .ended = recognizer.state {
-            guard let item = self.item, !item.blurred else {
+            guard let item = self.item else {
                 return
             }
             switch item.content {

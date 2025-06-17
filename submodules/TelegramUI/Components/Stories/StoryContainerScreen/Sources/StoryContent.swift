@@ -226,7 +226,8 @@ public final class StoryContentContextState {
         public let nextItemId: StoryId?
         public let allItems: [StoryContentItem]
         public let forwardInfoStories: [StoryId: Promise<EngineStoryItem?>]
-        
+        public let blurred: Bool
+
         var effectivePeer: EnginePeer {
             return self.item.itemPeer ?? self.peer
         }
@@ -239,7 +240,8 @@ public final class StoryContentContextState {
             previousItemId: StoryId?,
             nextItemId: StoryId?,
             allItems: [StoryContentItem],
-            forwardInfoStories: [StoryId: Promise<EngineStoryItem?>]
+            forwardInfoStories: [StoryId: Promise<EngineStoryItem?>],
+            blurred: Bool = false
         ) {
             self.peer = peer
             self.additionalPeerData = additionalPeerData
@@ -249,6 +251,7 @@ public final class StoryContentContextState {
             self.nextItemId = nextItemId
             self.allItems = allItems
             self.forwardInfoStories = forwardInfoStories
+            self.blurred = blurred
         }
         
         public static func ==(lhs: FocusedSlice, rhs: FocusedSlice) -> Bool {

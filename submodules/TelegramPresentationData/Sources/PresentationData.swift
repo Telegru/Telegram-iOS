@@ -13,6 +13,7 @@ import PresentationStrings
 import DAuth
 
 import TPUI
+import DSettingsPresentationData
 
 public struct PresentationDateTimeFormat: Equatable {
     public let timeFormat: PresentationTimeFormat
@@ -253,7 +254,6 @@ public func currentPresentationDataAndSettings(accountManager: AccountManager<Te
         var experimentalUISettings: PreferencesEntry?
         var contactSynchronizationSettings: PreferencesEntry?
         var stickerSettings: PreferencesEntry?
-        var dahlSettings: PreferencesEntry?
         
         init(
             localizationSettings: PreferencesEntry?,
@@ -266,8 +266,7 @@ public func currentPresentationDataAndSettings(accountManager: AccountManager<Te
             mediaDisplaySettings: PreferencesEntry?,
             experimentalUISettings: PreferencesEntry?,
             contactSynchronizationSettings: PreferencesEntry?,
-            stickerSettings: PreferencesEntry?,
-            dahlSettings: PreferencesEntry?
+            stickerSettings: PreferencesEntry?
         ) {
             self.localizationSettings = localizationSettings
             self.presentationThemeSettings = presentationThemeSettings
@@ -280,10 +279,8 @@ public func currentPresentationDataAndSettings(accountManager: AccountManager<Te
             self.experimentalUISettings = experimentalUISettings
             self.contactSynchronizationSettings = contactSynchronizationSettings
             self.stickerSettings = stickerSettings
-            self.dahlSettings = dahlSettings
         }
     }
-    
     return accountManager.transaction { transaction -> InternalData in
         let localizationSettings = transaction.getSharedData(SharedDataKeys.localizationSettings)
         let presentationThemeSettings = transaction.getSharedData(ApplicationSpecificSharedDataKeys.presentationThemeSettings)
@@ -296,7 +293,6 @@ public func currentPresentationDataAndSettings(accountManager: AccountManager<Te
         let experimentalUISettings = transaction.getSharedData(ApplicationSpecificSharedDataKeys.experimentalUISettings)
         let contactSynchronizationSettings = transaction.getSharedData(ApplicationSpecificSharedDataKeys.contactSynchronizationSettings)
         let stickerSettings = transaction.getSharedData(ApplicationSpecificSharedDataKeys.stickerSettings)
-        let dahlSettings = transaction.getSharedData(ApplicationSpecificSharedDataKeys.dalSettings)
         
         return InternalData(
             localizationSettings: localizationSettings,
@@ -309,12 +305,20 @@ public func currentPresentationDataAndSettings(accountManager: AccountManager<Te
             mediaDisplaySettings: mediaDisplaySettings,
             experimentalUISettings: experimentalUISettings,
             contactSynchronizationSettings: contactSynchronizationSettings,
-            stickerSettings: stickerSettings,
-            dahlSettings: dahlSettings
+            stickerSettings: stickerSettings
         )
     }
+    |> mapToSignal { internalData -> Signal<(InternalData, vkIcons: Bool, squareStyle: Bool), NoError> in
+        combineLatest(
+            DahlPresentationDataManager.shared.vkIcons |> take(1),
+            DahlPresentationDataManager.shared.squareStyle |> take(1)
+        )
+        |> map {
+            return (internalData, vkIcons: $0, squareStyle: $1)
+        }
+    }
     |> deliverOn(Queue(name: "PresentationData-Load", qos: .userInteractive))
-    |> map { internalData -> InitialPresentationDataAndSettings in
+    |> map { (internalData, vkIcons, squareStyle) -> InitialPresentationDataAndSettings in
         let localizationSettings: LocalizationSettings?
         if let current = internalData.localizationSettings?.get(LocalizationSettings.self) {
             localizationSettings = current
@@ -382,9 +386,6 @@ public func currentPresentationDataAndSettings(accountManager: AccountManager<Te
         
         let contactSettings: ContactSynchronizationSettings = internalData.contactSynchronizationSettings?.get(ContactSynchronizationSettings.self) ?? ContactSynchronizationSettings.defaultSettings
         
-        let dahlSettings = internalData.dahlSettings?.get(DalSettings.self) ?? .defaultSettings
-        let squareStyle = dahlSettings.appearanceSettings.squareStyle
-        
         let effectiveTheme: PresentationThemeReference
         var preferredBaseTheme: TelegramBaseTheme?
         let parameters = AutomaticThemeSwitchParameters(settings: themeSettings.automaticThemeSwitchSetting)
@@ -407,10 +408,10 @@ public func currentPresentationDataAndSettings(accountManager: AccountManager<Te
             }
         }
         
-        TPIconManager.shared.switchIconSet(use: dahlSettings.appearanceSettings.vkIcons ? DahlIconSet() : TGIconSet())
+        TPIconManager.shared.switchIconSet(use: vkIcons ? DahlIconSet() : TGIconSet())
         
         let effectiveColors = themeSettings.themeSpecificAccentColors[effectiveTheme.index]
-        let theme = makePresentationTheme(mediaBox: accountManager.mediaBox, themeReference: effectiveTheme, baseTheme: preferredBaseTheme, accentColor: effectiveColors?.colorFor(baseTheme: preferredBaseTheme ?? .day), bubbleColors: effectiveColors?.customBubbleColors ?? [], baseColor: effectiveColors?.baseColor, squareStyle: squareStyle, vkIcons: dahlSettings.appearanceSettings.vkIcons) ?? defaultPresentationTheme
+        let theme = makePresentationTheme(mediaBox: accountManager.mediaBox, themeReference: effectiveTheme, baseTheme: preferredBaseTheme, accentColor: effectiveColors?.colorFor(baseTheme: preferredBaseTheme ?? .day), bubbleColors: effectiveColors?.customBubbleColors ?? [], baseColor: effectiveColors?.baseColor, squareStyle: squareStyle, vkIcons: vkIcons) ?? defaultPresentationTheme
         
         var effectiveChatWallpaper: TelegramWallpaper = (themeSettings.themeSpecificChatWallpapers[coloredThemeIndex(reference: effectiveTheme, accentColor: effectiveColors)] ?? themeSettings.themeSpecificChatWallpapers[effectiveTheme.index]) ?? theme.chat.defaultWallpaper
         if case .builtin = effectiveChatWallpaper {
@@ -736,19 +737,9 @@ public func chatServiceBackgroundColor(wallpaper: TelegramWallpaper, mediaBox: M
 }
 
 public func updatedPresentationData(accountManager: AccountManager<TelegramAccountManagerTypes>, applicationInForeground: Signal<Bool, NoError>, systemUserInterfaceStyle: Signal<WindowUserInterfaceStyle, NoError>) -> Signal<PresentationData, NoError> {
-    let squareStyleSignal = accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-    |> map { sharedData -> DalSettings in
-        return sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
-    }
-    |> map { $0.appearanceSettings.squareStyle }
-    |> distinctUntilChanged
+    let squareStyleSignal = DahlPresentationDataManager.shared.squareStyle |> distinctUntilChanged
     
-    let vkIconsSignal = accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-    |> map { sharedData -> DalSettings in
-        return sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
-    }
-    |> map { $0.appearanceSettings.vkIcons }
-    |> distinctUntilChanged
+    let vkIconsSignal = DahlPresentationDataManager.shared.vkIcons |> distinctUntilChanged
     
     return combineLatest(
         accountManager.sharedData(keys: [SharedDataKeys.localizationSettings, ApplicationSpecificSharedDataKeys.presentationThemeSettings, ApplicationSpecificSharedDataKeys.contactSynchronizationSettings]),

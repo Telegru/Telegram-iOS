@@ -359,6 +359,7 @@ final class ContactsControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                 storySubscriptions: nil,
                 storiesIncludeHidden: true,
                 uploadProgress: [:],
+                whitelist: nil,
                 tabsNode: tabsNode,
                 tabsNodeIsSearch: tabsNodeIsSearch,
                 accessoryPanelContainer: nil,

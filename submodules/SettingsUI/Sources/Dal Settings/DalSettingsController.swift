@@ -781,7 +781,7 @@ public func dalsettingsController(
         },
         updateHidePublishStoriesButton: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.hidePublishStoriesButton = value
@@ -791,7 +791,7 @@ public func dalsettingsController(
         },
         updateHideStories: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.hideStories = value
@@ -801,7 +801,7 @@ public func dalsettingsController(
         },
         updateHideViewedStories: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.hideViewedStories = value
@@ -811,7 +811,7 @@ public func dalsettingsController(
         },
         updateHidePhone: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.hidePhone = value
@@ -821,7 +821,7 @@ public func dalsettingsController(
         },
         updateDisableReadHistory: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.disableReadHistory = value
@@ -831,7 +831,7 @@ public func dalsettingsController(
         },
         updateOfflineMode: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.offlineMode = value
@@ -843,7 +843,7 @@ public func dalsettingsController(
                 context: context,
                 updateCamera: { newCamera in
                     let _ = updateDalSettingsInteractively(
-                        accountManager: context.sharedContext.accountManager,
+                        engine: context.engine,
                         { settings in
                             var settings = settings
                             settings.videoMessageCamera = CameraType(rawValue: newCamera) ?? .undefined
@@ -855,7 +855,7 @@ public func dalsettingsController(
             pushControllerImpl?(cameraSettingsController)
         }, updateCallConfirmation: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.callConfirmation = value
@@ -864,7 +864,7 @@ public func dalsettingsController(
             ).start()
         }, updateSendAudioConfirmation: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.sendAudioConfirmation = value
@@ -873,7 +873,7 @@ public func dalsettingsController(
             ).start()
         }, updateChatsFoldersAtBottom: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.chatsFoldersAtBottom = value
@@ -882,7 +882,7 @@ public func dalsettingsController(
             ).start()
         }, updateHideAllChatsFolder: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.hideAllChatsFolder = value
@@ -891,7 +891,7 @@ public func dalsettingsController(
             ).start()
         }, updateInfiniteScrolling: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.infiniteScrolling = value
@@ -900,7 +900,7 @@ public func dalsettingsController(
             ).start()
         }, updateShowRecentChats: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.showRecentChats = value
@@ -910,7 +910,10 @@ public func dalsettingsController(
         }
     )
     
-    let sharedData = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
+    let dahlSettingsSignal = context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+    |> map { view -> DalSettings in
+        return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
+    }
     
     let isProxyEnabled = Promise<Bool>()
     isProxyEnabled.set(
@@ -932,19 +935,12 @@ public func dalsettingsController(
     }
 
     let signal = combineLatest(
-        sharedData,
+        dahlSettingsSignal,
         context.sharedContext.presentationData,
-        context.account.postbox.preferencesView(keys: [ApplicationSpecificSharedDataKeys.dalSettings]),
         isProxyEnabled.get(),
         tabBarItemSignal
     )
-    |> map { sharedData, presentationData, preferences, isProxyEnabledValue, tabBarItem -> (ItemListControllerState, (ItemListNodeState, Any)) in
-        let dalSettings: DalSettings
-        if let entry = sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) {
-            dalSettings = entry
-        } else {
-            dalSettings = DalSettings.defaultSettings
-        }
+    |> map { dalSettings, presentationData, isProxyEnabledValue, tabBarItem -> (ItemListControllerState, (ItemListNodeState, Any)) in
         
         let entries = dalSettingsEntries(
             isProxyEnabled: isProxyEnabledValue,
@@ -960,7 +956,7 @@ public func dalsettingsController(
             chatsFoldersAtBottom: dalSettings.chatsFoldersAtBottom,
             hideAllChatsFolder: dalSettings.hideAllChatsFolder,
             infiniteScrolling: dalSettings.infiniteScrolling,
-            showRecentChats: dalSettings.showRecentChats ?? false,
+            showRecentChats: dalSettings.showRecentChats,
             presentationData: presentationData
         )
         

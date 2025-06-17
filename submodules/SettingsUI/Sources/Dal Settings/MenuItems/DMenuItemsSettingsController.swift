@@ -455,7 +455,7 @@ public func dMenuItemsSettingsController(context: AccountContext) -> ViewControl
     
     let arguments = DMenuItemsSettingsArguments { value in
         let _ = updateDalSettingsInteractively(
-            accountManager: context.sharedContext.accountManager,
+            engine: context.engine,
             { settings in
                 var settings = settings
                 var itemsSettings = settings.menuItemsSettings
@@ -466,7 +466,7 @@ public func dMenuItemsSettingsController(context: AccountContext) -> ViewControl
         ).start()
     } updateWallet: { value in
         let _ = updateDalSettingsInteractively(
-            accountManager: context.sharedContext.accountManager,
+            engine: context.engine,
             { settings in
                 var settings = settings
                 var itemsSettings = settings.menuItemsSettings
@@ -477,7 +477,7 @@ public func dMenuItemsSettingsController(context: AccountContext) -> ViewControl
         ).start()
     } updateSavedMessages: { value in
         let _ = updateDalSettingsInteractively(
-            accountManager: context.sharedContext.accountManager,
+            engine: context.engine,
             { settings in
                 var settings = settings
                 var itemsSettings = settings.menuItemsSettings
@@ -488,7 +488,7 @@ public func dMenuItemsSettingsController(context: AccountContext) -> ViewControl
         ).start()
     } updateRecentCalls: { value in
         let _ = updateDalSettingsInteractively(
-            accountManager: context.sharedContext.accountManager,
+            engine: context.engine,
             { settings in
                 var settings = settings
                 var itemsSettings = settings.menuItemsSettings
@@ -499,7 +499,7 @@ public func dMenuItemsSettingsController(context: AccountContext) -> ViewControl
         ).start()
     } updateDevices: { value in
         let _ = updateDalSettingsInteractively(
-            accountManager: context.sharedContext.accountManager,
+            engine: context.engine,
             { settings in
                 var settings = settings
                 var itemsSettings = settings.menuItemsSettings
@@ -510,7 +510,7 @@ public func dMenuItemsSettingsController(context: AccountContext) -> ViewControl
         ).start()
     } updateChatFolders: { value in
         let _ = updateDalSettingsInteractively(
-            accountManager: context.sharedContext.accountManager,
+            engine: context.engine,
             { settings in
                 var settings = settings
                 var itemsSettings = settings.menuItemsSettings
@@ -521,7 +521,7 @@ public func dMenuItemsSettingsController(context: AccountContext) -> ViewControl
         ).start()
     } updatePremium: { value in
         let _ = updateDalSettingsInteractively(
-            accountManager: context.sharedContext.accountManager,
+            engine: context.engine,
             { settings in
                 var settings = settings
                 var itemsSettings = settings.menuItemsSettings
@@ -532,7 +532,7 @@ public func dMenuItemsSettingsController(context: AccountContext) -> ViewControl
         ).start()
     } updateMyStars: { value in
         let _ = updateDalSettingsInteractively(
-            accountManager: context.sharedContext.accountManager,
+            engine: context.engine,
             { settings in
                 var settings = settings
                 var itemsSettings = settings.menuItemsSettings
@@ -543,7 +543,7 @@ public func dMenuItemsSettingsController(context: AccountContext) -> ViewControl
         ).start()
     } updateBusiness: { value in
         let _ = updateDalSettingsInteractively(
-            accountManager: context.sharedContext.accountManager,
+            engine: context.engine,
             { settings in
                 var settings = settings
                 var itemsSettings = settings.menuItemsSettings
@@ -554,7 +554,7 @@ public func dMenuItemsSettingsController(context: AccountContext) -> ViewControl
         ).start()
     } updateSendGift: { value in
         let _ = updateDalSettingsInteractively(
-            accountManager: context.sharedContext.accountManager,
+            engine: context.engine,
             { settings in
                 var settings = settings
                 var itemsSettings = settings.menuItemsSettings
@@ -565,7 +565,7 @@ public func dMenuItemsSettingsController(context: AccountContext) -> ViewControl
         ).start()
     } updateSupport: { value in
         let _ = updateDalSettingsInteractively(
-            accountManager: context.sharedContext.accountManager,
+            engine: context.engine,
             { settings in
                 var settings = settings
                 var itemsSettings = settings.menuItemsSettings
@@ -576,7 +576,7 @@ public func dMenuItemsSettingsController(context: AccountContext) -> ViewControl
         ).start()
     } updateFaq: { value in
         let _ = updateDalSettingsInteractively(
-            accountManager: context.sharedContext.accountManager,
+            engine: context.engine,
             { settings in
                 var settings = settings
                 var itemsSettings = settings.menuItemsSettings
@@ -587,7 +587,7 @@ public func dMenuItemsSettingsController(context: AccountContext) -> ViewControl
         ).start()
     } updateTips: { value in
         let _ = updateDalSettingsInteractively(
-            accountManager: context.sharedContext.accountManager,
+            engine: context.engine,
             { settings in
                 var settings = settings
                 var itemsSettings = settings.menuItemsSettings
@@ -598,10 +598,9 @@ public func dMenuItemsSettingsController(context: AccountContext) -> ViewControl
         ).start()
     }
 
-    
-    let menuItemsSignal = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
+    let menuItemsSignal = context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
     |> map {
-        $0.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self)?.menuItemsSettings ?? MenuItemsSettings.default
+        $0.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self)?.menuItemsSettings ?? MenuItemsSettings.default
     }
     |> take(1)
     |> mapToSignal { settings -> Signal<MenuItemsSettings, NoError> in

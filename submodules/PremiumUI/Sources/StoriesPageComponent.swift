@@ -18,11 +18,13 @@ private final class AvatarComponent: Component {
     let context: AccountContext
     let theme: PresentationTheme
     let peer: EnginePeer
+    let blurred: Bool
 
-    init(context: AccountContext, theme: PresentationTheme, peer: EnginePeer) {
+    init(context: AccountContext, theme: PresentationTheme, peer: EnginePeer, blurred: Bool) {
         self.context = context
         self.theme = theme
         self.peer = peer
+        self.blurred = blurred
     }
 
     static func ==(lhs: AvatarComponent, rhs: AvatarComponent) -> Bool {
@@ -33,6 +35,9 @@ private final class AvatarComponent: Component {
             return false
         }
         if lhs.peer != rhs.peer {
+            return false
+        }
+        if lhs.blurred != rhs.blurred {
             return false
         }
         return true
@@ -68,7 +73,9 @@ private final class AvatarComponent: Component {
                 context: component.context,
                 theme: component.theme,
                 peer: component.peer,
-                synchronousLoad: true
+                synchronousLoad: true,
+                blurred: component.blurred,
+                displayLetters: !component.blurred
             )
             
             let colors = [
@@ -276,24 +283,31 @@ private final class StoriesListComponent: CombinedComponent {
         var premiumLimits: EngineConfiguration.UserLimits = .defaultValue
         
         var accountPeer: EnginePeer?
+        var blurred: Bool = false
         
         init(context: AccountContext) {
             self.context = context
           
             super.init()
             
-            self.disposable = (context.engine.data.get(
-                TelegramEngine.EngineData.Item.Configuration.UserLimits(isPremium: false),
-                TelegramEngine.EngineData.Item.Configuration.UserLimits(isPremium: true),
-                TelegramEngine.EngineData.Item.Peer.Peer(id: context.account.peerId)
+            self.disposable = (combineLatest(
+                context.engine.data.get(
+                    TelegramEngine.EngineData.Item.Configuration.UserLimits(isPremium: false),
+                    TelegramEngine.EngineData.Item.Configuration.UserLimits(isPremium: true),
+                    TelegramEngine.EngineData.Item.Peer.Peer(id: context.account.peerId)
+                ),
+                context.childModeState
             )
-            |> deliverOnMainQueue).start(next: { [weak self] limits, premiumLimits, accountPeer in
-                if let strongSelf = self {
-                    strongSelf.limits = limits
-                    strongSelf.premiumLimits = premiumLimits
-                    strongSelf.accountPeer = accountPeer
-                    strongSelf.updated(transition: .immediate)
-                }
+            |> deliverOnMainQueue)
+            .start(next: { [weak self] data, childModeState in
+                let (limits, premiumLimits, accountPeer) = data
+                guard let strongSelf = self else { return }
+                
+                strongSelf.limits = limits
+                strongSelf.premiumLimits = premiumLimits
+                strongSelf.accountPeer = accountPeer
+                strongSelf.blurred = accountPeer == nil ? false : childModeState.isPeerAllowed(accountPeer!.id)
+                strongSelf.updated(transition: .immediate)
             })
         }
         
@@ -336,7 +350,8 @@ private final class StoriesListComponent: CombinedComponent {
                         component: AnyComponent(AvatarComponent(
                             context: context.component.context,
                             theme: theme,
-                            peer: accountPeer
+                            peer: accountPeer,
+                            blurred: context.state.blurred
                         ))
                     )
                 )

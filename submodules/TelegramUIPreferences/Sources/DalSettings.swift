@@ -9,6 +9,25 @@ public enum CameraType: String, Codable, Equatable {
     case front = "front"
     case back = "back"
     case undefined = "undefined"
+    
+    public var identifier: Int32 {
+        switch self {
+        case .front: return 0
+        case .back: return 1
+        case .undefined: return 2
+        }
+    }
+    
+    public init(identifier: Int32) {
+        switch identifier {
+        case 0:
+            self.init(rawValue: CameraType.front.rawValue)!
+        case 1:
+            self.init(rawValue: CameraType.back.rawValue)!
+        default:
+            self.init(rawValue: CameraType.undefined.rawValue)!
+        }
+    }
 }
 
 public enum DChatListViewStyle: Int32, CaseIterable, Codable, Equatable {
@@ -50,7 +69,7 @@ public struct DalSettings: Codable, Equatable {
     public var showChatFolders: Bool
     
     //Недавние чаты
-    public var showRecentChats: Bool?
+    public var showRecentChats: Bool
     
     public var chatFullscreenInput: Bool
 
@@ -77,7 +96,7 @@ public struct DalSettings: Codable, Equatable {
             hideAllChatsFolder: false,
             infiniteScrolling: false,
             showChatFolders: true,
-            showRecentChats: nil,
+            showRecentChats: false,
             chatsListViewType: .tripleLine,
             chatFullscreenInput: false
         )
@@ -105,7 +124,7 @@ public struct DalSettings: Codable, Equatable {
         hideAllChatsFolder: Bool,
         infiniteScrolling: Bool,
         showChatFolders: Bool,
-        showRecentChats: Bool?,
+        showRecentChats: Bool,
         chatsListViewType: DChatListViewStyle,
         chatFullscreenInput: Bool
     ) {
@@ -165,9 +184,7 @@ public struct DalSettings: Codable, Equatable {
         self.hideAllChatsFolder = (try container.decodeIfPresent(Int32.self, forKey: "hideAllChatsFolder") ?? 0) != 0
         self.infiniteScrolling = (try container.decodeIfPresent(Int32.self, forKey: "infiniteScrolling") ?? 0) != 0
         self.showChatFolders = (try container.decodeIfPresent(Bool.self, forKey: "showChatFolders") ?? true)
-        if let showRecentChats = (try container.decodeIfPresent(Int32.self, forKey: "showRecentChats")) {
-            self.showRecentChats = showRecentChats != 0
-        }
+        self.showRecentChats = (try container.decodeIfPresent(Int32.self, forKey: "showRecentChats") ?? 0) != 0
         
         if let listViewString = try container.decodeIfPresent(Int32.self, forKey: "chatsListViewType"),
            let listView = DChatListViewStyle(rawValue: listViewString) {
@@ -205,9 +222,7 @@ public struct DalSettings: Codable, Equatable {
         try container.encode((self.hideAllChatsFolder ? 1 : 0) as Int32, forKey: "hideAllChatsFolder")
         try container.encode((self.infiniteScrolling ? 1 : 0) as Int32, forKey: "infiniteScrolling")
         try container.encode(self.showChatFolders, forKey: "showChatFolders")
-        if let showRecentChats = self.showRecentChats {
-            try container.encode((showRecentChats ? 1 : 0) as Int32, forKey: "showRecentChats")
-        }
+        try container.encode((self.showRecentChats ? 1 : 0) as Int32, forKey: "showRecentChats")
         try container.encode(self.chatsListViewType.rawValue, forKey: "chatsListViewType")
         try container.encode(self.chatFullscreenInput, forKey: "chatFullscreenInput")
     }
@@ -228,19 +243,21 @@ public struct DalSettings: Codable, Equatable {
     }
 }
 
-public func updateDalSettingsInteractively(accountManager: AccountManager<TelegramAccountManagerTypes>, _ f: @escaping (DalSettings) -> DalSettings) -> Signal<Void, NoError> {
-    return accountManager.transaction { transaction -> Void in
-        transaction.updateSharedData(ApplicationSpecificSharedDataKeys.dalSettings, { entry in
+public func updateDalSettingsInteractively(engine: TelegramEngine, _ f: @escaping (DalSettings) -> DalSettings) -> Signal<Void, NoError> {
+    return Signal { generator in
+        return engine.preferences.update(id: ApplicationSpecificPreferencesKeys.dahlSettings, { entry in
             let currentSettings: DalSettings
             if let entry = entry?.get(DalSettings.self) {
                 currentSettings = entry
             } else {
                 currentSettings = DalSettings.defaultSettings
             }
-            return PreferencesEntry(f(currentSettings))
+            return SharedPreferencesEntry(f(currentSettings))
+        })
+        .start(completed: {
+            generator.putNext(())
+            generator.putCompletion()
         })
     }
-    |> mapToSignal { _ in
-        return .complete()
-    }
 }
+

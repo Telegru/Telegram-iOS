@@ -2,6 +2,7 @@ import Foundation
 import SwiftSignalKit
 import Postbox
 import TelegramCore
+import AccountContext
 import TelegramUIPreferences
 
 final class OnlineLockManager {
@@ -11,8 +12,8 @@ final class OnlineLockManager {
     private var settingsDisposable: Disposable?
     private var currentBlockState: Bool = false
     
-    init(context: Signal<SharedApplicationContext, NoError>) {
-        self.accountsDisposable = (context
+    init(context: Signal<AccountContext, NoError>, sharedContext: Signal<SharedApplicationContext, NoError>) {
+        self.accountsDisposable = (sharedContext
         |> mapToSignal { sharedAccountContext -> Signal<[(Account, Bool)], NoError> in
             return sharedAccountContext.sharedContext.activeAccountContexts
             |> map { _, accounts, _ in
@@ -34,25 +35,27 @@ final class OnlineLockManager {
             }
         })
         
-        self.settingsDisposable = (context
-        |> mapToSignal { sharedAccountContext -> Signal<Bool, NoError> in
-            return (sharedAccountContext.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-        |> map { sharedData -> Bool in
-//                if let currentSettings = sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) {
-//                    return currentSettings.offlineMode
-//                } else {
-                    return DalSettings.defaultSettings.offlineMode
-//                }
-            }
-        |> distinctUntilChanged)
-        }
-        |> deliverOnMainQueue).start(next: { [weak self] shouldBlock in
-            guard let strongSelf = self else {
-                return
-            }
-            strongSelf.currentBlockState = shouldBlock
-            strongSelf.applyBlockState(shouldBlock)
-        })
+        self.settingsDisposable = (
+            (
+                context
+                |> mapToSignal { context -> Signal<Bool, NoError> in
+                    context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+                    |> map { view -> DalSettings in
+                        return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? .defaultSettings
+                    } |> map { _ -> Bool in
+                        return DalSettings.defaultSettings.offlineMode
+                    }
+                }
+                |> distinctUntilChanged
+                |> deliverOnMainQueue
+            ).start(next: { [weak self] shouldBlock in
+                guard let strongSelf = self else {
+                    return
+                }
+                strongSelf.currentBlockState = shouldBlock
+                strongSelf.applyBlockState(shouldBlock)
+            })
+        )
     }
     
     deinit {

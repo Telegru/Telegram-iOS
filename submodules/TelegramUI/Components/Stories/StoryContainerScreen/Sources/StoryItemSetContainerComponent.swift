@@ -44,6 +44,7 @@ import StoryFooterPanelComponent
 import TelegramNotices
 import SliderContextItem
 import SaveProgressScreen
+import ContentHiddenOverlayNode
 
 public final class StoryAvailableReactions: Equatable {
     let reactionItems: [ReactionItem]
@@ -118,6 +119,7 @@ public final class StoryItemSetContainerComponent: Component {
     public let close: () -> Void
     public let navigate: (NavigationDirection) -> Void
     public let delete: () -> Void
+    public let requestAccessAction: () -> Void
     public let markAsSeen: (StoryId) -> Void
     public let reorder: () -> Void
     public let controller: () -> ViewController?
@@ -159,6 +161,7 @@ public final class StoryItemSetContainerComponent: Component {
         reorder: @escaping () -> Void,
         controller: @escaping () -> ViewController?,
         toggleAmbientMode: @escaping () -> Void,
+        requestAccessAction: @escaping () -> Void,
         keyboardInputData: Signal<ChatEntityKeyboardInputNode.InputData, NoError>,
         closeFriends: Promise<[EnginePeer]>,
         blockedPeers: BlockedPeersContext?,
@@ -201,6 +204,7 @@ public final class StoryItemSetContainerComponent: Component {
         self.sharedViewListsContext = sharedViewListsContext
         self.stealthModeTimeout = stealthModeTimeout
         self.isDismissed = isDismissed
+        self.requestAccessAction = requestAccessAction
     }
     
     public static func ==(lhs: StoryItemSetContainerComponent, rhs: StoryItemSetContainerComponent) -> Bool {
@@ -477,6 +481,8 @@ public final class StoryItemSetContainerComponent: Component {
         private var audioRecorderStatusDisposable: Disposable?
         private var videoRecorderDisposable: Disposable?
         
+        private var contentHiddenOverlayNode: ContentHiddenOverlayNode?
+        
         private weak var voiceMessagesRestrictedTooltipController: TooltipController?
         
         let transitionCloneContainerView: UIView
@@ -554,11 +560,15 @@ public final class StoryItemSetContainerComponent: Component {
             self.scroller.delegate = self
             self.itemsContainerView.addGestureRecognizer(self.scroller.panGestureRecognizer)
             
+            let overlayNode = ContentHiddenOverlayNode(contentType: .stories)
+            
+            self.contentHiddenOverlayNode = overlayNode
             self.componentContainerView.addSubview(self.itemsContainerView)
+            self.componentContainerView.addSubview(overlayNode.view)
             self.componentContainerView.addSubview(self.controlsNavigationClippingView)
             self.componentContainerView.addSubview(self.controlsClippingView)
             self.componentContainerView.addSubview(self.controlsContainerView)
-            
+
             self.controlsClippingView.addSubview(self.contentDimView)
             self.controlsNavigationClippingView.addSubview(self.topContentGradientView)
             self.layer.addSublayer(self.bottomContentGradientLayer)
@@ -710,6 +720,10 @@ public final class StoryItemSetContainerComponent: Component {
                     self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.4, curve: .spring)))
                 }
             })
+        }
+        
+        private func handleContentHiddenAccessRequest() {
+            
         }
         
         required init?(coder: NSCoder) {
@@ -1687,6 +1701,12 @@ public final class StoryItemSetContainerComponent: Component {
                             displayFooter = true
                             displayFooterViews = false
                         }
+                        
+                        if self.component?.slice.blurred == true {
+                            displayFooter = false
+                            displayFooterViews = false
+                        }
+                        
                         if component.slice.item.storyItem.isForwardingDisabled {
                             canShare = false
                         }
@@ -2472,7 +2492,68 @@ public final class StoryItemSetContainerComponent: Component {
                     )
                     visibleItemView.layer.animateScale(from: 1.0, to: innerScale, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: false)
                 }
+                
+                if let overlayNode = self.contentHiddenOverlayNode?.view {
+                    let innerScale = innerSourceLocalFrame.width / overlayNode.bounds.width
+                    
+                    var adjustedInnerSourceLocalFrame = innerSourceLocalFrame
+                    if !transitionOut.destinationIsAvatar {
+                        let innerSourceSize = overlayNode.bounds.size.aspectFilled(adjustedInnerSourceLocalFrame.size)
+                        adjustedInnerSourceLocalFrame.origin.y += (adjustedInnerSourceLocalFrame.height - innerSourceSize.height) * 0.5
+                        adjustedInnerSourceLocalFrame.size.height = innerSourceSize.height
+                    }
+                    
+                    let innerFromFrame = CGRect(origin: CGPoint(x: adjustedInnerSourceLocalFrame.minX, y: adjustedInnerSourceLocalFrame.minY), size: CGSize(width: adjustedInnerSourceLocalFrame.width, height: overlayNode.bounds.height * innerScale))
+                    
+                    overlayNode.layer.animatePosition(
+                        from: overlayNode.layer.position,
+                        to: CGPoint(
+                            x: innerFromFrame.midX,
+                            y: innerFromFrame.midY
+                        ),
+                        duration: 0.12,
+                        timingFunction: kCAMediaTimingFunctionSpring,
+                        removeOnCompletion: false
+                    )
+                    
+                    overlayNode.layer.animateBounds(
+                        from: overlayNode.bounds,
+                        to: CGRect(origin: CGPoint(x: adjustedInnerSourceLocalFrame.minX, y: adjustedInnerSourceLocalFrame.minY), size: adjustedInnerSourceLocalFrame.size),
+                        duration: 0.12,
+                        timingFunction: kCAMediaTimingFunctionSpring,
+                        removeOnCompletion: false
+                    )
+                    
+                    if overlayNode.layer.cornerRadius != transitionOut.destinationCornerRadius {
+                        overlayNode.layer.animate(
+                            from: overlayNode.layer.cornerRadius as NSNumber,
+                            to: transitionOut.destinationCornerRadius as NSNumber,
+                            keyPath: "cornerRadius",
+                            timingFunction: kCAMediaTimingFunctionSpring,
+                            duration: 0.12,
+                            removeOnCompletion: false
+                        )
+                    }
+                    
+                    let currentAlpha = overlayNode.alpha
+                    overlayNode.layer.animateAlpha(
+                        from: currentAlpha,
+                        to: 0.0,
+                        duration: 0.12,
+                        removeOnCompletion: false
+                    )
+                    
+                    overlayNode.layer.animateScale(
+                        from: 1.0,
+                        to: innerScale,
+                        duration: 0.12,
+                        timingFunction: kCAMediaTimingFunctionSpring,
+                        removeOnCompletion: false
+                    )
+                }
             }
+            
+            
             
             self.closeButton.layer.animateScale(from: 1.0, to: 0.001, duration: 0.3, delay: 0.0, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: false, completion: { _ in
                 for cleanup in cleanups {
@@ -2769,7 +2850,7 @@ public final class StoryItemSetContainerComponent: Component {
             if case let .user(user) = component.slice.peer, let _ = user.botInfo {
                 showMessageInputPanel = false
             }
-            
+  
             var isUnsupported = false
             var disabledPlaceholder: MessageInputPanelComponent.DisabledPlaceholder?
             
@@ -3884,7 +3965,7 @@ public final class StoryItemSetContainerComponent: Component {
                 containerSize: CGSize(width: 33.0, height: 64.0)
             )
             
-            if let soundButtonView = self.soundButton.view {
+            if let soundButtonView = self.soundButton.view, !component.slice.blurred {
                 if soundButtonView.superview == nil {
                     self.controlsClippingView.addSubview(soundButtonView)
                 }
@@ -4043,7 +4124,7 @@ public final class StoryItemSetContainerComponent: Component {
             var currentCenterInfoItem: InfoItem?
             if let focusedItem {
                 var counters: StoryAuthorInfoComponent.Counters?
-                if focusedItem.dayCounters != nil, let position = focusedItem.position {
+                if focusedItem.dayCounters != nil, let position = focusedItem.position, !component.slice.blurred {
                     counters = StoryAuthorInfoComponent.Counters(
                         position: position,
                         totalCount: component.slice.totalCount
@@ -4200,7 +4281,7 @@ public final class StoryItemSetContainerComponent: Component {
                 }
             }
             
-            if !isUnsupported, !component.slice.item.storyItem.text.isEmpty || component.slice.item.storyItem.forwardInfo != nil {
+            if !isUnsupported, !component.slice.item.storyItem.text.isEmpty || component.slice.item.storyItem.forwardInfo != nil, !component.slice.blurred {
                 var captionItemTransition = transition
                 let captionItem: CaptionItem
                 if let current = self.captionItem {
@@ -4451,7 +4532,7 @@ public final class StoryItemSetContainerComponent: Component {
                 effectiveDisplayReactions = true
             }
             
-            if let reactionItems = component.availableReactions?.reactionItems, effectiveDisplayReactions {
+            if !component.slice.blurred, let reactionItems = component.availableReactions?.reactionItems, effectiveDisplayReactions {
                 let reactionContextNode: ReactionContextNode
                 var reactionContextNodeTransition = transition
                 if let current = self.reactionContextNode {
@@ -4922,6 +5003,10 @@ public final class StoryItemSetContainerComponent: Component {
                     count = dayCounters.totalCount
                 }
                 
+                if component.slice.blurred {
+                    count = 1
+                }
+                
                 let isSeeking = component.isProgressPaused && component.hideUI && isVideo
                 
                 var navigationStripTransition = transition
@@ -5004,6 +5089,25 @@ public final class StoryItemSetContainerComponent: Component {
                 if !self.isAnimatingOut && !component.isDismissed {
                     component.presentController(scheduledStoryUnpinnedUndoOverlay, nil)
                 }
+            }
+            
+            if component.slice.blurred, let contentHiddenOverlayNode = self.contentHiddenOverlayNode {
+                let overlayFrame = CGRect(origin: CGPoint.zero, size: self.frame.size)
+                transition.setFrame(view: contentHiddenOverlayNode.view, frame: overlayFrame)
+                contentHiddenOverlayNode.frame = overlayFrame
+                contentHiddenOverlayNode.update(theme: component.theme, strings: component.strings)
+                self.displayLikeReactions = false
+                if let reactionContextNode = self.reactionContextNode {
+                    transition.setPosition(view: reactionContextNode.view, position: CGPoint(x: 0, y: -1000))
+                }
+                if let view = self.inputPanel.view {
+                    transition.setPosition(view: view, position: CGPoint(x: 0, y: -1000))
+                }
+                if let view = self.moreButton.view {
+                    transition.setAlpha(view: view, alpha: 0.0)
+                }
+                transition.setAlpha(view: itemsContainerView, alpha: 0.0)
+                contentHiddenOverlayNode.requestAccessAction = component.requestAccessAction
             }
             
             return contentSize

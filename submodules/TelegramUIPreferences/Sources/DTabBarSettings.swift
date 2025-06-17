@@ -7,9 +7,6 @@ public enum DAppTab: Int, Codable, CaseIterable {
     case contacts
     case calls
     case dahlSettings
-//    case wallet
-//    case apps
-//    case channels
     case wall
     
     public var isAlwaysShow: Bool {

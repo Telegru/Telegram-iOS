@@ -840,8 +840,8 @@ public class GalleryController: ViewController, StandalonePresentableController,
         
         self.disposable.set(combineLatest(
             messageView,
-            self.context.account.postbox.preferencesView(keys: [PreferencesKeys.appConfiguration]),
-            translateToLanguage,
+            self.context.account.postbox.preferencesView(keys: [PreferencesKeys.appConfiguration]) |> take(1),
+            translateToLanguage |> take(1),
             whitelist
         ).start(next: { [weak self] view, preferencesView, translateToLanguage, whitelist in
             let f: () -> Void = {

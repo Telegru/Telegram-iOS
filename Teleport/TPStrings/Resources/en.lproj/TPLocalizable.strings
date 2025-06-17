@@ -211,6 +211,12 @@
 "DahlSettings.PremiumSettings.AnimatedReactions" = "Animated reactions";
 "DahlSettings.PremiumSettings.AnimatedPremiumStickers" = "Animation of premium stickers";
 
+// Settings recover
+
+"DahlSettings.Recover.Alert.Title" = "Restore settings?";
+"DahlSettings.Recover.Alert.Subtitle" = "Please restart the app to restore your Dahl settings.";
+"DahlSettings.Recover.Alert.Recover" = "Restore";
+"DahlSettings.Recover.Alert.Cancel" = "Keep current";
 
 // Wallet
 "Wallet.TabTitle" = "Wallet";
@@ -289,6 +295,7 @@
 "ChildMode.GroupHidden" = "Group hidden";
 "ChildMode.ChannelHidden" = "Channel hidden";
 "ChildMode.ContentHidden" = "Contact hidden";
+"ChildMode.StoriesHidden" = "Истории скрыты";
 
 "ChildMode.LinkHiddenDescription" = "Tap \"Ask Permission\"\nand wait for confirmation\nto see the link from chat";
 "ChildMode.FileHiddenDescription" = "Tap \"Ask Permission\"\nand wait for confirmation\nto see the file from chat";
@@ -297,6 +304,7 @@
 "ChildMode.ChatHiddenDescription" = "Tap \"Ask Permission\"\nand wait for confirmation\nto read messages";
 "ChildMode.ChannelHiddenDescription" = "Tap \"Ask Permission\"\nand wait for confirmation\nto start reading channel messages";
 "ChildMode.GroupHiddenDescription" = "Tap \"Ask Permission\"\nand wait for confirmation\nto start chatting";
+"ChildMode.StoriesHiddenDescription" = "Tap \"Ask Permission\"\nand wait for confirmation\nto view contact's stories";
 
 "ChildMode.Link.AvailableAfterConfirmation" = "Chat and link will be available after confirmation";
 "ChildMode.File.AvailableAfterConfirmation" = "Chat and file will be available after confirmation";

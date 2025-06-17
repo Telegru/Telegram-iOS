@@ -228,7 +228,8 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
     private var storySubscriptionsDisposable: Disposable?
     private var preloadStorySubscriptionsDisposable: Disposable?
     private var preloadStoryResourceDisposables: [MediaId: Disposable] = [:]
-    
+    private var childModeDisposable: Disposable?
+
     private var sharedOpenStoryProgressDisposable = MetaDisposable()
     
     var currentTooltipUpdateTimer: Foundation.Timer?
@@ -799,26 +800,23 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             }
         })
         
-        let dalSettings = self.context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-            |> map { sharedData -> DalSettings in
-            return sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
+        let dalSettings = self.context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+            |> map { view -> DalSettings in
+            return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
         }
         
-        let isChildModeActive = (self.context.childModeManager?.isChildModeActive ?? .single(false))
-            |> distinctUntilChanged
-        self.dalSettingsDisposable = (combineLatest(dalSettings, isChildModeActive)
+        self.dalSettingsDisposable = (dalSettings
         |> deliverOnMainQueue
-        ).startStrict(next: { [weak self] dalSettings, isChildModeActive  in
+        ).startStrict(next: { [weak self] dalSettings  in
             if let self {
-                self.isChildModeActive = isChildModeActive
-                self.storyPostingHidden = dalSettings.hidePublishStoriesButton || isChildModeActive
-                self.storyPostingHiddenValue.set(dalSettings.hidePublishStoriesButton || isChildModeActive)
+                self.storyPostingHidden = dalSettings.hidePublishStoriesButton
+                self.storyPostingHiddenValue.set(dalSettings.hidePublishStoriesButton)
                 self.foldersAtBottom = dalSettings.chatsFoldersAtBottom
                 let oldAllChatsHidden = self.allChatsHidden
                 self.allChatsHidden = dalSettings.hideAllChatsFolder
                 self.infiniteScrolling = dalSettings.infiniteScrolling
-                self.showRecentChats = dalSettings.showRecentChats ?? false
-                self.showRecentChatsValue.set(dalSettings.showRecentChats ?? false)
+                self.showRecentChats = dalSettings.showRecentChats
+                self.showRecentChatsValue.set(dalSettings.showRecentChats)
                 if oldAllChatsHidden != self.allChatsHidden {
                     self.initializedFilters = false
                     self.reloadFilters()
@@ -828,11 +826,9 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
         
         if case .chatList(.root) = location {
             self.folderVisibilityDisposable = (
-                self.context.sharedContext.accountManager.sharedData(
-                    keys: [ApplicationSpecificSharedDataKeys.dalSettings]
-                )
-                |> map { sharedData -> Bool in
-                    return (sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings).showChatFolders
+                self.context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+                |> map { view -> Bool in
+                    return (view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings).showChatFolders
                 }
                 |> distinctUntilChanged
                 |> deliverOnMainQueue
@@ -874,6 +870,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
         self.sharedOpenStoryProgressDisposable.dispose()
         self.dalSettingsDisposable?.dispose()
         self.folderVisibilityDisposable?.dispose()
+        self.childModeDisposable?.dispose()
         for (_, disposable) in self.preloadStoryResourceDisposables {
             disposable.dispose()
         }
@@ -2199,27 +2196,24 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             if self.previewing {
                 self.storiesReady.set(.single(true))
             } else {
-                let dalSettings = self.context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-                |> map { sharedData -> DalSettings in
+                let dalSettings = self.context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+                |> map { view -> DalSettings in
                     var dalSettings =  DalSettings.defaultSettings
-                    if let current = sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) {
+                    if let current = view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) {
                         dalSettings = current
                     }
                     return dalSettings
                 }
-     
-                let isChildModeActive = (self.context.childModeManager?.isChildModeActive ?? .single(false))
-                    |> distinctUntilChanged
                 
-                self.storySubscriptionsDisposable = (combineLatest(dalSettings, self.context.engine.messages.storySubscriptions(isHidden: self.location == .chatList(groupId: .archive)), isChildModeActive)
+                self.storySubscriptionsDisposable = (combineLatest(dalSettings, self.context.engine.messages.storySubscriptions(isHidden: self.location == .chatList(groupId: .archive)))
                     |> deliverOnMainQueue
                 )
-                .startStrict(next: { [weak self] dalSettings, rawStorySubscriptions, isChildModeActive in
+                .startStrict(next: { [weak self] dalSettings, rawStorySubscriptions in
                     guard let self else { return }
                     
                     self.rawStorySubscriptions = rawStorySubscriptions
 
-                    if dalSettings.hideStories || isChildModeActive {
+                    if dalSettings.hideStories {
                         // Если истории должны быть скрыты, очищаем подписки
                         self.orderedStorySubscriptions = EngineStorySubscriptions(
                             accountItem: rawStorySubscriptions.accountItem,
@@ -2289,11 +2283,19 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                     self.updateStoryUploadProgress(progress)
                 })
                 
+                self.childModeDisposable = (self.context.childModeState
+                |> deliverOnMainQueue).startStrict(next: { [weak self] state in
+                    guard let self else {
+                        return
+                    }
+                    self.updateStoryWhitelist(whitelist: state.isEnabled ? state.allowedPeerIds : nil)
+                })
+                
                 if case .chatList(.root) = self.location {
-                    self.storyArchiveSubscriptionsDisposable = (combineLatest(dalSettings, self.context.engine.messages.storySubscriptions(isHidden: true), isChildModeActive)
+                    self.storyArchiveSubscriptionsDisposable = (combineLatest(dalSettings, self.context.engine.messages.storySubscriptions(isHidden: true))
                         |> deliverOnMainQueue
                     )
-                        .startStrict(next: { [weak self] dalSettings, rawStoryArchiveSubscriptions, isChildModeActive in
+                        .startStrict(next: { [weak self] dalSettings, rawStoryArchiveSubscriptions in
                         guard let self else {
                             return
                         }
@@ -2302,7 +2304,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                         
                         let archiveStoryState: ChatListNodeState.StoryState?
 
-                        if dalSettings.hideStories || rawStoryArchiveSubscriptions.items.isEmpty || isChildModeActive {
+                        if dalSettings.hideStories || rawStoryArchiveSubscriptions.items.isEmpty {
                             archiveStoryState = nil
                         } else {
                             var unseenCount = 0
@@ -2383,7 +2385,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             items.append(.action(ContextMenuActionItem(text: "DahlSettings.DisablePanel".tp_loc(lang: strongSelf.presentationData.strings.baseLanguageCode), textColor: .primary, icon: { theme in generateTintedImage(image: TPIconManager.shared.icon(.contextMenuEye), color: theme.contextMenu.primaryColor) }, action: { [weak self] _, f in
                 guard let self else { return }
                 let _ = updateDalSettingsInteractively(
-                    accountManager: self.context.sharedContext.accountManager,
+                    engine: self.context.engine,
                     { settings in
                         var settings = settings
                         settings.showRecentChats = false
@@ -3593,6 +3595,15 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
         }
     }
     
+    private(set) var whitelist: Set<EnginePeer.Id>? = nil
+    private func updateStoryWhitelist(whitelist: Set<EnginePeer.Id>?) {
+        self.whitelist = whitelist
+        
+        if let navigationBarView = self.chatListDisplayNode.navigationBarView.view as? ChatListNavigationBar.View {
+            navigationBarView.updateStoryWhitelist(whitelist: whitelist)
+        }
+    }
+    
     public func scrollToStories(peerId: EnginePeer.Id? = nil) {
         self.chatListDisplayNode.scrollToStories(animated: false)
         
@@ -4789,7 +4800,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                 
                 let displaySearchFilters = true
                                   
-                if let filterContainerNodeAndActivate = strongSelf.chatListDisplayNode.activateSearch(placeholderNode: searchContentNode.placeholderNode, displaySearchFilters: displaySearchFilters, hasDownloads: strongSelf.hasDownloads, initialFilter: filter, navigationController: strongSelf.navigationController as? NavigationController, isChildModeActive: strongSelf.isChildModeActive) {
+                if let filterContainerNodeAndActivate = strongSelf.chatListDisplayNode.activateSearch(placeholderNode: searchContentNode.placeholderNode, displaySearchFilters: displaySearchFilters, hasDownloads: strongSelf.hasDownloads, initialFilter: filter, navigationController: strongSelf.navigationController as? NavigationController) {
                     let (filterContainerNode, activate) = filterContainerNodeAndActivate
                     if displaySearchFilters {
                         let searchTabsNode = SparseNode()
@@ -6723,7 +6734,7 @@ private final class ChatListLocationContext {
         self.context = context
         self.location = location
         self.parentController = parentController
-        let childModeStateSignal = context.childModeManager?.isChildModeActive ?? .single(false)
+        let childModeStateSignal = (context.childModeManager?.isChildModeActive ?? .single(false)) |> distinctUntilChanged
         
         let hasProxy = context.sharedContext.accountManager.sharedData(keys: [SharedDataKeys.proxySettings])
         |> map { sharedData -> (Bool, Bool) in

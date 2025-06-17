@@ -3013,7 +3013,7 @@ final class ChatListSearchListPaneNode: ASDisplayNode, ChatListSearchPaneNode {
                                 associatedPeer = renderedPeer.peers[associatedPeerId]
                             }
                             
-                            entries.append(.recentlySearchedPeer(peer, associatedPeer, foundLocalPeers.unread[peer.id], index, presentationData.theme, presentationData.strings, presentationData.nameSortOrder, presentationData.nameDisplayOrder, nil, false, true))
+                            entries.append(.recentlySearchedPeer(peer, associatedPeer, foundLocalPeers.unread[peer.id], index, presentationData.theme, presentationData.strings, presentationData.nameSortOrder, presentationData.nameDisplayOrder, nil, false, !isPeerAllowed(peerId: peer.id)))
                             
                             index += 1
                         }
@@ -4087,14 +4087,16 @@ final class ChatListSearchListPaneNode: ASDisplayNode, ChatListSearchPaneNode {
             }
             
             let remoteApps: Signal<[EnginePeer.Id]?, NoError> = context.engine.peers.recommendedAppPeerIds()
-            
+            let whitelist: Signal<(Bool, [EnginePeer.Id]), NoError> = (context.childModeManager?.whitelist() ?? .single((false, [])))
+
             let _ = self.context.engine.peers.requestRecommendedAppsIfNeeded().startStandalone()
             
             recentItems = combineLatest(
                 localApps,
-                remoteApps
+                remoteApps,
+                whitelist
             )
-            |> mapToSignal { localApps, remoteApps -> Signal<RecentItems, NoError> in
+            |> mapToSignal { localApps, remoteApps, whitelist -> Signal<RecentItems, NoError> in
                 var allAppIds = localApps.peerIds
                 
                 var recommendedAppOrder: [EnginePeer.Id] = []
@@ -4175,7 +4177,7 @@ final class ChatListSearchListPaneNode: ASDisplayNode, ChatListSearchPaneNode {
                             globalNotificationSettings,
                             peerStoryStats,
                             false,
-                            false
+                            whitelist.0 && !whitelist.1.contains(peer.id)
                         ))
                     }
                     if let remoteApps {
@@ -4211,7 +4213,7 @@ final class ChatListSearchListPaneNode: ASDisplayNode, ChatListSearchPaneNode {
                                 globalNotificationSettings,
                                 peerStoryStats,
                                 false,
-                                false
+                                whitelist.0 && !whitelist.1.contains(peer.id)
                             ))
                         }
                         

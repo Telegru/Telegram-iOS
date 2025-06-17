@@ -56,6 +56,7 @@ public final class StoryPeerListComponent: Component {
     public let collapseFraction: CGFloat
     public let unlocked: Bool
     public let uploadProgress: [EnginePeer.Id: Float]
+    public let whitelist: Set<EnginePeer.Id>?
     public let peerAction: (EnginePeer?) -> Void
     public let contextPeerAction: (ContextExtractedContentContainingNode, ContextGesture, EnginePeer) -> Void
     public let openStatusSetup: (UIView) -> Void
@@ -79,6 +80,7 @@ public final class StoryPeerListComponent: Component {
         collapseFraction: CGFloat,
         unlocked: Bool,
         uploadProgress: [EnginePeer.Id: Float],
+        whitelist: Set<EnginePeer.Id>?,
         peerAction: @escaping (EnginePeer?) -> Void,
         contextPeerAction: @escaping (ContextExtractedContentContainingNode, ContextGesture, EnginePeer) -> Void,
         openStatusSetup: @escaping (UIView) -> Void,
@@ -106,6 +108,7 @@ public final class StoryPeerListComponent: Component {
         self.openStatusSetup = openStatusSetup
         self.lockAction = lockAction
         self.composeAction = composeAction
+        self.whitelist = whitelist
     }
     
     public static func ==(lhs: StoryPeerListComponent, rhs: StoryPeerListComponent) -> Bool {
@@ -152,6 +155,9 @@ public final class StoryPeerListComponent: Component {
             return false
         }
         if lhs.uploadProgress != rhs.uploadProgress {
+            return false
+        }
+        if lhs.whitelist != rhs.whitelist {
             return false
         }
         return true
@@ -321,6 +327,7 @@ public final class StoryPeerListComponent: Component {
         
         private var sortedItems: [EngineStorySubscriptions.Item] = []
         
+        private var blurredItems: Set<EnginePeer.Id> = Set()
         private var visibleItems: [EnginePeer.Id: VisibleItem] = [:]
         private var visibleCollapsableItems: [EnginePeer.Id: VisibleItem] = [:]
         
@@ -1137,11 +1144,12 @@ public final class StoryPeerListComponent: Component {
                         rightNeighborDistance = CGPoint(x: abs(rightItemFrame.midX - measuredItem.itemFrame.midX), y: rightItemFrame.minY - measuredItem.itemFrame.minY)
                     }
                 }
-                
+                let blurred = component.whitelist != nil && component.whitelist?.contains(peer.id) == false
                 let totalCount: Int
                 let unseenCount: Int
-                totalCount = itemSet.storyCount
-                unseenCount = itemSet.unseenCount
+                totalCount = blurred ? 1 : itemSet.storyCount
+                unseenCount = blurred ? 1 : itemSet.unseenCount
+                
                 
                 var composeContentOffset: CGFloat?
                 if peer.id == component.context.account.peerId && collapsedState.sideAlphaFraction == 1.0 && self.scrollView.contentOffset.x < 0.0 {
@@ -1159,6 +1167,7 @@ public final class StoryPeerListComponent: Component {
                         unseenCount: unseenCount,
                         hasUnseenCloseFriendsItems: hasUnseenCloseFriendsItems,
                         hasItems: hasItems,
+                        blurred: blurred,
                         ringAnimation: itemRingAnimation,
                         scale: itemScale,
                         fullWidth: expandedItemWidth,
@@ -1287,6 +1296,8 @@ public final class StoryPeerListComponent: Component {
                     }
                 }
                 
+                let blurred = component.whitelist != nil && !component.whitelist!.contains(peer.id)
+                
                 let _ = visibleItem.view.update(
                     transition: itemTransition,
                     component: AnyComponent(StoryPeerListItemComponent(
@@ -1298,6 +1309,7 @@ public final class StoryPeerListComponent: Component {
                         unseenCount: itemSet.unseenCount != 0 ? 1 : 0,
                         hasUnseenCloseFriendsItems: hasUnseenCloseFriendsItems,
                         hasItems: hasItems,
+                        blurred: blurred,
                         ringAnimation: itemRingAnimation,
                         scale: itemScale,
                         fullWidth: expandedItemWidth,

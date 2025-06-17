@@ -294,6 +294,7 @@ final class MiniAppListScreenComponent: Component {
                     storySubscriptions: nil,
                     storiesIncludeHidden: false,
                     uploadProgress: [:],
+                    whitelist: nil,
                     tabsNode: nil,
                     tabsNodeIsSearch: false,
                     accessoryPanelContainer: nil,

@@ -8,9 +8,11 @@ private enum ApplicationSpecificPreferencesKeyValues: Int32 {
     case chatListFilterSettings = 18
     case widgetSettings = 19
     case mediaAutoSaveSettings = 20
+    case dalSettings = 10000
 }
 
 public struct ApplicationSpecificPreferencesKeys {
+    public static let dahlSettings = applicationSpecificPreferencesKey(ApplicationSpecificPreferencesKeyValues.dalSettings.rawValue)
     public static let voipDerivedState = applicationSpecificPreferencesKey(ApplicationSpecificPreferencesKeyValues.voipDerivedState.rawValue)
     public static let chatArchiveSettings = applicationSpecificPreferencesKey(ApplicationSpecificPreferencesKeyValues.chatArchiveSettings.rawValue)
     public static let chatListFilterSettings = applicationSpecificPreferencesKey(ApplicationSpecificPreferencesKeyValues.chatListFilterSettings.rawValue)

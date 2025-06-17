@@ -50,8 +50,7 @@ swift_library(
     ],
     deps = [
         "//third-party/recaptcha:RecaptchaEnterprise",
-        "//Teleport/TPNews:TPNews",
-        "//Teleport/TPSettings:TPSettings",
+        "//Teleport/DSettings:DSettings",
         "//Teleport/DWallpaper:DWallpaper",
         "//Teleport/DAnalytics:DAnalytics",
 
@@ -473,7 +472,7 @@ swift_library(
         "//submodules/TelegramUI/Components/PeerManagement/OwnershipTransferController",
         "//submodules/TelegramUI/Components/PeerManagement/OldChannelsController",
         "//submodules/TelegramUI/Components/Chat/ChatSendStarsScreen",
-	    "//submodules/TelegramUI/Components/DSettings",
+	    "//submodules/TelegramUI/Components/DSettingsScreen:DSettingsScreen",
         "//submodules/TelegramUI/Components/MinimizedContainer",
         "//submodules/TelegramUI/Components/SpaceWarpView",
         "//submodules/TelegramUI/Components/MiniAppListScreen",

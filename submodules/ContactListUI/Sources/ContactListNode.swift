@@ -1514,9 +1514,9 @@ public final class ContactListNode: ASDisplayNode {
                         peerRequiresPremiumForMessaging = .single([:])
                     }
                     
-                    let dahlSettingsSignal = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-                    |> map { sharedData -> DalSettings in
-                        return sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
+                    let dahlSettingsSignal = context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+                    |> map { view -> DalSettings in
+                        return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
                     } |> distinctUntilChanged
                     
                     let whitelist: Signal<(Bool, [EnginePeer.Id]), NoError> = (context.childModeManager?.whitelist() ?? .single((false, [])))
@@ -1806,9 +1806,9 @@ public final class ContactListNode: ASDisplayNode {
                     topPeers = .single([])
                 }
                 
-                let dahlSettingsSignal = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-                |> map { sharedData -> DalSettings in
-                    return sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
+                let dahlSettingsSignal = context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+                |> map { view -> DalSettings in
+                    return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
                 } |> distinctUntilChanged
                 let whitelist: Signal<(Bool, [EnginePeer.Id]), NoError> = (context.childModeManager?.whitelist() ?? .single((false, [])))
 
@@ -1876,7 +1876,7 @@ public final class ContactListNode: ASDisplayNode {
                         }
                         
                         var isEmpty = false
-                        if (authorizationStatus == .notDetermined || authorizationStatus == .denied) && peers.isEmpty {
+                        if (authorizationStatus == .notDetermined || authorizationStatus == .denied) && peers.isEmpty && topPeers.isEmpty {
                             isEmpty = true
                         }
                         

@@ -85,10 +85,6 @@ import GiftStoreScreen
 import SendInviteLinkScreen
 import PostSuggestionsSettingsScreen
 
-import TPNews
-
-import TPNews
-
 private final class AccountUserInterfaceInUseContext {
     let subscribers = Bag<(Bool) -> Void>()
     let tokens = Bag<Void>()
@@ -609,9 +605,9 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                                     TelegramEngine.EngineData.Item.Configuration.AvailableColorOptions(scope: .replies),
                                     TelegramEngine.EngineData.Item.Configuration.AvailableColorOptions(scope: .profile)
                                     ),
-                                    accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-                                            |> map { sharedData -> DalSettings in
-                                                return sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
+                                    account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+                                            |> map { view -> DalSettings in
+                                                return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
                                             } |> take(1)
                                 )
                                 |> map { combined -> AddedAccountResult in
@@ -1202,7 +1198,7 @@ public final class SharedAccountContextImpl: SharedAccountContext {
         self.callStateDisposable = nil
         
         if case let .call(call) = call {
-            let callController = CallController(sharedContext: self, account: call.context.account, call: call, easyDebugAccess: !GlobalExperimentalSettings.isAppStoreBuild)
+            let callController = CallController(sharedContext: self, account: call.context.account, call: call, engine: call.context.engine, easyDebugAccess: !GlobalExperimentalSettings.isAppStoreBuild)
             self.callController = callController
             let thisCallIsOnScreenPromise = ValuePromise<Bool>(false, ignoreRepeated: true)
             callController.restoreUIForPictureInPicture = { [weak self, weak callController] completion in
@@ -2296,10 +2292,6 @@ public final class SharedAccountContextImpl: SharedAccountContext {
     
     public func makeChatListController(context: AccountContext, location: ChatListControllerLocation, controlsHistoryPreload: Bool, hideNetworkActivityStatus: Bool, previewing: Bool, enableDebugActions: Bool) -> ChatListController {
         return ChatListControllerImpl(context: context, location: location, controlsHistoryPreload: controlsHistoryPreload, hideNetworkActivityStatus: hideNetworkActivityStatus, previewing: previewing, enableDebugActions: enableDebugActions)
-    }
-    
-    public func makeNewsFeedController(context: AccountContext) -> ViewController {
-        return NewsFeedViewController(context: context)
     }
     
     public func makePeerSelectionController(_ params: PeerSelectionControllerParams) -> PeerSelectionController {

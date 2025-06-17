@@ -522,7 +522,7 @@ public func dPremiumSettingsController(
         context: context,
         updateShowPremiumInSettings: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.menuItemsSettings.premium = value
@@ -532,7 +532,7 @@ public func dPremiumSettingsController(
         },
         updateShowStatusIcon: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.premiumSettings.showStatusIcon = value
@@ -542,7 +542,7 @@ public func dPremiumSettingsController(
         },
         updateShowAnimatedAvatar: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.premiumSettings.showAnimatedAvatar = value
@@ -552,7 +552,7 @@ public func dPremiumSettingsController(
         },
         updateShowAnimatedReactions: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.premiumSettings.showAnimatedReactions = value
@@ -562,7 +562,7 @@ public func dPremiumSettingsController(
         },
         updateShowPremiumStickerAnimation: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.premiumSettings.showPremiumStickerAnimation = value
@@ -572,7 +572,7 @@ public func dPremiumSettingsController(
         },
         updateHideStories: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.hideStories = value
@@ -582,7 +582,7 @@ public func dPremiumSettingsController(
         },
         updateStoriesPostingGesture: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.isStoriesPostingGestureEnabled = value
@@ -592,7 +592,7 @@ public func dPremiumSettingsController(
         },
         updateHideStoriesPublishButton: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.hidePublishStoriesButton = value
@@ -602,7 +602,7 @@ public func dPremiumSettingsController(
         },
         updateHideViewedStories: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.hideViewedStories = value
@@ -612,23 +612,19 @@ public func dPremiumSettingsController(
         }
     )
 
-    let sharedData = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
+    let dahlSettingsSignal = context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+    |> map { view -> DalSettings in
+        return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
+    }
     
     let signal = combineLatest(
-        sharedData,
         context.sharedContext.presentationData,
-        context.account.postbox.preferencesView(keys: [
-            ApplicationSpecificSharedDataKeys.dalSettings
-        ])
-        )
+        dahlSettingsSignal
+    )
     |> map {
-            sharedData, presentationData, preferences -> (
+            presentationData, settings -> (
                 ItemListControllerState, (ItemListNodeState, Any)
             ) in
-            let settings =
-                sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(
-                    DalSettings.self) ?? .defaultSettings
-
             let entries = dPremiumSettingsEntries(
                 presentationData: presentationData,
                 showPremiumInSettings: settings.menuItemsSettings.premium,

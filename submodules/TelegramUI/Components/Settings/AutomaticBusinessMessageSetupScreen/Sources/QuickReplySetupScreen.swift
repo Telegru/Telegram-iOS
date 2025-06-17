@@ -829,6 +829,7 @@ final class QuickReplySetupScreenComponent: Component {
                     storySubscriptions: nil,
                     storiesIncludeHidden: false,
                     uploadProgress: [:],
+                    whitelist: nil,
                     tabsNode: nil,
                     tabsNodeIsSearch: false,
                     accessoryPanelContainer: nil,

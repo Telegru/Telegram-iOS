@@ -12,6 +12,7 @@ public enum ContentHiddenType {
     case channel
     case group
     case media
+    case stories
 
     func getTitle() -> String {
         switch self {
@@ -25,6 +26,8 @@ public enum ContentHiddenType {
             return "ChildMode.GroupHidden"
         case .media:
             return "ChildMode.MediaHidden"
+        case .stories:
+            return "ChildMode.StoriesHidden"
         }
     }
     
@@ -40,6 +43,8 @@ public enum ContentHiddenType {
             return "ChildMode.MediaHiddenDescription"
         case .content:
             return "ChildMode.ContentHiddenDescription"
+        case .stories:
+            return "ChildMode.StoriesHiddenDescription"
         }
     }
     
@@ -56,13 +61,13 @@ public class ContentHiddenOverlayNode: ASDisplayNode {
     private let descriptionNode: ImmediateTextNode
     private let buttonNode: IconLeftButtonNode
     
-    private var theme: PresentationTheme
-    private let strings: PresentationStrings
+    private var theme: PresentationTheme?
+    private var strings: PresentationStrings?
     private var contentType: ContentHiddenType
     
     public var requestAccessAction: (() -> Void)?
     
-    public init(theme: PresentationTheme, strings: PresentationStrings, contentType: ContentHiddenType = .chat) {
+    public init(theme: PresentationTheme? = nil, strings: PresentationStrings? = nil, contentType: ContentHiddenType = .chat) {
         self.theme = theme
         self.strings = strings
         self.contentType = contentType
@@ -76,7 +81,7 @@ public class ContentHiddenOverlayNode: ASDisplayNode {
         
         super.init()
         
-        self.blurNode.backgroundColor = theme.list.plainBackgroundColor
+        self.blurNode.backgroundColor = theme?.list.plainBackgroundColor ?? .black
         self.addSubnode(self.blurNode)
         self.addSubnode(self.contentNode)
         
@@ -92,20 +97,24 @@ public class ContentHiddenOverlayNode: ASDisplayNode {
     }
     
     private func setupNodes() {
-        let iconImage = generateTintedImage(image: UIImage(bundleImageName: "Child Mode/Blocked"), color: self.theme.chat.inputPanel.primaryTextColor)
+        guard let theme, let strings else {
+            return
+        }
+        
+        let iconImage = generateTintedImage(image: UIImage(bundleImageName: "Child Mode/Blocked"), color: theme.chat.inputPanel.primaryTextColor)
         self.iconNode.image = iconImage
         
         self.titleNode.attributedText = NSAttributedString(
             string: self.contentType.getTitle().tp_loc(lang: strings.baseLanguageCode),
             font: Font.bold(15.0),
-            textColor: self.theme.chat.inputPanel.primaryTextColor
+            textColor: theme.chat.inputPanel.primaryTextColor
         )
         
         self.descriptionNode.maximumNumberOfLines = 0
         self.descriptionNode.attributedText = NSAttributedString(
             string: self.contentType.getDescription().tp_loc(lang: strings.baseLanguageCode),
             font: Font.regular(15.0),
-            textColor: self.theme.chat.inputPanel.primaryTextColor,
+            textColor: theme.chat.inputPanel.primaryTextColor,
             paragraphAlignment: .center
         )
         
@@ -127,8 +136,9 @@ public class ContentHiddenOverlayNode: ASDisplayNode {
         buttonNode.addTarget(self, action: #selector(buttonPressed), forControlEvents: .touchUpInside)
     }
     
-    public func update(theme: PresentationTheme, contentType: ContentHiddenType? = nil) {
+    public func update(theme: PresentationTheme, strings: PresentationStrings? = nil, contentType: ContentHiddenType? = nil) {
         self.theme = theme
+        self.strings = strings
         
         if let newContentType = contentType {
             self.contentType = newContentType

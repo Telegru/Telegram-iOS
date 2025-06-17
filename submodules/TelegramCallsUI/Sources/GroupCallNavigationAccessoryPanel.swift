@@ -411,8 +411,8 @@ public final class GroupCallNavigationAccessoryPanel: ASDisplayNode {
             self.isMutedDisposable.set(nil)
             
             if let groupCall = data.groupCall {
-                self.membersDisposable.set((groupCall.summaryState
-                |> deliverOnMainQueue).start(next: { [weak self] summaryState in
+                self.membersDisposable.set((combineLatest(groupCall.summaryState, context.childModeState)
+                |> deliverOnMainQueue).start(next: { [weak self] summaryState, childModeState in
                     guard let strongSelf = self, let summaryState = summaryState else {
                         return
                     }
@@ -430,7 +430,9 @@ public final class GroupCallNavigationAccessoryPanel: ASDisplayNode {
                     if let info = summaryState.info, info.isStream {
                         strongSelf.avatarsContent = strongSelf.avatarsContext.update(peers: [], animated: false)
                     } else {
-                        strongSelf.avatarsContent = strongSelf.avatarsContext.update(peers: summaryState.topParticipants.compactMap { $0.peer }, animated: false)
+                        let peers = summaryState.topParticipants.compactMap { $0.peer }
+                        let whitelist = peers.compactMap { childModeState.allowedPeerIds.contains($0.id) ? nil : $0.id }
+                        strongSelf.avatarsContent = strongSelf.avatarsContext.update(peers: peers, whitelist: Set(whitelist), animated: false)
                     }
                     
                     if let (size, leftInset, rightInset, isHidden) = strongSelf.validLayout {
@@ -515,6 +517,24 @@ public final class GroupCallNavigationAccessoryPanel: ASDisplayNode {
             } else {
                 self.avatarsContent = self.avatarsContext.update(peers: data.topParticipants.compactMap { $0.peer }, animated: false)
             }
+            
+            self.membersDisposable.set((context.childModeState
+            |> deliverOnMainQueue).start(next: { [weak self] childModeState in
+                guard let strongSelf = self else {
+                    return
+                }
+                let isAllowed = childModeState.isPeerAllowed(data.peerId)
+                strongSelf.joinButton.isEnabled = isAllowed
+                strongSelf.joinButton.alpha = isAllowed ? 1.0 : 0.5
+                strongSelf.tapButton.isEnabled = isAllowed
+
+                
+                if !data.info.isStream {
+                    let peers = data.topParticipants.compactMap { $0.peer }
+                    let whitelist = peers.compactMap { childModeState.allowedPeerIds.contains($0.id) ? nil : $0.id }
+                    strongSelf.avatarsContent = strongSelf.avatarsContext.update(peers: peers, whitelist: Set(whitelist), animated: false)
+                }
+            }))
             
             updateAudioLevels = true
         }

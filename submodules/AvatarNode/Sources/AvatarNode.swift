@@ -720,7 +720,9 @@ public final class AvatarNode: ASDisplayNode {
                             guard let self else {
                                 return
                             }
-                            self.imageNode.contents = image?.cgImage
+                            if !blurred {
+                                self.imageNode.contents = image?.cgImage
+                            }
                         }).strict())
                     }
                 }

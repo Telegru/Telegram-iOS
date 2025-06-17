@@ -840,13 +840,9 @@ func peerInfoScreenSettingsData(context: AccountContext, peerId: EnginePeer.Id, 
     }
     
     let profileGiftsContext = ProfileGiftsContext(account: context.account, peerId: peerId)
-    let dalSettings = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-    |> map { sharedData -> DalSettings in
-        var dalSettings =  DalSettings.defaultSettings
-        if let current = sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) {
-            dalSettings = current
-        }
-        return dalSettings
+    let dalSettings = context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+    |> map { view -> DalSettings in
+        return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
     }
     
     return combineLatest(
@@ -1324,13 +1320,9 @@ func peerInfoScreenData(context: AccountContext, peerId: PeerId, strings: Presen
                 }
             }
                      
-            let dalSettings = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-            |> map { sharedData -> DalSettings in
-                var dalSettings =  DalSettings.defaultSettings
-                if let current = sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) {
-                    dalSettings = current
-                }
-                return dalSettings
+            let dalSettings = context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+            |> map { view -> DalSettings in
+                return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
             }
                         
             return combineLatest(
@@ -1588,13 +1580,9 @@ func peerInfoScreenData(context: AccountContext, peerId: PeerId, strings: Presen
             }
             
             let profileGiftsContext = ProfileGiftsContext(account: context.account, peerId: peerId)
-            let dalSettings = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-            |> map { sharedData -> DalSettings in
-                var dalSettings =  DalSettings.defaultSettings
-                if let current = sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) {
-                    dalSettings = current
-                }
-                return dalSettings
+            let dalSettings = context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+            |> map { view -> DalSettings in
+                return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
             }
             
             return combineLatest(
@@ -1913,13 +1901,9 @@ func peerInfoScreenData(context: AccountContext, peerId: PeerId, strings: Presen
             
             let isPremiumRequiredForStoryPosting: Signal<Bool, NoError> = isPremiumRequiredForStoryPosting(context: context)
             
-            let dalSettings = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-            |> map { sharedData -> DalSettings in
-                var dalSettings =  DalSettings.defaultSettings
-                if let current = sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) {
-                    dalSettings = current
-                }
-                return dalSettings
+            let dalSettings = context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+            |> map { view -> DalSettings in
+                return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
             }
             
             return combineLatest(queue: .mainQueue(),

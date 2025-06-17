@@ -218,7 +218,8 @@ public final class ChatMessageItemImpl: ChatMessageItem, CustomStringConvertible
     public let disableDate: Bool
     public let effectiveAuthorId: PeerId?
     public let additionalContent: ChatMessageItemAdditionalContent?
-    
+    public let blurred: Bool
+
     let dateHeader: ChatMessageDateHeader
     let avatarHeader: ChatMessageAvatarHeader?
 
@@ -269,7 +270,7 @@ public final class ChatMessageItemImpl: ChatMessageItem, CustomStringConvertible
         }
     }
     
-    public init(presentationData: ChatPresentationData, context: AccountContext, chatLocation: ChatLocation, associatedData: ChatMessageItemAssociatedData, controllerInteraction: ChatControllerInteraction, content: ChatMessageItemContent, disableDate: Bool = false, additionalContent: ChatMessageItemAdditionalContent? = nil) {
+    public init(presentationData: ChatPresentationData, context: AccountContext, chatLocation: ChatLocation, associatedData: ChatMessageItemAssociatedData, controllerInteraction: ChatControllerInteraction, content: ChatMessageItemContent, disableDate: Bool = false, additionalContent: ChatMessageItemAdditionalContent? = nil, blurred: Bool = false) {
         self.presentationData = presentationData
         self.context = context
         self.chatLocation = chatLocation
@@ -287,6 +288,12 @@ public final class ChatMessageItemImpl: ChatMessageItem, CustomStringConvertible
         
         let messagePeerId: PeerId = chatLocation.peerId ?? content.firstMessage.id.peerId
         
+        if let authorId = content.firstMessage.author?.id {
+            self.blurred = !(context.childModeManager?.isPeerAllowedSync(authorId) ?? true)
+        } else {
+            self.blurred = false
+        }
+
         do {
             let peerId = messagePeerId
             if peerId.isRepliesOrSavedMessages(accountPeerId: context.account.peerId) {
@@ -384,7 +391,7 @@ public final class ChatMessageItemImpl: ChatMessageItem, CustomStringConvertible
                         }
                     }
                     
-                    avatarHeader = ChatMessageAvatarHeader(timestamp: content.index.timestamp, peerId: effectiveAuthor.id, peer: effectiveAuthor, messageReference: MessageReference(message), message: message, presentationData: presentationData, context: context, controllerInteraction: controllerInteraction, storyStats: storyStats)
+                    avatarHeader = ChatMessageAvatarHeader(timestamp: content.index.timestamp, peerId: effectiveAuthor.id, peer: effectiveAuthor, messageReference: MessageReference(message), message: message, presentationData: presentationData, context: context, controllerInteraction: controllerInteraction, storyStats: storyStats, blurred: self.blurred)
                 }
             }
         }

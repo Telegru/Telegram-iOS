@@ -1,10 +1,10 @@
 load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
 
 tpdeps = [
-    "//Teleport/TPSettings:TPSettings",
+    "//Teleport/DSettings:DSettings",
     "//Teleport/TPStrings:TPStrings",
-	"//submodules/TelegramUI/Components/DSettings",
-        "//submodules/TelegramUI/Components/ContentHiddenOverlayNode",
+	"//submodules/TelegramUI/Components/DSettingsScreen:DSettingsScreen",
+    "//submodules/TelegramUI/Components/ContentHiddenOverlayNode",
 ]
 
 swift_library(

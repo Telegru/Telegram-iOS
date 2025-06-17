@@ -32,14 +32,13 @@ import PeerInfoStoryGridScreen
 import ShareWithPeersScreen
 import ChatEmptyNode
 
-import TPNews
 import ItemListUI
 import TelegramUIPreferences
 import WebUI
 import PresentationDataUtils
 import LocalizedPeerData
 import DWallpaper
-import DSettings
+import DSettingsScreen
 import DWall
 
 private class DetailsChatPlaceholderNode: ASDisplayNode, NavigationDetailsPlaceholderNode {
@@ -51,7 +50,7 @@ private class DetailsChatPlaceholderNode: ASDisplayNode, NavigationDetailsPlaceh
     
     init(context: AccountContext) {
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
-        self.presentationInterfaceState = ChatPresentationInterfaceState(chatWallpaper: self.presentationData.chatWallpaper, theme: self.presentationData.theme, strings: self.presentationData.strings, dateTimeFormat: self.presentationData.dateTimeFormat, nameDisplayOrder: self.presentationData.nameDisplayOrder, limitsConfiguration: context.currentLimitsConfiguration.with { $0 }, fontSize: self.presentationData.chatFontSize, bubbleCorners: self.presentationData.chatBubbleCorners, accountPeerId: context.account.peerId, mode: .standard(.default), chatLocation: .peer(id: context.account.peerId), subject: nil, peerNearbyData: nil, greetingData: nil, pendingUnpinnedAllMessages: false, activeGroupCallInfo: nil, hasActiveGroupCall: false, importState: nil, threadData: nil, isGeneralThreadClosed: nil, replyMessage: nil, accountPeerColor: nil, businessIntro: nil)
+        self.presentationInterfaceState = ChatPresentationInterfaceState(chatWallpaper: self.presentationData.chatWallpaper, theme: self.presentationData.theme, strings: self.presentationData.strings, dateTimeFormat: self.presentationData.dateTimeFormat, nameDisplayOrder: self.presentationData.nameDisplayOrder, limitsConfiguration: context.currentLimitsConfiguration.with { $0 }, fontSize: self.presentationData.chatFontSize, bubbleCorners: self.presentationData.chatBubbleCorners, accountPeerId: context.account.peerId, mode: .standard(.default), chatLocation: .peer(id: context.account.peerId), subject: nil, peerNearbyData: nil, greetingData: nil, pendingUnpinnedAllMessages: false, activeGroupCallInfo: nil, hasActiveGroupCall: false, importState: nil, threadData: nil, isGeneralThreadClosed: nil, replyMessage: nil, accountPeerColor: nil, businessIntro: nil, requiresParentalPermission: false)
         
         self.wallpaperBackgroundNode = createWallpaperBackgroundNode(context: context, forChatDisplay: true, useSharedAnimationPhase: true)
         self.emptyNode = ChatEmptyNode(context: context, interaction: nil)
@@ -64,7 +63,7 @@ private class DetailsChatPlaceholderNode: ASDisplayNode, NavigationDetailsPlaceh
     
     func updatePresentationData(_ presentationData: PresentationData) {
         self.presentationData = presentationData
-        self.presentationInterfaceState = ChatPresentationInterfaceState(chatWallpaper: self.presentationData.chatWallpaper, theme: self.presentationData.theme, strings: self.presentationData.strings, dateTimeFormat: self.presentationData.dateTimeFormat, nameDisplayOrder: self.presentationData.nameDisplayOrder, limitsConfiguration: self.presentationInterfaceState.limitsConfiguration, fontSize: self.presentationData.chatFontSize, bubbleCorners: self.presentationData.chatBubbleCorners, accountPeerId: self.presentationInterfaceState.accountPeerId, mode: .standard(.default), chatLocation: self.presentationInterfaceState.chatLocation, subject: nil, peerNearbyData: nil, greetingData: nil, pendingUnpinnedAllMessages: false, activeGroupCallInfo: nil, hasActiveGroupCall: false, importState: nil, threadData: nil, isGeneralThreadClosed: nil, replyMessage: nil, accountPeerColor: nil, businessIntro: nil)
+        self.presentationInterfaceState = ChatPresentationInterfaceState(chatWallpaper: self.presentationData.chatWallpaper, theme: self.presentationData.theme, strings: self.presentationData.strings, dateTimeFormat: self.presentationData.dateTimeFormat, nameDisplayOrder: self.presentationData.nameDisplayOrder, limitsConfiguration: self.presentationInterfaceState.limitsConfiguration, fontSize: self.presentationData.chatFontSize, bubbleCorners: self.presentationData.chatBubbleCorners, accountPeerId: self.presentationInterfaceState.accountPeerId, mode: .standard(.default), chatLocation: self.presentationInterfaceState.chatLocation, subject: nil, peerNearbyData: nil, greetingData: nil, pendingUnpinnedAllMessages: false, activeGroupCallInfo: nil, hasActiveGroupCall: false, importState: nil, threadData: nil, isGeneralThreadClosed: nil, replyMessage: nil, accountPeerColor: nil, businessIntro: nil, requiresParentalPermission: false)
         
         self.wallpaperBackgroundNode.update(wallpaper: presentationData.chatWallpaper, animated: false)
     }
@@ -88,7 +87,6 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
     public var contactsController: ContactsController?
     public var callListController: CallListController?
     public var chatListController: ChatListController?
-    public var newsFeedController: ViewController?
     public var accountSettingsController: PeerInfoScreen?
     
 //    private var appsController: ViewController?
@@ -167,9 +165,9 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         }
         
         self.tabsTitleDisposable = (
-            context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-            |> map { sharedData -> DalSettings in
-                return sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
+            context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+            |> map { view -> DalSettings in
+                return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
             }
             |> map { $0.tabBarSettings.showTabTitles }
             |> distinctUntilChanged
@@ -326,7 +324,6 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         let tabBarController = TabBarControllerImpl(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData), theme: TabBarControllerTheme(rootControllerTheme: self.presentationData.theme))
         tabBarController.navigationPresentation = .master
         let chatListController = self.context.sharedContext.makeChatListController(context: self.context, location: .chatList(groupId: .root), controlsHistoryPreload: true, hideNetworkActivityStatus: false, previewing: false, enableDebugActions: !GlobalExperimentalSettings.isAppStoreBuild)
-        let newsFeedController = self.context.sharedContext.makeNewsFeedController(context: self.context)
         if let sharedContext = self.context.sharedContext as? SharedAccountContextImpl {
             chatListController.tabBarItem.badgeValue = sharedContext.switchingData.chatListBadge
         }
@@ -403,7 +400,6 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         self.contactsController = contactsController
         self.callListController = callListController
         self.chatListController = chatListController
-        self.newsFeedController = newsFeedController
         self.accountSettingsController = accountSettingsController
         self.dahlSettingsController = dahlSettingsController
 //        self.walletController = walletController

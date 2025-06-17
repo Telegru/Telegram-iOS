@@ -36,7 +36,7 @@ public final class DChildModeAssembly {
     private var childModeService: ChildModeService {
         ChildModeServiceImpl(
             userID: self.userID,
-            accountService: self.networkAssembly.accountService,
+            accountUserInfoSyncManager: self.networkAssembly.accountUserInfoSyncManager,
             clientFactory: self.networkAssembly.clientFactory
         )
     }

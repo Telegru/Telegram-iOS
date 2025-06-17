@@ -132,6 +132,7 @@ git_repository(
     commit = "513364f870f6bfc468f9d2ff0a95caccc10044c5", #5.10.2
     build_file_content = """
 load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
+
 swift_library(
     name = "Alamofire",
     srcs = glob(["Source/**/*.swift"]),
@@ -147,6 +148,7 @@ git_repository(
     commit = "c263811c1f3dbf002be9bd83107f7cdc38992b26", #15.0.3
     build_file_content = """
 load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
+
 swift_library(
     name = "Moya",
     srcs = glob(["Sources/Moya/**/*.swift"]),

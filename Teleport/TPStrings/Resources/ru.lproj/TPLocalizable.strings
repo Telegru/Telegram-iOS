@@ -212,6 +212,13 @@
 "DahlSettings.PremiumSettings.AnimatedReactions" = "Анимированные реакции";
 "DahlSettings.PremiumSettings.AnimatedPremiumStickers" = "Анимация премиум-стикеров";
 
+// Settings recover
+
+"DahlSettings.Recover.Alert.Title" = "Восстановить настройки?";
+"DahlSettings.Recover.Alert.Subtitle" = "Перезапустите приложение, чтобы восстановить ваши Настройки Даль.";
+"DahlSettings.Recover.Alert.Recover" = "Восстановить";
+"DahlSettings.Recover.Alert.Cancel" = "Оставить текущие";
+
 // Wallet
 "Wallet.TabTitle" = "Кошелек";
 
@@ -289,6 +296,7 @@
 "ChildMode.GroupHidden" = "Группа скрыта";
 "ChildMode.ChannelHidden" = "Канал скрыт";
 "ChildMode.ContentHidden" = "Контакт скрыт";
+"ChildMode.StoriesHidden" = "Истории скрыты";
 
 "ChildMode.LinkHiddenDescription" = "Нажми кнопку \"Спросить разрешение\"\nи дождись подтверждения,\nчтобы увидеть ссылку из чата";
 "ChildMode.FileHiddenDescription" = "Нажми кнопку \"Спросить разрешение\"\nи дождись подтверждения,\nчтобы увидеть файл из чата";
@@ -297,6 +305,7 @@
 "ChildMode.ChatHiddenDescription" = "Нажми кнопку \"Спросить разрешение\"\nи дождись подтверждения,\nчтобы прочитать сообщения";
 "ChildMode.ChannelHiddenDescription" = "Нажми кнопку \"Спросить разрешение\"\nи дождись подтверждения,\nчтобы начать читать сообщения канала";
 "ChildMode.GroupHiddenDescription" = "Нажми кнопку \"Спросить разрешение\"\nи дождись подтверждения,\nчтобы начать общение";
+"ChildMode.StoriesHiddenDescription" = "Нажми кнопку \"Спросить разрешение\"\nи дождись подтверждения,\nчтобы увидеть истории контакта";
 
 "ChildMode.Link.AvailableAfterConfirmation" = "Чат и ссылка станут доступны после подтверждения";
 "ChildMode.File.AvailableAfterConfirmation" = "Чат и файл станут доступны после подтверждения";

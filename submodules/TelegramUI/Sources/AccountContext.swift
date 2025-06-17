@@ -172,6 +172,10 @@ public final class AccountContextImpl: AccountContext {
         return self._dahlSettings.get()
     }
     
+    public var childModeState: Signal<DChildModeState, NoError> {
+        return self.childModeManager?.state() ?? .complete()
+    }
+    
     public var watchManager: WatchManager?
     
     private var storedPassword: (String, CFAbsoluteTime, SwiftSignalKit.Timer)?
@@ -384,9 +388,9 @@ public final class AccountContextImpl: AccountContext {
             let _ = currentContentSettings.swap(value)
         })
         
-        let updateDahlSettings = sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-        |> map { sharedData -> DalSettings in
-            return sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
+        let updateDahlSettings = account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+        |> map { view -> DalSettings in
+            return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
         }
         self.currentDahlSettings = Atomic(value: dahlSettings)
         self._dahlSettings.set(.single(dahlSettings) |> then(updateDahlSettings))

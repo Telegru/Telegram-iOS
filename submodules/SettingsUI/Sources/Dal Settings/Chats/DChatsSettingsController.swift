@@ -409,7 +409,7 @@ public func dChatsSettingsController(
         context: context,
         updateCallConfirmation: { updatedValue in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.callConfirmation = updatedValue
@@ -419,7 +419,7 @@ public func dChatsSettingsController(
         },
         updateAudioMessageConfirmation: { updatedValue in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.sendAudioConfirmation = updatedValue
@@ -432,7 +432,7 @@ public func dChatsSettingsController(
         },
         updateRecentChatsEnabled: { updatedValue in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.showRecentChats = updatedValue
@@ -442,7 +442,7 @@ public func dChatsSettingsController(
         },
         updateBottomFolders: { updatedValue in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.chatsFoldersAtBottom = updatedValue
@@ -452,7 +452,7 @@ public func dChatsSettingsController(
         },
         updateFolderInfiniteScrolling: { updatedValue in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.infiniteScrolling = updatedValue
@@ -462,7 +462,7 @@ public func dChatsSettingsController(
         },
         updateHideAllChats: { updatedValue in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.hideAllChatsFolder = updatedValue
@@ -472,7 +472,7 @@ public func dChatsSettingsController(
         },
         updateChatFolderVisibility: { updatedValue in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     if !updatedValue {
@@ -488,7 +488,7 @@ public func dChatsSettingsController(
         },
         updateChatFullscreenInput: { updatedValue in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.chatFullscreenInput = updatedValue
@@ -502,9 +502,9 @@ public func dChatsSettingsController(
     )
     
     let dahlSettingsSignal = (
-        context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-        |> map { sharedData -> DalSettings in
-            return sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
+        context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+        |> map { view -> DalSettings in
+            return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
         }
         |> distinctUntilChanged
     )
@@ -569,7 +569,7 @@ public func dChatsSettingsController(
         entries.append(
             .recentChats(
                 title: "DahlSettings.Chats.RecentChats".tp_loc(lang: lang),
-                value: dahlSettings.showRecentChats ?? false
+                value: dahlSettings.showRecentChats
             )
         )
         
@@ -659,7 +659,7 @@ public func dChatsSettingsController(
             context: context,
             updateCamera: { newCamera in
                 let _ = updateDalSettingsInteractively(
-                    accountManager: context.sharedContext.accountManager,
+                    engine: context.engine,
                     { settings in
                         var settings = settings
                         settings.videoMessageCamera = CameraType(rawValue: newCamera) ?? .undefined

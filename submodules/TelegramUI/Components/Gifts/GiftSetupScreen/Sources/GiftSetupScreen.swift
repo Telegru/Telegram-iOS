@@ -1665,7 +1665,8 @@ final class GiftSetupScreenComponent: Component {
                     isGeneralThreadClosed: nil,
                     replyMessage: nil,
                     accountPeerColor: nil,
-                    businessIntro: nil
+                    businessIntro: nil,
+                    requiresParentalPermission: false
                 )
                 
                 self.inputMediaNodeBackground.backgroundColor = presentationData.theme.rootController.navigationBar.opaqueBackgroundColor.cgColor

@@ -460,6 +460,10 @@ func inputPanelForChatPresentationIntefaceState(_ chatPresentationInterfaceState
         displayInputTextPanel = false
     }
     
+    if chatPresentationInterfaceState.requiresParentalPermission {
+        displayInputTextPanel = false
+    }
+    
     if displayInputTextPanel {
         if let currentPanel = (currentPanel as? ChatTextInputPanelNode) ?? (currentSecondaryPanel as? ChatTextInputPanelNode) {
             currentPanel.interfaceInteraction = interfaceInteraction

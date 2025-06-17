@@ -827,10 +827,10 @@ final class AuthorizedApplicationContext {
         let isChildModeActive = (context.childModeManager?.isChildModeActive ?? .single(false))
             |> distinctUntilChanged
         
-        let appTabsSignal = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-        |> map { sharedData -> [DAppTab] in
+        let appTabsSignal = context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+        |> map { view -> [DAppTab] in
             var value = DTabBarSettings.default
-            if let settings = sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) {
+            if let settings = view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) {
                 value = settings.tabBarSettings
             }
             return value.activeTabs

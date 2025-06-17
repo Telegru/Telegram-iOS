@@ -259,6 +259,8 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
     
     let peerDisposable = MetaDisposable()
     let titleDisposable = MetaDisposable()
+    let isPeerAllowedDisposable = MetaDisposable()
+    
     var accountPeerDisposable: Disposable?
     let navigationActionDisposable = MetaDisposable()
     var networkStateDisposable: Disposable?
@@ -772,7 +774,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         
         self.stickerSettings = ChatInterfaceStickerSettings()
         
-        self.presentationInterfaceState = ChatPresentationInterfaceState(chatWallpaper: self.presentationData.chatWallpaper, theme: self.presentationData.theme, strings: self.presentationData.strings, dateTimeFormat: self.presentationData.dateTimeFormat, nameDisplayOrder: self.presentationData.nameDisplayOrder, limitsConfiguration: context.currentLimitsConfiguration.with { $0 }, fontSize: self.presentationData.chatFontSize, bubbleCorners: self.presentationData.chatBubbleCorners, accountPeerId: context.account.peerId, mode: mode, chatLocation: chatLocation, subject: subject, peerNearbyData: peerNearbyData, greetingData: context.prefetchManager?.preloadedGreetingSticker, pendingUnpinnedAllMessages: false, activeGroupCallInfo: nil, hasActiveGroupCall: false, importState: nil, threadData: nil, isGeneralThreadClosed: nil, replyMessage: nil, accountPeerColor: nil, businessIntro: nil)
+        self.presentationInterfaceState = ChatPresentationInterfaceState(chatWallpaper: self.presentationData.chatWallpaper, theme: self.presentationData.theme, strings: self.presentationData.strings, dateTimeFormat: self.presentationData.dateTimeFormat, nameDisplayOrder: self.presentationData.nameDisplayOrder, limitsConfiguration: context.currentLimitsConfiguration.with { $0 }, fontSize: self.presentationData.chatFontSize, bubbleCorners: self.presentationData.chatBubbleCorners, accountPeerId: context.account.peerId, mode: mode, chatLocation: chatLocation, subject: subject, peerNearbyData: peerNearbyData, greetingData: context.prefetchManager?.preloadedGreetingSticker, pendingUnpinnedAllMessages: false, activeGroupCallInfo: nil, hasActiveGroupCall: false, importState: nil, threadData: nil, isGeneralThreadClosed: nil, replyMessage: nil, accountPeerColor: nil, businessIntro: nil, requiresParentalPermission: false)
         
         if case let .customChatContents(customChatContents) = subject {
             switch customChatContents.kind {
@@ -3143,9 +3145,9 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                             return
                         }
 
-                        let _ = (context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-                        |> map { sharedData -> Bool in
-                            if let current = sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) {
+                        let _ = (context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+                        |> map { view -> Bool in
+                            if let current = view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) {
                                 return current.callConfirmation
                             } else {
                                 return DalSettings.defaultSettings.callConfirmation
@@ -5939,10 +5941,19 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                 }
                         
                 let isPeerAllowed = (context.childModeManager?.isPeerAllowed(peerId) ?? .single(true))
+                
+                self.isPeerAllowedDisposable.set((isPeerAllowed
+                |> deliverOnMainQueue)
+                .startStrict(next: { [weak self] isPeerAllowed in
+                    self?.updateChatPresentationInterfaceState(animated: false, interactive: false, { state in
+                        return state.updatedRequiresParentalPermission(!isPeerAllowed)
+                    })
+                }))
                                      
                 self.titleDisposable.set((combineLatest(queue: Queue.mainQueue(), peerView.get(), onlineMemberCount, displayedCountSignal, subtitleTextSignal, self.presentationInterfaceStatePromise.get(), hasPeerInfo, messageOptionsTitleInfo, isPeerAllowed)
                 |> deliverOnMainQueue).startStrict(next: { [weak self] peerView, onlineMemberCount, displayedCount, subtitleText, presentationInterfaceState, hasPeerInfo, messageOptionsTitleInfo, isPeerAllowed in
                     if let strongSelf = self {
+                  
                         var isScheduledMessages = false
                         if case .scheduledMessages = presentationInterfaceState.subject {
                             isScheduledMessages = true
@@ -7746,14 +7757,11 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             })
         }
         
-        let disableReadHistory = (self.context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-        |> map { sharedData -> Bool in
+        let disableReadHistory = (self.context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+        |> map { view -> Bool in
             var hideReadTime = false
-//            if let current = sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) {
-//                hideReadTime = current.disableReadHistory
-//            } else {
-                hideReadTime = DalSettings.defaultSettings.disableReadHistory
-//            }
+
+            hideReadTime = DalSettings.defaultSettings.disableReadHistory
             return hideReadTime
         })
 
@@ -7785,14 +7793,14 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             })
         }
         
-        self.addToRecentChatsDisposable =  (self.context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-                                            |> map { sharedData -> DalSettings in
-            return sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
+        self.addToRecentChatsDisposable =  (self.context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+                                            |> map { view -> DalSettings in
+            return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
         }
                                             |> deliverOnMainQueue
         ).startStrict(next: { [weak self] dalSettings in
             if let self {
-                self.addToRecentChats = dalSettings.showRecentChats != nil
+                self.addToRecentChats = dalSettings.showRecentChats
             }
         })
     }
@@ -7901,6 +7909,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             self.postedScheduledMessagesEventsDisposable?.dispose()
             self.premiumOrStarsRequiredDisposable?.dispose()
             self.addToRecentChatsDisposable?.dispose()
+            self.isPeerAllowedDisposable.dispose()
         }
         deallocate()
     }

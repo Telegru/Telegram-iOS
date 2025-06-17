@@ -160,7 +160,7 @@ public func dMessageItemDoubleTapSettingsController(
         context: context,
         updateSelectedItem: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var settings = settings
                     settings.chatsSettings.messageDoubleTapActionType = value
@@ -171,9 +171,9 @@ public func dMessageItemDoubleTapSettingsController(
     )
     
     let doubleTapActionTypeSignal = (
-        context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-        |> map { sharedData -> DMessageItemDoubleTapActionType in
-            return (sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings).chatsSettings.messageDoubleTapActionType
+        context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+        |> map { view -> DMessageItemDoubleTapActionType in
+            return (view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings).chatsSettings.messageDoubleTapActionType
         }
         |> distinctUntilChanged
     )

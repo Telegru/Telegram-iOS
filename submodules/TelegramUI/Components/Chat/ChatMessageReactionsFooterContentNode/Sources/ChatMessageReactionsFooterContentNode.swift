@@ -66,7 +66,8 @@ public final class MessageReactionButtonsNode: ASDisplayNode {
         associatedData: ChatMessageItemAssociatedData,
         alignment: DisplayAlignment,
         constrainedWidth: CGFloat,
-        type: DisplayType
+        type: DisplayType,
+        whitelist: Set<EnginePeer.Id>? = nil
     ) -> (proposedWidth: CGFloat, continueLayout: (CGFloat) -> (size: CGSize, apply: (ListViewItemUpdateAnimation) -> Void)) {
         let reactionColors: ReactionButtonComponent.Colors
         let themeColors: PresentationThemeBubbleColorComponents
@@ -220,6 +221,7 @@ public final class MessageReactionButtonsNode: ASDisplayNode {
                     ),
                     count: Int(reaction.count),
                     peers: peers,
+                    whitelist: whitelist,
                     chosenOrder: reaction.chosenOrder
                 )
             },

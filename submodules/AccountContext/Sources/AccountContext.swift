@@ -1333,7 +1333,8 @@ public protocol AccountContext: AnyObject {
     var additionalAnimatedEmojiStickers: Signal<[String: [Int: StickerPackItem]], NoError> { get }
     var availableReactions: Signal<AvailableReactions?, NoError> { get }
     var availableMessageEffects: Signal<AvailableMessageEffects?, NoError> { get }
-    
+    var childModeState: Signal<DChildModeState, NoError> { get }
+
     var isPremium: Bool { get }
     var isFrozen: Bool { get }
     var userLimits: EngineConfiguration.UserLimits { get }

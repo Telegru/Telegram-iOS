@@ -2364,6 +2364,43 @@ public final class ChatListNode: ListView {
             return peer?.isPremium ?? false
         }
         |> distinctUntilChanged
+
+        let dahlSettingsSignal = context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+        |> map { view -> DalSettings in
+            return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
+        }
+        
+        let isChildModeActive = (self.context.childModeManager?.isChildModeActive ?? .single(false))
+            |> distinctUntilChanged
+        
+        let chatListItemTextLineCount = combineLatest(dahlSettingsSignal, isChildModeActive)
+            |> map { dahlSettings, isChildModeActive -> Int in
+                if isChildModeActive {
+                    return Int(DalSettings.defaultSettings.chatsListViewType.rawValue)
+                } else {
+                    return Int(dahlSettings.chatsListViewType.rawValue)
+                }
+            }
+            |> deliverOnMainQueue
+            |> distinctUntilChanged
+        
+
+        let showStatusIconSignal = dahlSettingsSignal
+        |> map { settings -> Bool in
+            settings.premiumSettings.showStatusIcon
+        }
+        |> distinctUntilChanged
+        
+        let showChatListSeparatorsSignal = dahlSettingsSignal
+        |> map { settings -> Bool in
+            return settings.appearanceSettings.showChatListSeparators
+        }
+        |> distinctUntilChanged
+        
+        let whitelist: Signal<[EnginePeer.Id]?, NoError> = (self.context.childModeManager?.whitelist() ?? .single((false, [])))
+            |> map { enabled, peerIds in
+                return enabled ? peerIds : nil
+            }
         
         let isChildModeActive = (self.context.childModeManager?.isChildModeActive ?? .single(false))
             |> distinctUntilChanged

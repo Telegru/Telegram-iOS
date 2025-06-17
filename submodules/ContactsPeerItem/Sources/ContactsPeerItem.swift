@@ -1114,7 +1114,7 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
             }
             
             var actionButtonTitleLayoutAndApply: (TextNodeLayout, () -> TextNode)?
-            if let buttonAction = item.buttonAction {
+            if let buttonAction = item.buttonAction, !item.blurred {
                 actionButtonTitleLayoutAndApply = makeActionButtonTitleLayuout(TextNodeLayoutArguments(attributedString: NSAttributedString(string: buttonAction.title, font: Font.semibold(15.0), textColor: item.presentationData.theme.list.itemCheckColors.foregroundColor, paragraphAlignment: .center), backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: params.width, height: CGFloat.infinity), alignment: .natural, cutout: nil, insets: UIEdgeInsets()))
                 
                 if let (actionButtonTitleLayout, _) = actionButtonTitleLayoutAndApply {

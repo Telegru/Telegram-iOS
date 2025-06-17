@@ -139,6 +139,7 @@ public final class ChatListHeaderComponent: Component {
     public let storiesFraction: CGFloat
     public let storiesUnlocked: Bool
     public let uploadProgress: [EnginePeer.Id: Float]
+    public let whitelist: Set<EnginePeer.Id>?
     public let context: AccountContext
     public let theme: PresentationTheme
     public let strings: PresentationStrings
@@ -157,6 +158,7 @@ public final class ChatListHeaderComponent: Component {
         storiesFraction: CGFloat,
         storiesUnlocked: Bool,
         uploadProgress: [EnginePeer.Id: Float],
+        whitelist: Set<EnginePeer.Id>?,
         context: AccountContext,
         theme: PresentationTheme,
         strings: PresentationStrings,
@@ -178,6 +180,7 @@ public final class ChatListHeaderComponent: Component {
         self.strings = strings
         self.openStatusSetup = openStatusSetup
         self.toggleIsLocked = toggleIsLocked
+        self.whitelist = whitelist
     }
     
     public static func ==(lhs: ChatListHeaderComponent, rhs: ChatListHeaderComponent) -> Bool {
@@ -218,6 +221,9 @@ public final class ChatListHeaderComponent: Component {
             return false
         }
         if lhs.strings !== rhs.strings {
+            return false
+        }
+        if lhs.whitelist != rhs.whitelist {
             return false
         }
         return true
@@ -956,6 +962,7 @@ public final class ChatListHeaderComponent: Component {
                         collapseFraction: 1.0 - component.storiesFraction,
                         unlocked: component.storiesUnlocked,
                         uploadProgress: component.uploadProgress,
+                        whitelist: component.whitelist,
                         peerAction: { [weak self] peer in
                             guard let self else {
                                 return

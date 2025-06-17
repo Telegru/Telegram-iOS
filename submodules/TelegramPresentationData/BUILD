@@ -25,6 +25,7 @@ swift_library(
         "//Telegram:PresentationStrings",
         "//Teleport/TPUI:TPUI",
         "//Teleport/DWallpaper:DWallpaper",
+        "//Teleport/DSettings/PresentationData:DSettingsPresentationData",
     ],
     data = [
         "//Teleport/DWallpaper:DWallpaperImages"

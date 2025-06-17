@@ -95,7 +95,7 @@ public func dRecentChatsSettingsController(context: AccountContext) -> ViewContr
     let arguments = DRecentChatsSettingsControllerArguments(
         context: context,
         updateShowRecentChats: { value in
-            let _ = updateDalSettingsInteractively(accountManager: context.sharedContext.accountManager) { settings in
+            let _ = updateDalSettingsInteractively(engine: context.engine) { settings in
                 var updatedSettings = settings
                 updatedSettings.showRecentChats = value
                 return updatedSettings
@@ -105,15 +105,10 @@ public func dRecentChatsSettingsController(context: AccountContext) -> ViewContr
     )
     
     let showRecentChats = (
-        context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-        |> map { sharedData -> Bool in
-            let dalSettings: DalSettings
-            if let entry = sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) {
-                dalSettings = entry
-            } else {
-                dalSettings = DalSettings.defaultSettings
-            }
-            return dalSettings.showRecentChats ?? false
+        context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+        |> map { view -> Bool in
+            let dalSettings = view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
+            return dalSettings.showRecentChats
         }
         |> distinctUntilChanged
     )

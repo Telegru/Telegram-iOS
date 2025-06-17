@@ -209,7 +209,7 @@ private final class CallSuggestTabAlertContentNode: AlertContentNode {
     }
 }
 
-func callSuggestTabController(sharedContext: SharedAccountContext) -> AlertController {
+func callSuggestTabController(sharedContext: SharedAccountContext, engine: TelegramEngine) -> AlertController {
     let presentationData = sharedContext.currentPresentationData.with { $0 }
     let theme = presentationData.theme
     let strings = presentationData.strings
@@ -224,7 +224,7 @@ func callSuggestTabController(sharedContext: SharedAccountContext) -> AlertContr
             $0.withUpdatedShowTab(true)
         }).start()
         
-        let _ = updateDalSettingsInteractively(accountManager: sharedContext.accountManager, {
+        let _ = updateDalSettingsInteractively(engine: engine, {
             $0.withUpdatedShowCallTab()
         }).start()
     })]

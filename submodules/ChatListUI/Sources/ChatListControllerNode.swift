@@ -1385,6 +1385,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                 storySubscriptions: effectiveStorySubscriptions,
                 storiesIncludeHidden: self.location == .chatList(groupId: .archive),
                 uploadProgress: self.controller?.storyUploadProgress ?? [:],
+                whitelist: self.controller?.whitelist ?? nil,
                 tabsNode: tabsNode,
                 tabsNodeIsSearch: tabsNodeIsSearch,
                 accessoryPanelContainer: self.controller?.accessoryPanelContainer,

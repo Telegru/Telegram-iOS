@@ -579,9 +579,12 @@ extension ChatControllerImpl {
         
         if let peerId = self.chatLocation.peerId {
             self.chatThemeEmoticonPromise.set(self.context.engine.data.get(TelegramEngine.EngineData.Item.Peer.ThemeEmoticon(id: peerId)))
-            let chatWallpaper = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-            |> mapToSignal { [weak self] sharedData -> Signal<TelegramWallpaper?, NoError> in
-                let settings = sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? .defaultSettings
+            
+            let chatWallpaper = context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+            |> map { view -> DalSettings in
+                return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
+            }
+            |> mapToSignal { [weak self] settings -> Signal<TelegramWallpaper?, NoError> in
                 guard let self, settings.appearanceSettings.showCustomWallpaperInChannels else {
                     return .single(nil)
                 }
@@ -741,10 +744,12 @@ extension ChatControllerImpl {
                 threadData |> debug_measureTimeToFirstEvent(label: "cachedData_threadData"),
                 forumTopicData |> debug_measureTimeToFirstEvent(label: "cachedData_forumTopicData"),
                 premiumGiftOptions |> debug_measureTimeToFirstEvent(label: "cachedData_premiumGiftOptions"),
-				self.context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-            ).startStrict(next: { [weak self] cachedDataAndMessages, hasPendingMessages, isTopReplyThreadMessageShown, topPinnedMessage, customEmojiAvailable, isForum, threadData, forumTopicData, premiumGiftOptions, sharedData in
+                  self.context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+                  |> map { view -> DalSettings in
+                    return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
+                }
+            ).startStrict(next: { [weak self] cachedDataAndMessages, hasPendingMessages, isTopReplyThreadMessageShown, topPinnedMessage, customEmojiAvailable, isForum, threadData, forumTopicData, premiumGiftOptions, dahlSettings in
                 if let strongSelf = self {
-                    let dahlSettings = sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? .defaultSettings
                     let (cachedData, messages) = cachedDataAndMessages
                     
                     if cachedData != nil {
@@ -2909,9 +2914,9 @@ extension ChatControllerImpl {
                     return
                 }
                 
-                let dalSettings: Signal<DalSettings, NoError> = (strongSelf.context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-                |> map { sharedData -> DalSettings in
-                    return sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
+                let dalSettings: Signal<DalSettings, NoError> = (strongSelf.context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+                                                                 |> map { view -> DalSettings in
+                    return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
                 })
                 
                 let hasOngoingCall: Signal<Bool, NoError> = strongSelf.context.sharedContext.hasOngoingCall.get()

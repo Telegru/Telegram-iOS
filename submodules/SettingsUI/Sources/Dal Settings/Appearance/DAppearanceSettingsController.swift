@@ -361,7 +361,7 @@ public func dAppearanceSettingsController(
     let arguments = DAppearanceSettingsArguments(
         context: context,
         updateShowCustomWallpaperInChannels: { value in
-            let _ = updateDalSettingsInteractively(accountManager: context.sharedContext.accountManager) { settings in
+            let _ = updateDalSettingsInteractively(engine: context.engine) { settings in
                 var updatedSettings = settings
                 updatedSettings.appearanceSettings.showCustomWallpaperInChannels = value
                 return updatedSettings
@@ -369,7 +369,7 @@ public func dAppearanceSettingsController(
             .start()
         },
         updateChannelBottomPanel: { value in
-            let _ = updateDalSettingsInteractively(accountManager: context.sharedContext.accountManager) { settings in
+            let _ = updateDalSettingsInteractively(engine: context.engine) { settings in
                 var updatedSettings = settings
                 updatedSettings.appearanceSettings.showChannelBottomPanel = value
                 return updatedSettings
@@ -377,7 +377,7 @@ public func dAppearanceSettingsController(
             .start()
         },
         updateChatsListViewType: { selectedType in
-            let _ = updateDalSettingsInteractively(accountManager: context.sharedContext.accountManager) { settings in
+            let _ = updateDalSettingsInteractively(engine: context.engine) { settings in
                 var updatedSettings = settings
                 updatedSettings.chatsListViewType = selectedType
                 return updatedSettings
@@ -385,7 +385,7 @@ public func dAppearanceSettingsController(
             .start()
         },
         updateViewRounding: { value in
-            let _ = updateDalSettingsInteractively(accountManager: context.sharedContext.accountManager) { settings in
+            let _ = updateDalSettingsInteractively(engine: context.engine) { settings in
                 var updatedSettings = settings
                 updatedSettings.appearanceSettings.squareStyle = value
                 return updatedSettings
@@ -393,7 +393,7 @@ public func dAppearanceSettingsController(
             .start()
         },
         updateVKIcons: { value in
-            let _ = updateDalSettingsInteractively(accountManager: context.sharedContext.accountManager) { settings in
+            let _ = updateDalSettingsInteractively(engine: context.engine) { settings in
                 var updatedSettings = settings
                 updatedSettings.appearanceSettings.vkIcons = value
                 return updatedSettings
@@ -401,7 +401,7 @@ public func dAppearanceSettingsController(
             .start()
         },
         updateAlternativeFontInAvatars: { value in
-            let _ = updateDalSettingsInteractively(accountManager: context.sharedContext.accountManager) { settings in
+            let _ = updateDalSettingsInteractively(engine: context.engine) { settings in
                 var updatedSettings = settings
                 updatedSettings.appearanceSettings.alternativeAvatarFont = value
                 return updatedSettings
@@ -413,7 +413,7 @@ public func dAppearanceSettingsController(
             }
         },
         updateShowChatListSeparators: { value in
-            let _ = updateDalSettingsInteractively(accountManager: context.sharedContext.accountManager) { settings in
+            let _ = updateDalSettingsInteractively(engine: context.engine) { settings in
                 var updatedSettings = settings
                 updatedSettings.appearanceSettings.showChatListSeparators = value
                 return updatedSettings
@@ -421,9 +421,9 @@ public func dAppearanceSettingsController(
         }
     )
     
-    let dahlSettingsSignal = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-    |> map { sharedData -> DalSettings in
-        return sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? .defaultSettings
+    let dahlSettingsSignal = context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+    |> map { view -> DalSettings in
+        return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
     } |> distinctUntilChanged
     
     let signal = combineLatest(

@@ -524,7 +524,7 @@ public final class ChatMessageAvatarHeaderNodeImpl: ListViewItemHeaderNode, Chat
         }
 
         self.containerNode.activated = { [weak self] gesture, _ in
-            guard let strongSelf = self, let peer = strongSelf.peer else {
+            guard let strongSelf = self, let peer = strongSelf.peer, !blurred else {
                 return
             }
             var messageId: MessageId?
@@ -572,7 +572,7 @@ public final class ChatMessageAvatarHeaderNodeImpl: ListViewItemHeaderNode, Chat
         if peer.smallProfileImage != nil {
             self.avatarNode.setPeerV2(context: context, theme: theme, peer: EnginePeer(peer), authorOfMessage: authorOfMessage, overrideImage: overrideImage, emptyColor: emptyColor, synchronousLoad: synchronousLoad, displayDimensions: CGSize(width: 38.0, height: 38.0), blurred: blurred)
         } else {
-            self.avatarNode.setPeer(context: context, theme: theme, peer: EnginePeer(peer), authorOfMessage: authorOfMessage, overrideImage: overrideImage, emptyColor: emptyColor, synchronousLoad: synchronousLoad, displayDimensions: CGSize(width: 38.0, height: 38.0))
+            self.avatarNode.setPeer(context: context, theme: theme, peer: EnginePeer(peer), authorOfMessage: authorOfMessage, overrideImage: overrideImage, emptyColor: emptyColor, synchronousLoad: synchronousLoad, displayDimensions: CGSize(width: 38.0, height: 38.0), blurred: blurred, displayLetters: !blurred)
         }
         
         if peer.isPremium && context.sharedContext.energyUsageSettings.autoplayVideo {

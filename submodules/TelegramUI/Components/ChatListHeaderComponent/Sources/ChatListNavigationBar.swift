@@ -34,6 +34,7 @@ public final class ChatListNavigationBar: Component {
     public let storySubscriptions: EngineStorySubscriptions?
     public let storiesIncludeHidden: Bool
     public let uploadProgress: [EnginePeer.Id: Float]
+    public let whitelist: Set<EnginePeer.Id>?
     public let tabsNode: ASDisplayNode?
     public let tabsNodeIsSearch: Bool
     public let accessoryPanelContainer: ASDisplayNode?
@@ -57,6 +58,7 @@ public final class ChatListNavigationBar: Component {
         storySubscriptions: EngineStorySubscriptions?,
         storiesIncludeHidden: Bool,
         uploadProgress: [EnginePeer.Id: Float],
+        whitelist: Set<EnginePeer.Id>?,
         tabsNode: ASDisplayNode?,
         tabsNodeIsSearch: Bool,
         accessoryPanelContainer: ASDisplayNode?,
@@ -87,6 +89,7 @@ public final class ChatListNavigationBar: Component {
         self.openStatusSetup = openStatusSetup
         self.allowAutomaticOrder = allowAutomaticOrder
         self.recentChatsPanelNode = recentChatsPanelNode
+        self.whitelist = whitelist
     }
 
     public static func ==(lhs: ChatListNavigationBar, rhs: ChatListNavigationBar) -> Bool {
@@ -142,6 +145,9 @@ public final class ChatListNavigationBar: Component {
             return false
         }
         if lhs.recentChatsPanelNode !== rhs.recentChatsPanelNode {
+            return false
+        }
+        if lhs.whitelist != rhs.whitelist {
             return false
         }
         return true
@@ -379,6 +385,7 @@ public final class ChatListNavigationBar: Component {
                 storiesFraction: storiesOffsetFraction,
                 storiesUnlocked: storiesUnlocked,
                 uploadProgress: component.uploadProgress,
+                whitelist: component.whitelist,
                 context: component.context,
                 theme: component.theme,
                 strings: component.strings,
@@ -593,6 +600,7 @@ public final class ChatListNavigationBar: Component {
                     storySubscriptions: component.storySubscriptions,
                     storiesIncludeHidden: component.storiesIncludeHidden,
                     uploadProgress: storyUploadProgress,
+                    whitelist: component.whitelist,
                     tabsNode: component.tabsNode,
                     tabsNodeIsSearch: component.tabsNodeIsSearch,
                     accessoryPanelContainer: component.accessoryPanelContainer,
@@ -614,6 +622,67 @@ public final class ChatListNavigationBar: Component {
                         storiesFraction: headerComponent.storiesFraction,
                         storiesUnlocked: headerComponent.storiesUnlocked,
                         uploadProgress: storyUploadProgress,
+                        whitelist: headerComponent.whitelist,
+                        context: headerComponent.context,
+                        theme: headerComponent.theme,
+                        strings: headerComponent.strings,
+                        openStatusSetup: headerComponent.openStatusSetup,
+                        toggleIsLocked: headerComponent.toggleIsLocked
+                    )
+                    self.currentHeaderComponent = headerComponent
+                    
+                    let _ = self.headerContent.update(
+                        transition: .immediate,
+                        component: AnyComponent(headerComponent),
+                        environment: {},
+                        containerSize: CGSize(width: currentLayout.size.width, height: 44.0)
+                    )
+                }
+            }
+        }
+        
+        public func updateStoryWhitelist(whitelist: Set<EnginePeer.Id>?) {
+            guard let component = self.component else {
+                return
+            }
+            if component.whitelist != whitelist {
+                self.component = ChatListNavigationBar(
+                    context: component.context,
+                    theme: component.theme,
+                    strings: component.strings,
+                    statusBarHeight: component.statusBarHeight,
+                    sideInset: component.sideInset,
+                    isSearchActive: component.isSearchActive,
+                    isSearchEnabled: component.isSearchEnabled,
+                    primaryContent: component.primaryContent,
+                    secondaryContent: component.secondaryContent,
+                    secondaryTransition: component.secondaryTransition,
+                    storySubscriptions: component.storySubscriptions,
+                    storiesIncludeHidden: component.storiesIncludeHidden,
+                    uploadProgress: component.uploadProgress,
+                    whitelist: whitelist,
+                    tabsNode: component.tabsNode,
+                    tabsNodeIsSearch: component.tabsNodeIsSearch,
+                    accessoryPanelContainer: component.accessoryPanelContainer,
+                    accessoryPanelContainerHeight: component.accessoryPanelContainerHeight,
+                    recentChatsPanelNode: component.recentChatsPanelNode,
+                    activateSearch: component.activateSearch,
+                    openStatusSetup: component.openStatusSetup,
+                    allowAutomaticOrder: component.allowAutomaticOrder
+                )
+                if let currentLayout = self.currentLayout, let headerComponent = self.currentHeaderComponent {
+                    let headerComponent = ChatListHeaderComponent(
+                        sideInset: headerComponent.sideInset,
+                        primaryContent: headerComponent.primaryContent,
+                        secondaryContent: headerComponent.secondaryContent,
+                        secondaryTransition: headerComponent.secondaryTransition,
+                        networkStatus: headerComponent.networkStatus,
+                        storySubscriptions: headerComponent.storySubscriptions,
+                        storiesIncludeHidden: headerComponent.storiesIncludeHidden,
+                        storiesFraction: headerComponent.storiesFraction,
+                        storiesUnlocked: headerComponent.storiesUnlocked,
+                        uploadProgress: component.uploadProgress,
+                        whitelist: component.whitelist,
                         context: headerComponent.context,
                         theme: headerComponent.theme,
                         strings: headerComponent.strings,

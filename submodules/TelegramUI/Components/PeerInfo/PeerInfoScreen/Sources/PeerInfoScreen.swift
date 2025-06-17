@@ -114,10 +114,10 @@ import VerifyAlertController
 import GiftViewScreen
 import ContentHiddenOverlayNode
 
-import TPSettings
+import DSettings
 import TPStrings
 import TPUI
-import DSettings
+import DSettingsScreen
 
 public enum PeerInfoAvatarEditingMode {
     case generic
@@ -464,7 +464,7 @@ final class PeerInfoSelectionPanelNode: ASDisplayNode {
         self.backgroundNode.updateColor(color: presentationData.theme.rootController.navigationBar.blurredBackgroundColor, transition: .immediate)
         self.separatorNode.backgroundColor = presentationData.theme.rootController.navigationBar.separatorColor
         
-        let interfaceState = ChatPresentationInterfaceState(chatWallpaper: .color(0), theme: presentationData.theme, strings: presentationData.strings, dateTimeFormat: presentationData.dateTimeFormat, nameDisplayOrder: presentationData.nameDisplayOrder, limitsConfiguration: .defaultValue, fontSize: .regular, bubbleCorners: PresentationChatBubbleCorners(mainRadius: 16.0, auxiliaryRadius: 8.0, mergeBubbleCorners: true), accountPeerId: self.context.account.peerId, mode: .standard(.default), chatLocation: .peer(id: self.peerId), subject: nil, peerNearbyData: nil, greetingData: nil, pendingUnpinnedAllMessages: false, activeGroupCallInfo: nil, hasActiveGroupCall: false, importState: nil, threadData: nil, isGeneralThreadClosed: nil, replyMessage: nil, accountPeerColor: nil, businessIntro: nil)
+        let interfaceState = ChatPresentationInterfaceState(chatWallpaper: .color(0), theme: presentationData.theme, strings: presentationData.strings, dateTimeFormat: presentationData.dateTimeFormat, nameDisplayOrder: presentationData.nameDisplayOrder, limitsConfiguration: .defaultValue, fontSize: .regular, bubbleCorners: PresentationChatBubbleCorners(mainRadius: 16.0, auxiliaryRadius: 8.0, mergeBubbleCorners: true), accountPeerId: self.context.account.peerId, mode: .standard(.default), chatLocation: .peer(id: self.peerId), subject: nil, peerNearbyData: nil, greetingData: nil, pendingUnpinnedAllMessages: false, activeGroupCallInfo: nil, hasActiveGroupCall: false, importState: nil, threadData: nil, isGeneralThreadClosed: nil, replyMessage: nil, accountPeerColor: nil, businessIntro: nil, requiresParentalPermission: false)
         let panelHeight = self.selectionPanel.updateLayout(width: layout.size.width, leftInset: layout.safeInsets.left, rightInset: layout.safeInsets.right, bottomInset: layout.intrinsicInsets.bottom, additionalSideInsets: UIEdgeInsets(), maxHeight: layout.size.height, fullscreenMaxHeight: layout.size.height, isSecondary: false, transition: transition, interfaceState: interfaceState, metrics: layout.metrics, isMediaInputExpanded: false)
         
         transition.updateFrame(node: self.selectionPanel, frame: CGRect(origin: CGPoint(), size: CGSize(width: layout.size.width, height: panelHeight)))
@@ -2889,6 +2889,8 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
     private var hiddenMediaDisposable: Disposable?
     private let hiddenAvatarRepresentationDisposable = MetaDisposable()
     
+    private var autoTranslateDisposable: Disposable?
+    
     private var resolvePeerByNameDisposable: MetaDisposable?
     private let navigationActionDisposable = MetaDisposable()
     private let enqueueMediaMessageDisposable = MetaDisposable()
@@ -4958,11 +4960,11 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
                                 }
                                 return profileGifts.upgradeStarGift(formId: formId, reference: reference, keepOriginalInfo: keepOriginalInfo)
                             },
-                            buyGift: { [weak profileGifts] slug, peerId in
+                            buyGift: { [weak profileGifts] slug, peerId, price in
                                 guard let profileGifts else {
                                     return .never()
                                 }
-                                return profileGifts.buyStarGift(slug: slug, peerId: peerId)
+                                return profileGifts.buyStarGift(slug: slug, peerId: peerId, price: price)
                             },
                             shareStory: { [weak self] uniqueGift in
                                 guard let self, let controller = self.controller else {
@@ -5164,6 +5166,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
         self.boostStatusDisposable?.dispose()
         self.personalChannelsDisposable?.dispose()
         self.childModeDisposable?.dispose()
+        self.autoTranslateDisposable?.dispose()
     }
     
     override func didLoad() {
@@ -7646,16 +7649,16 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
         result: ((ContextMenuActionResult) -> Void)? = nil,
         backAction: ((ContextControllerProtocol) -> Void)? = nil
     ) {
-        let _ = (self.context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-        |> map { sharedData -> Bool in
-            if let current = sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) {
-                return current.callConfirmation
-            } else {
-                return DalSettings.defaultSettings.callConfirmation
+        let _ = (
+            context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+            |> map { view -> DalSettings in
+                return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
             }
-        }
-        |> take(1)
-        |> deliverOnMainQueue).startStandalone(next: { [weak self] (callConfirmation: Bool) in
+            |> map {
+                $0.callConfirmation
+            }
+            |> take(1)
+            |> deliverOnMainQueue).startStandalone(next: { [weak self] (callConfirmation: Bool) in
                 guard let strongSelf = self else { return }
                 
                 if callConfirmation {
@@ -9374,7 +9377,10 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
     }
     
     private func displayAutoTranslateLocked() {
-        let _ = combineLatest(
+        guard self.autoTranslateDisposable == nil else {
+            return
+        }
+        self.autoTranslateDisposable = combineLatest(
             queue: Queue.mainQueue(),
             context.engine.peers.getChannelBoostStatus(peerId: self.peerId),
             context.engine.peers.getMyBoostStatus()
@@ -9388,6 +9394,9 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
                 }
             })
             controller.push(boostController)
+            
+            self.autoTranslateDisposable?.dispose()
+            self.autoTranslateDisposable = nil
         })
     }
     
@@ -11206,7 +11215,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
                 self?.deactivateSearch()
             })
         } else if let currentPaneKey = self.paneContainerNode.currentPaneKey, case .savedMessagesChats = currentPaneKey {
-            let contentNode = ChatListSearchContainerNode(context: self.context, animationCache: self.context.animationCache, animationRenderer: self.context.animationRenderer, filter: [.removeSearchHeader], requestPeerType: nil, location: .savedMessagesChats, displaySearchFilters: false, hasDownloads: false, isChildModeActive: self.contentHiddenOverlayNode.isVisible(), initialFilter: .chats, openPeer: { [weak self] peer, _, _, _ in
+            let contentNode = ChatListSearchContainerNode(context: self.context, animationCache: self.context.animationCache, animationRenderer: self.context.animationRenderer, filter: [.removeSearchHeader], requestPeerType: nil, location: .savedMessagesChats, displaySearchFilters: false, hasDownloads: false, initialFilter: .chats, openPeer: { [weak self] peer, _, _, _ in
                 guard let self else {
                     return
                 }

@@ -86,10 +86,11 @@ public final class StoryContentContextImpl: StoryContentContext {
                     TelegramEngine.EngineData.Item.NotificationSettings.Global(),
                     TelegramEngine.EngineData.Item.Peer.IsPremiumRequiredForMessaging(id: peerId)
                 ),
-                preferHighQualityStories
+                preferHighQualityStories,
+                context.childModeState
             )
-            |> mapToSignal { _, views, data, preferHighQualityStories -> Signal<(CombinedView, [PeerId: Peer], (EngineGlobalNotificationSettings, Bool), [MediaId: TelegramMediaFile], [Int64: EngineStoryItem.ForwardInfo], [StoryId: EngineStoryItem?], Bool), NoError> in
-                return context.account.postbox.transaction { transaction -> (CombinedView, [PeerId: Peer], (EngineGlobalNotificationSettings, Bool), [MediaId: TelegramMediaFile], [Int64: EngineStoryItem.ForwardInfo], [StoryId: EngineStoryItem?], Bool) in
+            |> mapToSignal { _, views, data, preferHighQualityStories, childModeState -> Signal<(CombinedView, [PeerId: Peer], (EngineGlobalNotificationSettings, Bool), [MediaId: TelegramMediaFile], [Int64: EngineStoryItem.ForwardInfo], [StoryId: EngineStoryItem?], Bool, Set<EnginePeer.Id>?), NoError> in
+                return context.account.postbox.transaction { transaction -> (CombinedView, [PeerId: Peer], (EngineGlobalNotificationSettings, Bool), [MediaId: TelegramMediaFile], [Int64: EngineStoryItem.ForwardInfo], [StoryId: EngineStoryItem?], Bool, Set<EnginePeer.Id>?) in
                     var peers: [PeerId: Peer] = [:]
                     var forwardInfoStories: [StoryId: EngineStoryItem?] = [:]
                     var allEntityFiles: [MediaId: TelegramMediaFile] = [:]
@@ -159,10 +160,10 @@ public final class StoryContentContextImpl: StoryContentContext {
                         }
                     }
                     
-                    return (views, peers, data, allEntityFiles, pendingForwardsInfo, forwardInfoStories, preferHighQualityStories)
+                    return (views, peers, data, allEntityFiles, pendingForwardsInfo, forwardInfoStories, preferHighQualityStories, childModeState.isEnabled ? childModeState.allowedPeerIds : nil)
                 }
             }
-            |> deliverOnMainQueue).startStrict(next: { [weak self] views, peers, data, allEntityFiles, pendingForwardsInfo, forwardInfoStories, preferHighQualityStories in
+            |> deliverOnMainQueue).startStrict(next: { [weak self] views, peers, data, allEntityFiles, pendingForwardsInfo, forwardInfoStories, preferHighQualityStories, childModeState in
                 guard let self else {
                     return
                 }
@@ -476,7 +477,8 @@ public final class StoryContentContextImpl: StoryContentContext {
                             previousItemId: previousItemId,
                             nextItemId: nextItemId,
                             allItems: allItems,
-                            forwardInfoStories: self.currentForwardInfoStories
+                            forwardInfoStories: self.currentForwardInfoStories,
+                            blurred: childModeState != nil && !childModeState!.contains(peer.id)
                         )
                         self.isReady = true
                         self.updated.set(.single(Void()))
@@ -1375,7 +1377,8 @@ public final class SingleStoryContentContextImpl: StoryContentContext {
                         previousItemId: nil,
                         nextItemId: nil,
                         allItems: [mainItem],
-                        forwardInfoStories: self.currentForwardInfoStories
+                        forwardInfoStories: self.currentForwardInfoStories,
+                        blurred: false
                     ),
                     previousSlice: nil,
                     nextSlice: nil
@@ -1652,7 +1655,8 @@ public final class PeerStoryListContentContextImpl: StoryContentContext {
                             previousItemId: focusedIndex == 0 ? nil : state.items[focusedIndex - 1].id,
                             nextItemId: (focusedIndex == state.items.count - 1) ? nil : state.items[focusedIndex + 1].id,
                             allItems: allItems,
-                            forwardInfoStories: [:]
+                            forwardInfoStories: [:],
+                            blurred: false
                         ),
                         previousSlice: nil,
                         nextSlice: nil
@@ -2333,7 +2337,8 @@ public final class RepostStoriesContentContextImpl: StoryContentContext {
             originalStory: EngineStoryItem,
             peerId: EnginePeer.Id,
             focusedId initialFocusedId: Int32?,
-            items: [EngineStoryItem]
+            items: [EngineStoryItem],
+            blurred: Bool = false
         ) {
             self.context = context
             self.peerId = peerId
@@ -2617,7 +2622,8 @@ public final class RepostStoriesContentContextImpl: StoryContentContext {
                             previousItemId: previousItemId,
                             nextItemId: nextItemId,
                             allItems: allItems,
-                            forwardInfoStories: self.currentForwardInfoStories
+                            forwardInfoStories: self.currentForwardInfoStories,
+                            blurred: blurred
                         )
                         self.isReady = true
                         self.updated.set(.single(Void()))

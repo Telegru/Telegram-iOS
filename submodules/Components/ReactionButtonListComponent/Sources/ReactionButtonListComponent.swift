@@ -1262,7 +1262,7 @@ public final class ReactionButtonAsyncNode: ContextControllerSourceView {
                 self.avatarsView = avatarsView
                 self.buttonNode.addSubview(avatarsView)
             }
-            let content = AnimatedAvatarSetContext().update(peers: layout.spec.component.avatarPeers, animated: false)
+            let content = AnimatedAvatarSetContext().update(peers: layout.spec.component.avatarPeers, whitelist: layout.spec.component.whitelist, animated: false)
             let avatarsSize = avatarsView.update(
                 context: layout.spec.component.context,
                 content: content,
@@ -1402,6 +1402,7 @@ public final class ReactionButtonComponent: Equatable {
     public let colors: Colors
     public let reaction: Reaction
     public let avatarPeers: [EnginePeer]
+    public let whitelist: Set<EnginePeer.Id>?
     public let isTag: Bool
     public let count: Int
     public let chosenOrder: Int?
@@ -1412,6 +1413,7 @@ public final class ReactionButtonComponent: Equatable {
         colors: Colors,
         reaction: Reaction,
         avatarPeers: [EnginePeer],
+        whitelist: Set<EnginePeer.Id>?,
         isTag: Bool,
         count: Int,
         chosenOrder: Int?,
@@ -1425,6 +1427,7 @@ public final class ReactionButtonComponent: Equatable {
         self.count = count
         self.chosenOrder = chosenOrder
         self.action = action
+        self.whitelist = context.childModeManager?.whitelistSync() ?? nil
     }
 
     public static func ==(lhs: ReactionButtonComponent, rhs: ReactionButtonComponent) -> Bool {
@@ -1514,17 +1517,20 @@ public final class ReactionButtonsAsyncLayoutContainer {
         public var reaction: ReactionButtonComponent.Reaction
         public var count: Int
         public var peers: [EnginePeer]
+        public var whitelist: Set<EnginePeer.Id>?
         public var chosenOrder: Int?
         
         public init(
             reaction: ReactionButtonComponent.Reaction,
             count: Int,
             peers: [EnginePeer],
+            whitelist: Set<EnginePeer.Id>?,
             chosenOrder: Int?
         ) {
             self.reaction = reaction
             self.count = count
             self.peers = peers
+            self.whitelist = whitelist
             self.chosenOrder = chosenOrder
         }
     }
@@ -1629,6 +1635,7 @@ public final class ReactionButtonsAsyncLayoutContainer {
                 colors: colors,
                 reaction: reaction.reaction,
                 avatarPeers: isTag ? [] : avatarPeers,
+                whitelist: reaction.whitelist,
                 isTag: isTag,
                 count: isTag ? 0 : reaction.count,
                 chosenOrder: reaction.chosenOrder,

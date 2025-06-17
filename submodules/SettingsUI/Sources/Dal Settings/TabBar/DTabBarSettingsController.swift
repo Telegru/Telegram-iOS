@@ -313,18 +313,17 @@ private func dTabBarSettingsControllerEntries(
 public func dTabBarSettingsController(
     context: AccountContext
 ) -> ViewController {
-    let activeTabsSignal = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
+    let dahlSettingsSignal = context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+    |> map { view -> DalSettings in
+        return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
+    }
+    let activeTabsSignal = dahlSettingsSignal
     |> map {
-        ($0.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? .defaultSettings).tabBarSettings.activeTabs
+        $0.tabBarSettings.activeTabs
     }
     |> take(1)
     |> mapToSignal { tabs -> Signal<[DAppTab], NoError> in
         return .single(tabs)
-    }
-    
-    let dahlSettingsSignal = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-    |> map {
-        ($0.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? .defaultSettings)
     }
     
     let activeTabs = Promise<[DAppTab]>()
@@ -335,7 +334,7 @@ public func dTabBarSettingsController(
         addTab: { tab in
             let _ = (activeTabs.get() |> take(1) |> filter { !$0.contains(tab) } |> deliverOnMainQueue )
                 .start(next: { tabs in
-                    let _ = updateDalSettingsInteractively(accountManager: context.sharedContext.accountManager) {
+                    let _ = updateDalSettingsInteractively(engine: context.engine) {
                         var settings = $0
                         var _tabs = tabs
                         _tabs.append(tab)
@@ -348,7 +347,7 @@ public func dTabBarSettingsController(
         removeTab: { tab in
             let _ = (activeTabs.get() |> take(1) |> deliverOnMainQueue)
                 .start(next: { tabs in
-                    let _ = updateDalSettingsInteractively(accountManager: context.sharedContext.accountManager) {
+                    let _ = updateDalSettingsInteractively(engine: context.engine) {
                         var settings = $0
                         var _tabs = tabs
                         _tabs.removeAll(where: { $0.rawValue == tab.rawValue })
@@ -359,7 +358,7 @@ public func dTabBarSettingsController(
                 })
         },
         updateShowTitle: { value in
-            let _ = updateDalSettingsInteractively(accountManager: context.sharedContext.accountManager) {
+            let _ = updateDalSettingsInteractively(engine: context.engine) {
                 var settings = $0
                 settings.tabBarSettings.showTabTitles = value
                 return settings
@@ -467,15 +466,15 @@ public func dTabBarSettingsController(
     controller.willDisappear = { _ in
         let _ = (combineLatest(
             activeTabs.get() |> take(1),
-            context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
+            context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
             |> take(1)
             |> map {
-                ($0.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? .defaultSettings).tabBarSettings.activeTabs
+                ($0.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings).tabBarSettings.activeTabs
             }
         )
         |> filter { $0 != $1 }
         |> mapToSignal { activeTabsValue, _ -> Signal<Void, NoError> in
-            return updateDalSettingsInteractively(accountManager: context.sharedContext.accountManager) {
+            return updateDalSettingsInteractively(engine: context.engine) {
                 var settings = $0
                 settings.tabBarSettings.activeTabs = activeTabsValue
                 return settings

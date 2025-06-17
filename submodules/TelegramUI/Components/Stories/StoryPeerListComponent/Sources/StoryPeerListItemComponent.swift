@@ -855,6 +855,7 @@ public final class StoryPeerListItemComponent: Component {
     public let unseenCount: Int
     public let hasUnseenCloseFriendsItems: Bool
     public let hasItems: Bool
+    public let blurred: Bool
     public let ringAnimation: RingAnimation?
     public let scale: CGFloat
     public let fullWidth: CGFloat
@@ -875,6 +876,7 @@ public final class StoryPeerListItemComponent: Component {
         unseenCount: Int,
         hasUnseenCloseFriendsItems: Bool,
         hasItems: Bool,
+        blurred: Bool,
         ringAnimation: RingAnimation?,
         scale: CGFloat,
         fullWidth: CGFloat,
@@ -894,6 +896,7 @@ public final class StoryPeerListItemComponent: Component {
         self.unseenCount = unseenCount
         self.hasUnseenCloseFriendsItems = hasUnseenCloseFriendsItems
         self.hasItems = hasItems
+        self.blurred = blurred
         self.ringAnimation = ringAnimation
         self.scale = scale
         self.fullWidth = fullWidth
@@ -953,6 +956,9 @@ public final class StoryPeerListItemComponent: Component {
             return false
         }
         if lhs.composeContentOffset != rhs.composeContentOffset {
+            return false
+        }
+        if lhs.blurred != rhs.blurred {
             return false
         }
         return true
@@ -1182,7 +1188,9 @@ public final class StoryPeerListItemComponent: Component {
                 context: component.context,
                 theme: component.theme,
                 peer: component.peer,
-                clipStyle: component.theme.squareStyle ? .rect : .round
+                clipStyle: component.theme.squareStyle ? .rect : .round,
+                blurred: component.blurred,
+                displayLetters: !component.blurred
             )
             avatarNode.updateSize(size: avatarSize)
             

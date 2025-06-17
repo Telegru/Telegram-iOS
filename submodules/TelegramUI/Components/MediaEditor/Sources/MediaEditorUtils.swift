@@ -151,15 +151,19 @@ public func getChatWallpaperImage(context: AccountContext, peerId: EnginePeer.Id
         return (transaction.getPeerCachedData(peerId: peerId) as? CachedChannelData)?.wallpaper
     }
     
-    let squareStyleSignal = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-    |> map { sharedData -> Bool in
-        sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self)?.appearanceSettings.squareStyle ?? false
+    let dahlSettingsSignal = context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+    |> map { view -> DalSettings in
+        return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
+    }
+    let squareStyleSignal = dahlSettingsSignal
+    |> map {
+        $0.appearanceSettings.squareStyle
     }
     |> distinctUntilChanged
     
-    let vkIconsSignal = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
-    |> map { sharedData -> Bool in
-        sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self)?.appearanceSettings.vkIcons ?? false
+    let vkIconsSignal = dahlSettingsSignal
+    |> map {
+        $0.appearanceSettings.vkIcons
     }
     |> distinctUntilChanged
     

@@ -373,7 +373,7 @@ public func dMessageMenuSettingsController(
         context: context,
         updateSaveSound: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var updatedSettings = settings
                     var updatedMessageMenuSettings = settings.messageMenuSettings
@@ -385,7 +385,7 @@ public func dMessageMenuSettingsController(
         },
         updateReply: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var updatedSettings = settings
                     var updatedMessageMenuSettings = settings.messageMenuSettings
@@ -397,7 +397,7 @@ public func dMessageMenuSettingsController(
         },
         updateReport: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var updatedSettings = settings
                     var updatedMessageMenuSettings = settings.messageMenuSettings
@@ -409,7 +409,7 @@ public func dMessageMenuSettingsController(
         },
         updateReplyPrivately: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var updatedSettings = settings
                     var updatedMessageMenuSettings = settings.messageMenuSettings
@@ -421,7 +421,7 @@ public func dMessageMenuSettingsController(
         },
         updateForwardWithoutName: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var updatedSettings = settings
                     var updatedMessageMenuSettings = settings.messageMenuSettings
@@ -433,7 +433,7 @@ public func dMessageMenuSettingsController(
         },
         updateSaved: { value in
             let _ = updateDalSettingsInteractively(
-                accountManager: context.sharedContext.accountManager,
+                engine: context.engine,
                 { settings in
                     var updatedSettings = settings
                     var updatedMessageMenuSettings = settings.messageMenuSettings
@@ -445,13 +445,15 @@ public func dMessageMenuSettingsController(
         }
     )
     
-    let sharedData = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.dalSettings])
+    let dahlSettingsSignal = context.account.postbox.preferencesView(keys: [ApplicationSpecificPreferencesKeys.dahlSettings])
+    |> map { view -> DalSettings in
+        return view.values[ApplicationSpecificPreferencesKeys.dahlSettings]?.get(DalSettings.self) ?? DalSettings.defaultSettings
+    }
     
     let signal = combineLatest(
-        sharedData,
+        dahlSettingsSignal,
         context.sharedContext.presentationData
-    ) |> map { sharedData, presentationData -> (ItemListControllerState, (ItemListNodeState, Any)) in
-        let dahlSettings = sharedData.entries[ApplicationSpecificSharedDataKeys.dalSettings]?.get(DalSettings.self) ?? .defaultSettings
+    ) |> map { dahlSettings, presentationData -> (ItemListControllerState, (ItemListNodeState, Any)) in
         
         let entries = dMessageMenuSettingsEntries(
             presentationData: presentationData,

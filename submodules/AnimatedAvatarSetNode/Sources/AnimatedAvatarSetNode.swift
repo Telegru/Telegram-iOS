@@ -18,10 +18,12 @@ public final class AnimatedAvatarSetContext {
             
             fileprivate let peer: EnginePeer?
             fileprivate let placeholderColor: UIColor
-            
-            fileprivate init(peer: EnginePeer?, placeholderColor: UIColor) {
+            fileprivate let blurred: Bool
+
+            fileprivate init(peer: EnginePeer?, placeholderColor: UIColor, blurred: Bool) {
                 self.peer = peer
                 self.placeholderColor = placeholderColor
+                self.blurred = blurred
             }
         }
         
@@ -46,10 +48,10 @@ public final class AnimatedAvatarSetContext {
     public init() {
     }
     
-    public func update(peers: [EnginePeer], animated: Bool) -> Content {
+    public func update(peers: [EnginePeer], whitelist: Set<EnginePeer.Id>? = Set(), animated: Bool) -> Content {
         var items: [(Content.Item.Key, Content.Item)] = []
         for peer in peers {
-            items.append((.peer(peer.id), Content.Item(peer: peer, placeholderColor: .white)))
+            items.append((.peer(peer.id), Content.Item(peer: peer, placeholderColor: .white, blurred: whitelist != nil && !whitelist!.contains(peer.id))))
         }
         return Content(items: items)
     }
@@ -57,7 +59,7 @@ public final class AnimatedAvatarSetContext {
     public func updatePlaceholder(color: UIColor, count: Int, animated: Bool) -> Content {
         var items: [(Content.Item.Key, Content.Item)] = []
         for i in 0 ..< count {
-            items.append((.placeholder(i), Content.Item(peer: nil, placeholderColor: color)))
+            items.append((.placeholder(i), Content.Item(peer: nil, placeholderColor: color, blurred: false)))
         }
         return Content(items: items)
     }
@@ -77,7 +79,7 @@ private final class ContentNode: ASDisplayNode {
     
     private var disposable: Disposable?
     
-    init(context: AccountContext, peer: EnginePeer?, placeholderColor: UIColor, font: UIFont, synchronousLoad: Bool, size: CGSize, spacing: CGFloat) {
+    init(context: AccountContext, peer: EnginePeer?, placeholderColor: UIColor, font: UIFont, synchronousLoad: Bool, size: CGSize, spacing: CGFloat, blurred: Bool) {
         self.context = context
         self.size = size
         self.spacing = spacing
@@ -91,7 +93,7 @@ private final class ContentNode: ASDisplayNode {
         self.addSubnode(self.clippedNode)
 
         if let peer = peer {
-            if let representation = peer.smallProfileImage, let signal = peerAvatarImage(account: context.account, peerReference: PeerReference(peer._asPeer()), authorOfMessage: nil, representation: representation, displayDimensions: size, synchronousLoad: synchronousLoad) {
+            if let representation = peer.smallProfileImage, let signal = peerAvatarImage(account: context.account, peerReference: PeerReference(peer._asPeer()), authorOfMessage: nil, representation: representation, displayDimensions: size, blurred: blurred, synchronousLoad: synchronousLoad) {
                 let image = generateImage(size, rotatedContext: { size, context in
                     context.clear(CGRect(origin: CGPoint(), size: size))
                     context.setFillColor(UIColor.lightGray.cgColor)
@@ -253,7 +255,7 @@ public final class AnimatedAvatarSetNode: ASDisplayNode {
                 itemNode.updateLayout(size: itemSize, isClipped: index != 0, animated: animated)
                 transition.updateFrame(node: itemNode, frame: itemFrame)
             } else {
-                itemNode = ContentNode(context: context, peer: item.peer, placeholderColor: item.placeholderColor, font: font ?? sharedAvatarFont, synchronousLoad: synchronousLoad, size: itemSize, spacing: spacing)
+                itemNode = ContentNode(context: context, peer: item.peer, placeholderColor: item.placeholderColor, font: font ?? sharedAvatarFont, synchronousLoad: synchronousLoad, size: itemSize, spacing: spacing, blurred: item.blurred)
                 self.addSubnode(itemNode)
                 self.contentNodes[key] = itemNode
                 itemNode.updateLayout(size: itemSize, isClipped: index != 0, animated: false)
@@ -315,7 +317,7 @@ public final class AnimatedAvatarSetView: UIView {
         
         private var disposable: Disposable?
         
-        init(context: AccountContext, peer: EnginePeer?, placeholderColor: UIColor, font: UIFont, synchronousLoad: Bool, size: CGSize, spacing: CGFloat) {
+        init(context: AccountContext, peer: EnginePeer?, placeholderColor: UIColor, font: UIFont, synchronousLoad: Bool, size: CGSize, spacing: CGFloat, blurred: Bool) {
             self.size = size
             self.spacing = spacing
 
@@ -328,7 +330,7 @@ public final class AnimatedAvatarSetView: UIView {
             self.addSubview(self.clippedView)
 
             if let peer = peer {
-                if let representation = peer.smallProfileImage, let signal = peerAvatarImage(account: context.account, peerReference: PeerReference(peer._asPeer()), authorOfMessage: nil, representation: representation, displayDimensions: size, synchronousLoad: synchronousLoad) {
+                if let representation = peer.smallProfileImage, let signal = peerAvatarImage(account: context.account, peerReference: PeerReference(peer._asPeer()), authorOfMessage: nil, representation: representation, displayDimensions: size, blurred: blurred, synchronousLoad: synchronousLoad) {
                     let image = generateImage(size, rotatedContext: { size, context in
                         context.clear(CGRect(origin: CGPoint(), size: size))
                         context.setFillColor(UIColor.lightGray.cgColor)
@@ -433,7 +435,7 @@ public final class AnimatedAvatarSetView: UIView {
                 itemView.updateLayout(size: itemSize, isClipped: index != 0, animated: animation.isAnimated)
                 animation.animator.updateFrame(layer: itemView.layer, frame: itemFrame, completion: nil)
             } else {
-                itemView = ContentView(context: context, peer: item.peer, placeholderColor: item.placeholderColor, font: font ?? sharedAvatarFont, synchronousLoad: synchronousLoad, size: itemSize, spacing: spacing)
+                itemView = ContentView(context: context, peer: item.peer, placeholderColor: item.placeholderColor, font: font ?? sharedAvatarFont, synchronousLoad: synchronousLoad, size: itemSize, spacing: spacing, blurred: item.blurred)
                 self.addSubview(itemView)
                 self.contentViews[key] = itemView
                 itemView.updateLayout(size: itemSize, isClipped: index != 0, animated: false)

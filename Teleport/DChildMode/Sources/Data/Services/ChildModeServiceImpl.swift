@@ -10,7 +10,7 @@ final class ChildModeServiceImpl: ChildModeService {
     private let userID: Int64
     private let client: APIClient
     private let storage: ChildModeStorage
-    private let accountService: AccountService
+    private let accountUserInfoSyncManager: AccountUserInfoSyncManager
     private let serviceIds: ServiceIds
     
     // In-memory cache
@@ -21,7 +21,7 @@ final class ChildModeServiceImpl: ChildModeService {
 
     init(
         userID: Int64,
-        accountService: AccountService,
+        accountUserInfoSyncManager: AccountUserInfoSyncManager,
         storage: ChildModeStorage = ChildModeStorageImpl(),
         clientFactory: APIClientFactory = APIClientFactoryImpl(),
         serviceIds: ServiceIds = .default
@@ -31,7 +31,7 @@ final class ChildModeServiceImpl: ChildModeService {
         self.userID = userID
         self.storage = storage
         self.client = clientFactory.sharedClient(forUserID: userID)
-        self.accountService = accountService
+        self.accountUserInfoSyncManager = accountUserInfoSyncManager
         self.serviceIds = serviceIds
         
         if let cached = self.storage.getCache(forUserID: userID) {
@@ -47,7 +47,7 @@ final class ChildModeServiceImpl: ChildModeService {
         client.request(
             ChildModeAPI.addToWhitelist(
                 type: WhitelistType(rawValue: item.type.rawValue) ?? .user,
-                value: item.type == .channel ? -abs(item.id) : item.id,
+                value: item.type == .channel || item.type == .chat  ? -abs(item.id) : item.id,
                 title: item.title,
                 description:
                     item.description,
@@ -57,6 +57,7 @@ final class ChildModeServiceImpl: ChildModeService {
         |> map { _ in () }
     }
     
+    //TODO: лучше set пусть возращает
     func whitelist(forceUpdate: Bool) -> Signal<(Bool, [EnginePeer.Id]), NoError> {
         if forceUpdate {
             performInitialFetchIfNeeded()
@@ -116,7 +117,7 @@ final class ChildModeServiceImpl: ChildModeService {
     // MARK: - Private methods
     
     private func performInitialFetchIfNeeded() {
-        if firstFetchPerformed.swap(true) { return } // уже запустили
+        if firstFetchPerformed.swap(true) { return } 
         
         _ = fetchWhitelist().start()
     }
@@ -125,20 +126,20 @@ final class ChildModeServiceImpl: ChildModeService {
     private func fetchWhitelist() -> Signal<(Bool, [EnginePeer.Id]), NoError> {
         let currentValue = self.whitelistPromise.get() |> take(1)
         let fetchSignal = self.client.request(ChildModeAPI.getWhitelist).mapObject(WhitelistResponse.self)
-        let viewMode = self.accountService.getAccountViewModeFromCache(forUserID: self.userID) |> castError(Error.self)
-        return combineLatest(viewMode, fetchSignal)
-        |> map { [weak self] viewMode, whitelist -> (Bool, [EnginePeer.Id]) in
+        let userInfo = self.accountUserInfoSyncManager.syncUserInfo() |> castError(Error.self)
+        return combineLatest(userInfo, fetchSignal)
+        |> map { [weak self] userInfo, whitelist -> (Bool, [EnginePeer.Id]) in
             guard let self else {
                 return (false, [])
             }
             
-            guard viewMode == .child else {
+            guard userInfo?.viewMode == .child else {
                 self.whitelistPromise.set(.single((false, [])))
                 self.storage.setCache(ChildModeCache(enabled: false, peers: []), forUserID: self.userID)
                 return (false, [])
             }
             
-            let enabled = whitelist.service.isEnabled
+            let enabled = true
             let peers = self.convert(whitelist)
             let tuple = (enabled, peers)
             
